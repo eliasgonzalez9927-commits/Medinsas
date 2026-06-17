@@ -13,6 +13,7 @@ clinic-saas-mvp/
       002_ai_whatsapp_agent.sql
       003_product_architecture.sql
       004_connect_operational_base.sql
+      005_connect_agenda_patients_booking.sql
     schema.sql
   backend/
     src/
@@ -63,7 +64,7 @@ clinic-saas-mvp/
 
 1. Crea un proyecto en Supabase.
 2. Ejecuta `supabase/schema.sql` en el SQL Editor.
-3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql` y `supabase/migrations/004_connect_operational_base.sql`.
+3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql` y `supabase/migrations/005_connect_agenda_patients_booking.sql`.
 4. Copia `.env.example` a `.env` y completa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 5. Instala dependencias con `npm install`.
 6. Ejecuta `npm run dev`.
@@ -96,8 +97,8 @@ clinic-saas-mvp/
 - `/admin/reportes`: indicadores de gestion.
 - `/reservar/:clinicSlug`: flujo publico mobile-first para reserva de pacientes.
 
-Las secciones nuevas usan mocks realistas desde `src/data/clinicMockData.ts` para dejar la UX y
-la arquitectura listas antes de conectar todas las tablas reales de Supabase.
+Las secciones de producto principales ya operan contra Supabase. Los mocks quedan solo como fallback
+visual en modulos que todavia no tengan datos reales cargados.
 
 ## Base operativa conectada
 
@@ -106,11 +107,19 @@ La capa `src/lib/clinic-data.ts` conecta a Supabase estos modulos:
 - Profesionales: listar, detalle por `id` o `slug`, crear, editar y activar/desactivar.
 - Servicios: listar, crear, editar y activar/desactivar.
 - Disponibilidad: listar reglas, crear/eliminar horarios, listar/crear/eliminar bloqueos.
-- Motor base de slots: `getAvailableSlots({ clinicId, professionalId, serviceId, date })`.
+- Pacientes: listar, buscar, crear y editar.
+- Agenda: listar turnos reales, filtrar por fecha/profesional/servicio/estado, crear turnos manuales y cambiar estado.
+- Reserva publica: `/reservar/:clinicSlug` carga servicios/profesionales reales, consulta horarios libres y crea turnos.
+- Motor de slots: `getAvailableSlots({ clinicId, professionalId, serviceId, date })` para admin y RPC `get_public_available_slots(...)` para anonimos.
 
 La migracion `004_connect_operational_base.sql` agrega slugs, campos operativos, RLS inicial,
 policies de lectura publica minima y permisos de gestion para administradores. Tambien inserta
 datos demo reales para `Clinica Central`.
+
+La migracion `005_connect_agenda_patients_booking.sql` conecta `appointments` con `patients`,
+quita el bloqueo global de un turno por hora, agrega `appointment_events`, expone la RPC publica
+de slots disponibles y crea `create_public_booking(...)` con validacion anti doble reserva dentro
+de la base de datos. Los eventos quedan listos para conectar WhatsApp sin enviar mensajes todavia.
 
 ## Integracion WhatsApp
 

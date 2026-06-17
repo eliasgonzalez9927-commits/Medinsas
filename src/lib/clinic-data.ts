@@ -10,12 +10,23 @@ import {
   AvailabilityRule,
   AvailabilityRuleInput,
   AvailabilityRuleWithRelations,
+  Appointment,
+  AppointmentFilters,
+  AppointmentInput,
+  AppointmentStatus,
+  AppointmentWithRelations,
+  AvailableSlot,
   Clinic,
   ClinicDataResult,
   Location,
+  Patient,
+  PatientInput,
+  PatientWithAppointments,
   Professional,
   ProfessionalInput,
   ProfessionalWithRelations,
+  PublicBookingPayload,
+  PublicBookingResult,
   Service,
   ServiceInput,
   ServiceWithRelations,
@@ -327,6 +338,225 @@ export async function deleteAvailabilityBlock(id: string): Promise<void> {
   }
 }
 
+export async function getPatients(clinicId: string): Promise<PatientWithAppointments[]> {
+  try {
+    const { data, error } = await supabase
+      .from("patients")
+      .select("*, appointments(*)")
+      .eq("clinic_id", clinicId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(mapPatient);
+  } catch (error) {
+    console.error("Failed to load patients", error);
+    throw new FriendlyDataError("No pudimos cargar los pacientes.");
+  }
+}
+
+export async function searchPatients(clinicId: string, query: string): Promise<PatientWithAppointments[]> {
+  const normalized = query.trim();
+  if (!normalized) return getPatients(clinicId);
+  try {
+    const { data, error } = await supabase
+      .from("patients")
+      .select("*, appointments(*)")
+      .eq("clinic_id", clinicId)
+      .or(
+        `first_name.ilike.%${normalized}%,last_name.ilike.%${normalized}%,phone.ilike.%${normalized}%,email.ilike.%${normalized}%,document_number.ilike.%${normalized}%`
+      )
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(mapPatient);
+  } catch (error) {
+    console.error("Failed to search patients", error);
+    throw new FriendlyDataError("No pudimos buscar pacientes.");
+  }
+}
+
+export async function getPatientById(id: string): Promise<PatientWithAppointments | null> {
+  try {
+    const { data, error } = await supabase
+      .from("patients")
+      .select("*, appointments(*)")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? mapPatient(data) : null;
+  } catch (error) {
+    console.error("Failed to load patient", error);
+    throw new FriendlyDataError("No pudimos cargar el paciente.");
+  }
+}
+
+export async function createPatient(data: PatientInput): Promise<Patient> {
+  try {
+    const { data: created, error } = await supabase.from("patients").insert(data).select("*").single();
+    if (error) throw error;
+    return created as Patient;
+  } catch (error) {
+    console.error("Failed to create patient", error);
+    throw new FriendlyDataError("No pudimos crear el paciente.");
+  }
+}
+
+export async function updatePatient(id: string, data: Partial<PatientInput>): Promise<Patient> {
+  try {
+    const { data: updated, error } = await supabase
+      .from("patients")
+      .update(data)
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return updated as Patient;
+  } catch (error) {
+    console.error("Failed to update patient", error);
+    throw new FriendlyDataError("No pudimos actualizar el paciente.");
+  }
+}
+
+export async function getAppointments(
+  clinicId: string,
+  filters: AppointmentFilters = {}
+): Promise<AppointmentWithRelations[]> {
+  try {
+    let query = supabase
+      .from("appointments")
+      .select("*, patients(*), professionals(*), services(*), locations(*)")
+      .eq("clinic_id", clinicId)
+      .order("starts_at");
+    if (filters.date) {
+      const start = new Date(`${filters.date}T00:00:00`);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      query = query.gte("starts_at", start.toISOString()).lt("starts_at", end.toISOString());
+    }
+    if (filters.professionalId && filters.professionalId !== "all") {
+      query = query.eq("professional_id", filters.professionalId);
+    }
+    if (filters.serviceId && filters.serviceId !== "all") query = query.eq("service_id", filters.serviceId);
+    if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []).map(mapAppointment);
+  } catch (error) {
+    console.error("Failed to load appointments", error);
+    throw new FriendlyDataError("No pudimos cargar la agenda.");
+  }
+}
+
+export async function createAppointment(data: AppointmentInput): Promise<Appointment> {
+  try {
+    await assertSlotAvailable(data.clinic_id, data.professional_id, data.service_id, data.starts_at);
+    const { data: created, error } = await supabase
+      .from("appointments")
+      .insert({
+        ...data,
+        appointment_type: data.appointment_type ?? "in_person",
+        status: data.status ?? "confirmed",
+        source: data.source ?? "manual",
+        whatsapp_status: data.whatsapp_status ?? "pending"
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    await logAppointmentEvent(created.id, "appointment_created", null, created.status);
+    return created as Appointment;
+  } catch (error) {
+    if (error instanceof FriendlyDataError) throw error;
+    console.error("Failed to create appointment", error);
+    throw new FriendlyDataError("No pudimos crear el turno.");
+  }
+}
+
+export async function updateAppointment(id: string, data: Partial<AppointmentInput>): Promise<Appointment> {
+  try {
+    const { data: updated, error } = await supabase
+      .from("appointments")
+      .update(data)
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return updated as Appointment;
+  } catch (error) {
+    console.error("Failed to update appointment", error);
+    throw new FriendlyDataError("No pudimos actualizar el turno.");
+  }
+}
+
+export async function updateAppointmentStatus(
+  id: string,
+  status: AppointmentStatus,
+  metadata: Record<string, unknown> = {}
+): Promise<void> {
+  try {
+    const { data: current, error: readError } = await supabase
+      .from("appointments")
+      .select("status")
+      .eq("id", id)
+      .single();
+    if (readError) throw readError;
+    const { error } = await supabase.from("appointments").update({ status }).eq("id", id);
+    if (error) throw error;
+    const eventByStatus: Record<string, string> = {
+      confirmed: "appointment_confirmed",
+      cancelled: "appointment_cancelled",
+      completed: "appointment_completed",
+      no_show: "appointment_no_show",
+      rescheduled: "appointment_rescheduled",
+      urgent: "appointment_marked_urgent"
+    };
+    await logAppointmentEvent(id, eventByStatus[status] ?? "appointment_status_changed", current.status, status, metadata);
+  } catch (error) {
+    console.error("Failed to update appointment status", error);
+    throw new FriendlyDataError("No pudimos actualizar el estado del turno.");
+  }
+}
+
+export async function confirmAppointment(id: string) {
+  return updateAppointmentStatus(id, "confirmed");
+}
+
+export async function cancelAppointment(id: string, reason?: string) {
+  await updateAppointment(id, { cancellation_reason: reason ?? null } as Partial<AppointmentInput>);
+  return updateAppointmentStatus(id, "cancelled", { reason });
+}
+
+export async function markAppointmentCompleted(id: string) {
+  return updateAppointmentStatus(id, "completed");
+}
+
+export async function markAppointmentNoShow(id: string) {
+  return updateAppointmentStatus(id, "no_show");
+}
+
+export async function rescheduleAppointment(id: string, newStartTime: string, newEndTime: string) {
+  const { data: current, error } = await supabase
+    .from("appointments")
+    .select("clinic_id, professional_id, service_id")
+    .eq("id", id)
+    .single();
+  if (error) {
+    console.error("Failed to read appointment before reschedule", error);
+    throw new FriendlyDataError("No pudimos reprogramar el turno.");
+  }
+  if (!current.clinic_id || !current.professional_id || !current.service_id) {
+    throw new FriendlyDataError("El turno no tiene profesional o servicio asignado.");
+  }
+  await assertSlotAvailable(current.clinic_id, current.professional_id, current.service_id, newStartTime);
+  const updated = await updateAppointment(id, {
+    starts_at: newStartTime,
+    end_time: newEndTime,
+    status: "rescheduled"
+  } as Partial<AppointmentInput>);
+  await logAppointmentEvent(id, "appointment_rescheduled", null, "rescheduled", {
+    starts_at: newStartTime,
+    end_time: newEndTime
+  });
+  return updated;
+}
+
 export async function getAvailableSlots({
   clinicId,
   professionalId,
@@ -337,35 +567,150 @@ export async function getAvailableSlots({
   professionalId: string;
   serviceId: string;
   date: string;
-}): Promise<string[]> {
-  const [rulesResult, blocks, serviceResult] = await Promise.all([
+}): Promise<AvailableSlot[]> {
+  const [rulesResult, blocks, serviceResult, appointments] = await Promise.all([
     getAvailabilityRules(clinicId, professionalId),
     getAvailabilityBlocks(clinicId, professionalId),
-    getServices(clinicId)
+    getServices(clinicId),
+    getAppointments(clinicId, { date })
   ]);
   const service = serviceResult.data.find((item) => item.id === serviceId);
+  if (!service || !service.active) return [];
   const duration = service?.duration_minutes ?? 30;
   const dayOfWeek = new Date(`${date}T12:00:00`).getDay();
   const rules = rulesResult.data.filter((rule) => rule.day_of_week === dayOfWeek && rule.active);
   const dayBlocks = blocks.filter((block) => block.date === date);
+  const busyAppointments = appointments.filter(
+    (appointment) =>
+      appointment.professional_id === professionalId &&
+      ["pending", "confirmed", "urgent", "rescheduled"].includes(appointment.status)
+  );
 
   return rules.flatMap((rule) => {
-    const slots: string[] = [];
+    const slots: AvailableSlot[] = [];
     let cursor = timeToMinutes(rule.start_time);
     const end = timeToMinutes(rule.end_time);
     while (cursor + duration <= end) {
       const slot = minutesToTime(cursor);
+      const startsAt = new Date(`${date}T${slot}:00`).toISOString();
+      const endTime = new Date(new Date(startsAt).getTime() + duration * 60000).toISOString();
       const blocked = dayBlocks.some(
         (block) => cursor < timeToMinutes(block.end_time) && cursor + duration > timeToMinutes(block.start_time)
+      );
+      const occupied = busyAppointments.some((appointment) =>
+        rangesOverlap(
+          startsAt,
+          endTime,
+          appointment.starts_at,
+          appointment.end_time ?? new Date(new Date(appointment.starts_at).getTime() + duration * 60000).toISOString()
+        )
       );
       const isPastToday =
         date === new Date().toISOString().slice(0, 10) &&
         cursor <= new Date().getHours() * 60 + new Date().getMinutes();
-      if (!blocked && !isPastToday) slots.push(slot);
+      if (!blocked && !occupied && !isPastToday) slots.push({ time: slot, startsAt, endTime });
       cursor += duration;
     }
     return slots;
   });
+}
+
+export async function createPublicBooking(payload: PublicBookingPayload): Promise<PublicBookingResult> {
+  try {
+    const { data, error } = await supabase.rpc("create_public_booking", {
+      p_clinic_slug: payload.clinicSlug,
+      p_professional_id: payload.professionalId,
+      p_service_id: payload.serviceId,
+      p_start_time: payload.startTime,
+      p_first_name: payload.firstName,
+      p_last_name: payload.lastName,
+      p_phone: payload.phone,
+      p_email: payload.email ?? null,
+      p_document_number: payload.documentNumber ?? null,
+      p_insurance: payload.insurance ?? null,
+      p_reason: payload.reason ?? null
+    });
+    if (error) throw error;
+    return data as PublicBookingResult;
+  } catch (error: any) {
+    console.error("Failed to create public booking", error);
+    if (String(error?.message ?? "").includes("SLOT_NOT_AVAILABLE")) {
+      throw new FriendlyDataError("Ese horario ya no esta disponible. Elegi otro horario para continuar.");
+    }
+    throw new FriendlyDataError("No pudimos crear la reserva. Intenta nuevamente.");
+  }
+}
+
+export async function getPublicAvailableSlots({
+  clinicSlug,
+  professionalId,
+  serviceId,
+  date
+}: {
+  clinicSlug: string;
+  professionalId: string;
+  serviceId: string;
+  date: string;
+}): Promise<AvailableSlot[]> {
+  try {
+    const { data, error } = await supabase.rpc("get_public_available_slots", {
+      p_clinic_slug: clinicSlug,
+      p_professional_id: professionalId,
+      p_service_id: serviceId,
+      p_date: date
+    });
+    if (error) throw error;
+    return (data ?? []).map((slot: any) => ({
+      time: slot.time,
+      startsAt: slot.starts_at,
+      endTime: slot.end_time
+    }));
+  } catch (error) {
+    console.error("Failed to load public slots", error);
+    throw new FriendlyDataError("No pudimos cargar los horarios disponibles.");
+  }
+}
+
+async function assertSlotAvailable(clinicId: string, professionalId: string, serviceId: string, startsAt: string) {
+  const date = startsAt.slice(0, 10);
+  const slots = await getAvailableSlots({ clinicId, professionalId, serviceId, date });
+  if (!slots.some((slot) => slot.startsAt === startsAt)) {
+    throw new FriendlyDataError("Ese horario ya no esta disponible. Elegi otro horario para continuar.");
+  }
+}
+
+async function logAppointmentEvent(
+  appointmentId: string,
+  eventType: string,
+  oldStatus: AppointmentStatus | null,
+  newStatus: AppointmentStatus | null,
+  metadata: Record<string, unknown> = {}
+) {
+  const { error } = await supabase.from("appointment_events").insert({
+    appointment_id: appointmentId,
+    event_type: eventType,
+    old_status: oldStatus,
+    new_status: newStatus,
+    metadata
+  });
+  if (error) console.error("Failed to log appointment event", error);
+}
+
+function mapPatient(row: any): PatientWithAppointments {
+  return {
+    ...(row as Patient),
+    appointments: (row.appointments ?? []).map(mapAppointment)
+  };
+}
+
+function mapAppointment(row: any): AppointmentWithRelations {
+  return {
+    ...(row as Appointment),
+    patient: row.patients ?? null,
+    professional: row.professionals ?? null,
+    service: row.services ?? null,
+    location: row.locations ?? null
+  };
 }
 
 function mapProfessional(row: any): ProfessionalWithRelations {
@@ -510,6 +855,10 @@ function minutesToTime(value: number) {
   const hours = Math.floor(value / 60).toString().padStart(2, "0");
   const minutes = (value % 60).toString().padStart(2, "0");
   return `${hours}:${minutes}`;
+}
+
+function rangesOverlap(startA: string, endA: string, startB: string, endB: string) {
+  return new Date(startA) < new Date(endB) && new Date(endA) > new Date(startB);
 }
 
 function dayLabelToNumber(day: string) {

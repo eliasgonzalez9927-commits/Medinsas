@@ -64,6 +64,64 @@ export type ProfessionalService = {
   service_id: string;
 };
 
+export type Patient = {
+  id: string;
+  clinic_id: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email: string | null;
+  document_number: string | null;
+  insurance: string | null;
+  birth_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at?: string;
+};
+
+export type AppointmentStatus =
+  | "pending"
+  | "confirmed"
+  | "attended"
+  | "cancelled"
+  | "rescheduled"
+  | "completed"
+  | "no_show"
+  | "urgent";
+
+export type AppointmentSource = "manual" | "online" | "whatsapp" | "imported";
+
+export type Appointment = {
+  id: string;
+  clinic_id: string | null;
+  patient_id: string;
+  professional_id: string | null;
+  service_id: string | null;
+  location_id: string | null;
+  starts_at: string;
+  end_time: string | null;
+  appointment_type: "in_person" | "telemedicine";
+  status: AppointmentStatus;
+  source: AppointmentSource;
+  reason: string;
+  notes: string | null;
+  cancellation_reason: string | null;
+  rescheduled_from_id: string | null;
+  whatsapp_status: string | null;
+  created_at: string;
+  updated_at?: string;
+};
+
+export type AppointmentEvent = {
+  id: string;
+  appointment_id: string;
+  event_type: string;
+  old_status: AppointmentStatus | null;
+  new_status: AppointmentStatus | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
 export type AvailabilityRule = {
   id: string;
   clinic_id: string;
@@ -84,6 +142,17 @@ export type AvailabilityBlock = {
   start_time: string;
   end_time: string;
   reason: string | null;
+};
+
+export type AppointmentWithRelations = Appointment & {
+  patient: Patient | null;
+  professional: Professional | null;
+  service: Service | null;
+  location: Location | null;
+};
+
+export type PatientWithAppointments = Patient & {
+  appointments?: AppointmentWithRelations[];
 };
 
 export type ProfessionalWithRelations = Professional & {
@@ -152,4 +221,71 @@ export type AvailabilityBlockInput = {
   start_time: string;
   end_time: string;
   reason?: string | null;
+};
+
+export type PatientInput = {
+  clinic_id: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email?: string | null;
+  document_number?: string | null;
+  insurance?: string | null;
+  birth_date?: string | null;
+  notes?: string | null;
+};
+
+export type AppointmentInput = {
+  clinic_id: string;
+  patient_id: string;
+  professional_id: string;
+  service_id: string;
+  location_id?: string | null;
+  starts_at: string;
+  end_time: string;
+  appointment_type?: "in_person" | "telemedicine";
+  status?: AppointmentStatus;
+  source?: AppointmentSource;
+  reason: string;
+  notes?: string | null;
+  cancellation_reason?: string | null;
+  rescheduled_from_id?: string | null;
+  whatsapp_status?: string | null;
+};
+
+export type AppointmentFilters = {
+  date?: string;
+  professionalId?: string;
+  status?: AppointmentStatus | "all";
+  serviceId?: string;
+};
+
+export type PublicBookingPayload = {
+  clinicSlug: string;
+  professionalId: string;
+  serviceId: string;
+  startTime: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email?: string | null;
+  documentNumber?: string | null;
+  insurance?: string | null;
+  reason?: string | null;
+};
+
+export type PublicBookingResult = {
+  appointment_id: string;
+  patient_id: string;
+  status: AppointmentStatus;
+  starts_at: string;
+  end_time: string;
+  service: string;
+  professional: string;
+};
+
+export type AvailableSlot = {
+  time: string;
+  startsAt: string;
+  endTime: string;
 };

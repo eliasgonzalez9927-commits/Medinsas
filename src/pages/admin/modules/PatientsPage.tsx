@@ -1,50 +1,302 @@
-import { Search, UserPlus } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Edit3, Search, UserPlus } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
-import { patients } from "../../../data/clinicMockData";
+import {
+  createPatient,
+  getDefaultClinic,
+  getPatients,
+  searchPatients,
+  updatePatient
+} from "../../../lib/clinic-data";
+import { Clinic, PatientInput, PatientWithAppointments } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
 
+type PatientForm = {
+  id?: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email: string;
+  document_number: string;
+  insurance: string;
+  birth_date: string;
+  notes: string;
+};
+
+const emptyForm: PatientForm = {
+  first_name: "",
+  last_name: "",
+  phone: "",
+  email: "",
+  document_number: "",
+  insurance: "",
+  birth_date: "",
+  notes: ""
+};
+
 export function PatientsPage() {
+  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const [patients, setPatients] = useState<PatientWithAppointments[]>([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [form, setForm] = useState<PatientForm>(emptyForm);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  async function load(search = query) {
+    setLoading(true);
+    setError("");
+    try {
+      const loadedClinic = clinic ?? (await getDefaultClinic());
+      setClinic(loadedClinic);
+      if (!loadedClinic) {
+        setPatients([]);
+        setError("No encontramos la clinica configurada. Ejecuta las migraciones y el seed inicial.");
+        return;
+      }
+      const loadedPatients = search.trim()
+        ? await searchPatients(loadedClinic.id, search)
+        : await getPatients(loadedClinic.id);
+      setPatients(loadedPatients);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos cargar los pacientes.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load("");
+  }, []);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (clinic) load(query);
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [query]);
+
+  const totals = useMemo(() => {
+    const withAppointments = patients.filter((patient) => (patient.appointments?.length ?? 0) > 0).length;
+    return { total: patients.length, withAppointments };
+  }, [patients]);
+
+  function openCreate() {
+    setForm(emptyForm);
+    setFormOpen(true);
+    setNotice("");
+  }
+
+  function openEdit(patient: PatientWithAppointments) {
+    setForm({
+      id: patient.id,
+      first_name: patient.first_name,
+      last_name: patient.last_name,
+      phone: patient.phone,
+      email: patient.email ?? "",
+      document_number: patient.document_number ?? "",
+      insurance: patient.insurance ?? "",
+      birth_date: patient.birth_date ?? "",
+      notes: patient.notes ?? ""
+    });
+    setFormOpen(true);
+    setNotice("");
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!clinic) return;
+    setSaving(true);
+    setError("");
+    try {
+      const payload: PatientInput = {
+        clinic_id: clinic.id,
+        first_name: form.first_name,
+        last_name: form.last_name,
+        phone: form.phone,
+        email: form.email || null,
+        document_number: form.document_number || null,
+        insurance: form.insurance || null,
+        birth_date: form.birth_date || null,
+        notes: form.notes || null
+      };
+      if (form.id) {
+        await updatePatient(form.id, payload);
+        setNotice("Paciente actualizado correctamente.");
+      } else {
+        await createPatient(payload);
+        setNotice("Paciente creado correctamente.");
+      }
+      setFormOpen(false);
+      await load(query);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos guardar el paciente.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <AdminPageShell
       actionLabel="Crear paciente"
-      description="Base de pacientes con busqueda, proximo turno, historial y notas internas."
+      description="Base operativa de pacientes con busqueda, datos administrativos e historial de turnos."
       eyebrow="Gestion de pacientes"
+      onAction={openCreate}
       title="Pacientes"
     >
+      {notice && <Message tone="success">{notice}</Message>}
+      {error && <Message tone="error">{error}</Message>}
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <Metric label="Pacientes cargados" value={String(totals.total)} />
+        <Metric label="Con turnos registrados" value={String(totals.withAppointments)} />
+        <Metric label="Sin actividad" value={String(Math.max(totals.total - totals.withAppointments, 0))} />
+      </section>
+
+      {formOpen && (
+        <SectionCard className="p-5">
+          <h2 className="font-semibold text-clinic-ink">{form.id ? "Editar paciente" : "Crear paciente"}</h2>
+          <form onSubmit={handleSubmit} className="mt-5 grid gap-4 md:grid-cols-2">
+            <Input label="Nombre" value={form.first_name} onChange={(value) => setForm({ ...form, first_name: value })} required />
+            <Input label="Apellido" value={form.last_name} onChange={(value) => setForm({ ...form, last_name: value })} required />
+            <Input label="Telefono / WhatsApp" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} required />
+            <Input label="Email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} type="email" />
+            <Input label="DNI" value={form.document_number} onChange={(value) => setForm({ ...form, document_number: value })} />
+            <Input label="Obra social" value={form.insurance} onChange={(value) => setForm({ ...form, insurance: value })} />
+            <Input label="Fecha de nacimiento" value={form.birth_date} onChange={(value) => setForm({ ...form, birth_date: value })} type="date" />
+            <label className="md:col-span-2">
+              <span className="text-sm font-medium text-clinic-ink">Notas internas</span>
+              <textarea
+                value={form.notes}
+                onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                className="mt-2 min-h-24 w-full resize-none rounded-lg border border-clinic-line px-3 py-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+              />
+            </label>
+            <div className="flex gap-2 md:col-span-2">
+              <Button disabled={saving} type="submit" variant="primary">
+                {saving ? "Guardando..." : "Guardar paciente"}
+              </Button>
+              <Button onClick={() => setFormOpen(false)}>Cancelar</Button>
+            </div>
+          </form>
+        </SectionCard>
+      )}
+
       <SectionCard className="p-5">
         <div className="relative max-w-xl">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-clinic-muted" />
           <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscar por nombre, telefono, DNI o email..."
             className="h-11 w-full rounded-lg border border-clinic-line bg-clinic-surface pl-10 pr-4 text-sm outline-none focus:border-clinic-brand focus:bg-white focus:ring-4 focus:ring-teal-100"
           />
         </div>
       </SectionCard>
-      <SectionCard className="overflow-hidden">
-        <div className="divide-y divide-clinic-line">
-          {patients.map((patient) => (
-            <article key={patient.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1fr_180px_180px_1fr_160px] lg:items-center">
-              <div>
-                <p className="font-semibold text-clinic-ink">
-                  {patient.firstName} {patient.lastName}
-                </p>
-                <p className="text-sm text-clinic-muted">{patient.phone}</p>
-              </div>
-              <p className="text-sm text-clinic-muted">DNI {patient.documentNumber}</p>
-              <p className="text-sm text-clinic-muted">{patient.insurance}</p>
-              <div>
-                <p className="text-sm font-medium text-clinic-ink">{patient.nextAppointment}</p>
-                <p className="text-xs text-clinic-muted">{patient.notes}</p>
-              </div>
-              <Button>Ver historial</Button>
-            </article>
-          ))}
-        </div>
-      </SectionCard>
-      <Button className="self-start" icon={<UserPlus size={16} />} variant="primary">
-        Crear paciente manualmente
-      </Button>
+
+      {loading ? (
+        <div className="rounded-lg border border-clinic-line bg-white p-8 text-center text-clinic-muted">Cargando pacientes...</div>
+      ) : patients.length === 0 ? (
+        <SectionCard className="p-8 text-center">
+          <h2 className="font-semibold text-clinic-ink">No hay pacientes para mostrar.</h2>
+          <p className="mt-2 text-sm text-clinic-muted">Crea el primer paciente o espera reservas online entrantes.</p>
+          <Button className="mt-5" icon={<UserPlus size={16} />} onClick={openCreate} variant="primary">
+            Crear paciente
+          </Button>
+        </SectionCard>
+      ) : (
+        <SectionCard className="overflow-hidden">
+          <div className="divide-y divide-clinic-line">
+            {patients.map((patient) => {
+              const nextAppointment = getNextAppointment(patient);
+              return (
+                <article key={patient.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1fr_170px_170px_1fr_130px] lg:items-center">
+                  <div>
+                    <p className="font-semibold text-clinic-ink">
+                      {patient.first_name} {patient.last_name}
+                    </p>
+                    <p className="text-sm text-clinic-muted">{patient.phone}</p>
+                  </div>
+                  <p className="text-sm text-clinic-muted">{patient.document_number ? `DNI ${patient.document_number}` : "Sin DNI"}</p>
+                  <p className="text-sm text-clinic-muted">{patient.insurance ?? "Sin cobertura"}</p>
+                  <div>
+                    <p className="text-sm font-medium text-clinic-ink">
+                      {nextAppointment ? formatDateTime(nextAppointment.starts_at) : "Sin proximo turno"}
+                    </p>
+                    <p className="text-xs text-clinic-muted">
+                      {(patient.appointments?.length ?? 0)} turnos registrados
+                    </p>
+                  </div>
+                  <Button icon={<Edit3 size={16} />} onClick={() => openEdit(patient)}>
+                    Editar
+                  </Button>
+                </article>
+              );
+            })}
+          </div>
+        </SectionCard>
+      )}
     </AdminPageShell>
   );
+}
+
+function getNextAppointment(patient: PatientWithAppointments) {
+  const now = Date.now();
+  return (patient.appointments ?? [])
+    .filter((appointment) => new Date(appointment.starts_at).getTime() >= now)
+    .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())[0];
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("es-AR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(new Date(value));
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-clinic-line bg-white p-4 shadow-sm">
+      <p className="text-sm text-clinic-muted">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-clinic-ink">{value}</p>
+    </div>
+  );
+}
+
+function Input({
+  label,
+  value,
+  onChange,
+  type = "text",
+  required = false
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  required?: boolean;
+}) {
+  return (
+    <label>
+      <span className="text-sm font-medium text-clinic-ink">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        type={type}
+        required={required}
+        className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+      />
+    </label>
+  );
+}
+
+function Message({ tone, children }: { tone: "success" | "error"; children: string }) {
+  const className =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : "border-red-200 bg-red-50 text-red-700";
+  return <div className={`rounded-lg border px-4 py-3 text-sm ${className}`}>{children}</div>;
 }
