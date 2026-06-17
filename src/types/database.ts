@@ -3,9 +3,11 @@ export type AppointmentStatus =
   | "pending"
   | "confirmed"
   | "attended"
+  | "completed"
   | "cancelled"
   | "rescheduled"
-  | "no_show";
+  | "no_show"
+  | "urgent";
 export type AppointmentType = "in_person" | "telemedicine";
 export type UrgencyLevel = "low" | "medium" | "high";
 

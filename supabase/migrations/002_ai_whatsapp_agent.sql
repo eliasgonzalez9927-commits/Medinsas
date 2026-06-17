@@ -2,6 +2,8 @@ alter type public.user_role add value if not exists 'doctor';
 alter type public.appointment_status add value if not exists 'no_show';
 alter type public.appointment_status add value if not exists 'cancelled';
 alter type public.appointment_status add value if not exists 'rescheduled';
+alter type public.appointment_status add value if not exists 'completed';
+alter type public.appointment_status add value if not exists 'urgent';
 
 alter table public.appointments
   add column if not exists specialty text;

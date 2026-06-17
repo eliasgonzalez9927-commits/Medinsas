@@ -11,6 +11,7 @@ clinic-saas-mvp/
       whatsapp-funnel.js
     migrations/
       002_ai_whatsapp_agent.sql
+      003_product_architecture.sql
     schema.sql
   backend/
     src/
@@ -23,6 +24,8 @@ clinic-saas-mvp/
       server.js
   src/
     components/
+      admin/
+      ui/
       fintech/
         FinancingSimulator.tsx
       growth/
@@ -36,11 +39,14 @@ clinic-saas-mvp/
     pages/
       admin/
         AdminDashboard.tsx
+        modules/
       auth/
         Login.tsx
         Register.tsx
       landing/
         ClinicLanding.tsx
+      booking/
+        PublicBookingPage.tsx
       patient/
         PatientBooking.tsx
     types/
@@ -54,9 +60,10 @@ clinic-saas-mvp/
 
 1. Crea un proyecto en Supabase.
 2. Ejecuta `supabase/schema.sql` en el SQL Editor.
-3. Copia `.env.example` a `.env` y completa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
-4. Instala dependencias con `npm install`.
-5. Ejecuta `npm run dev`.
+3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql` y `supabase/migrations/003_product_architecture.sql`.
+4. Copia `.env.example` a `.env` y completa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
+5. Instala dependencias con `npm install`.
+6. Ejecuta `npm run dev`.
 
 ## Modulos incluidos
 
@@ -70,6 +77,24 @@ clinic-saas-mvp/
 - Webhook base `supabase/functions/whatsapp-funnel.js` para automatizaciones de WhatsApp.
 - Backend Node.js en `backend/` para operar Supabase desde WhatsApp con un agente OpenAI y tools por rol.
 - Row Level Security para separar acceso de pacientes y administradores.
+
+## Rutas de producto
+
+- `/admin`: resumen operativo del dia.
+- `/admin/agenda`: agenda con filtros por fecha, profesional, especialidad y estado.
+- `/admin/profesionales`: cartilla de medicos/profesionales.
+- `/admin/profesionales/:id`: perfil, servicios, disponibilidad y link publico por profesional.
+- `/admin/disponibilidad`: reglas de horarios, descansos y bloqueos.
+- `/admin/pacientes`: base de pacientes y busqueda.
+- `/admin/servicios`: catalogo de servicios/tratamientos.
+- `/admin/booking`: configuracion de reservas online y links publicos.
+- `/admin/whatsapp`: plantillas y preparacion de flujos por WhatsApp.
+- `/admin/financiacion`: simulador de planes de pago.
+- `/admin/reportes`: indicadores de gestion.
+- `/reservar/:clinicSlug`: flujo publico mobile-first para reserva de pacientes.
+
+Las secciones nuevas usan mocks realistas desde `src/data/clinicMockData.ts` para dejar la UX y
+la arquitectura listas antes de conectar todas las tablas reales de Supabase.
 
 ## Integracion WhatsApp
 

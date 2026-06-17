@@ -5,9 +5,11 @@ create type public.appointment_status as enum (
   'pending',
   'confirmed',
   'attended',
+  'completed',
   'cancelled',
   'rescheduled',
-  'no_show'
+  'no_show',
+  'urgent'
 );
 create type public.appointment_type as enum ('in_person', 'telemedicine');
 create type public.urgency_level as enum ('low', 'medium', 'high');

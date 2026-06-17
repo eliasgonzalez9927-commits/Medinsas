@@ -22,10 +22,11 @@ const filters: Array<{ label: string; value: AppointmentFilter }> = [
 const statusOptions: AppointmentStatus[] = [
   "pending",
   "confirmed",
-  "attended",
+  "completed",
   "rescheduled",
   "cancelled",
-  "no_show"
+  "no_show",
+  "urgent"
 ];
 
 export function AppointmentTable({
@@ -149,7 +150,8 @@ export function AppointmentTable({
                           {appointment.appointment_type === "telemedicine"
                             ? "Telemedicina"
                             : "Presencial"}
-                          {appointment.triage_results?.urgency_level === "high" && (
+                          {(appointment.status === "urgent" ||
+                            appointment.triage_results?.urgency_level === "high") && (
                             <span className="ml-2 rounded-lg bg-red-50 px-2 py-0.5 font-semibold text-red-700">
                               Urgencia
                             </span>

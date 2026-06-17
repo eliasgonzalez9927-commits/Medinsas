@@ -60,7 +60,9 @@ export function AdminDashboard() {
   const summary = useMemo(() => {
     const pending = appointments.filter((item) => item.status === "pending").length;
     const confirmed = appointments.filter((item) => item.status === "confirmed").length;
-    const urgent = appointments.filter((item) => item.triage_results?.urgency_level === "high").length;
+    const urgent = appointments.filter(
+      (item) => item.status === "urgent" || item.triage_results?.urgency_level === "high"
+    ).length;
     const cancellations = appointments.filter((item) =>
       ["cancelled", "no_show"].includes(item.status)
     ).length;
@@ -83,7 +85,9 @@ export function AdminDashboard() {
       if (activeFilter === "cancelled") {
         return appointment.status === "cancelled" || appointment.status === "no_show";
       }
-      if (activeFilter === "urgency") return appointment.triage_results?.urgency_level === "high";
+      if (activeFilter === "urgency") {
+        return appointment.status === "urgent" || appointment.triage_results?.urgency_level === "high";
+      }
       return true;
     });
   }, [activeFilter, appointments]);

@@ -2,13 +2,17 @@ import {
   Banknote,
   CalendarDays,
   ClipboardList,
+  MessageCircle,
   LogOut,
   Menu,
+  PieChart,
   Search,
   Settings,
+  SlidersHorizontal,
   Stethoscope,
   UserRound,
-  UsersRound
+  UsersRound,
+  WalletCards
 } from "lucide-react";
 import { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
@@ -16,12 +20,17 @@ import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../ui/Button";
 
 const navItems = [
-  { label: "Dashboard", icon: ClipboardList, to: "/admin", active: true },
-  { label: "Agenda", icon: CalendarDays, to: "/admin", active: false },
-  { label: "Pacientes", icon: UsersRound, to: "/admin", active: false },
-  { label: "Profesionales", icon: Stethoscope, to: "/admin", active: false },
-  { label: "Financiacion", icon: Banknote, to: "/admin", active: false },
-  { label: "Configuracion", icon: Settings, to: "/admin", active: false }
+  { label: "Dashboard", icon: ClipboardList, to: "/admin" },
+  { label: "Agenda", icon: CalendarDays, to: "/admin/agenda" },
+  { label: "Pacientes", icon: UsersRound, to: "/admin/pacientes" },
+  { label: "Profesionales", icon: Stethoscope, to: "/admin/profesionales" },
+  { label: "Servicios", icon: WalletCards, to: "/admin/servicios" },
+  { label: "Disponibilidad", icon: SlidersHorizontal, to: "/admin/disponibilidad" },
+  { label: "Reservas online", icon: CalendarDays, to: "/admin/booking" },
+  { label: "WhatsApp", icon: MessageCircle, to: "/admin/whatsapp" },
+  { label: "Financiacion", icon: Banknote, to: "/admin/financiacion" },
+  { label: "Reportes", icon: PieChart, to: "/admin/reportes" },
+  { label: "Configuracion", icon: Settings, to: "/admin/configuracion" }
 ];
 
 export function AdminLayout({
@@ -58,19 +67,17 @@ export function AdminLayout({
                 <NavLink
                   key={item.label}
                   to={item.to}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                    item.active
-                      ? "bg-teal-50 text-clinic-brand"
-                      : "text-clinic-muted hover:bg-clinic-surface hover:text-clinic-ink"
-                  }`}
+                  end={item.to === "/admin"}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                      isActive
+                        ? "bg-teal-50 text-clinic-brand"
+                        : "text-clinic-muted hover:bg-clinic-surface hover:text-clinic-ink"
+                    }`
+                  }
                 >
                   <Icon size={18} />
                   {item.label}
-                  {!item.active && (
-                    <span className="ml-auto rounded-lg bg-clinic-surface px-2 py-0.5 text-[11px] text-clinic-muted">
-                      pronto
-                    </span>
-                  )}
                 </NavLink>
               );
             })}
