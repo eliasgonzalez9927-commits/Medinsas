@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { BadgeDollarSign, Landmark, TrendingUp } from "lucide-react";
+import { BadgeDollarSign, CircleHelp } from "lucide-react";
 
 type FinancingOption = {
   months: number;
@@ -42,21 +42,20 @@ export function FinancingSimulator() {
   );
 
   return (
-    <section className="rounded-lg border border-clinic-line bg-white p-5 shadow-soft">
+    <section className="rounded-lg border border-clinic-line bg-white p-5 shadow-sm">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
         <div>
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-50 text-clinic-accent">
             <BadgeDollarSign size={22} />
           </div>
-          <h2 className="mt-4 text-lg font-semibold text-clinic-ink">
-            Simulador de financiamiento
-          </h2>
+          <h2 className="mt-4 text-lg font-semibold text-clinic-ink">Simulador de financiacion</h2>
           <p className="mt-1 max-w-2xl text-sm text-clinic-muted">
-            Calcula cuotas para tratamientos y estima el flujo de caja que recibiria la clinica.
+            Calcula cuotas, anticipo y flujo estimado para la clinica.
           </p>
         </div>
-        <div className="rounded-lg bg-clinic-surface px-4 py-3 text-sm text-clinic-muted">
-          API futura: scoring crediticio, motor antifraude y red P2P de fondeo.
+        <div className="inline-flex items-center gap-2 rounded-lg bg-clinic-surface px-3 py-2 text-sm font-medium text-clinic-muted">
+          <CircleHelp size={16} />
+          Planes de pago
         </div>
       </div>
 
@@ -111,13 +110,16 @@ export function FinancingSimulator() {
               <p className="font-semibold text-clinic-ink">{option.months} cuotas</p>
               {option.months === bestOption.months && (
                 <span className="rounded-lg bg-clinic-accent px-2 py-1 text-xs font-semibold text-white">
-                  menor cuota
+                  Plan recomendado
                 </span>
               )}
             </div>
             <p className="mt-4 text-2xl font-semibold text-clinic-ink">
               {currency.format(option.monthlyPayment)}
             </p>
+            {option.months === bestOption.months && (
+              <p className="mt-1 text-xs font-medium text-blue-700">Menor cuota para el paciente</p>
+            )}
             <dl className="mt-4 space-y-2 text-sm">
               <div className="flex justify-between gap-3">
                 <dt className="text-clinic-muted">Anticipo neto</dt>
@@ -128,7 +130,7 @@ export function FinancingSimulator() {
                 <dd className="font-medium text-clinic-ink">{currency.format(option.platformFee)}</dd>
               </div>
               <div className="flex justify-between gap-3">
-                <dt className="text-clinic-muted">Cashflow total</dt>
+                <dt className="text-clinic-muted">Flujo estimado</dt>
                 <dd className="font-medium text-clinic-ink">
                   {currency.format(option.projectedCashflow)}
                 </dd>
@@ -138,17 +140,9 @@ export function FinancingSimulator() {
         ))}
       </div>
 
-      <div className="mt-5 grid gap-3 rounded-lg border border-clinic-line bg-clinic-surface p-4 text-sm text-clinic-muted md:grid-cols-2">
-        <p className="flex items-start gap-2">
-          <Landmark size={18} className="mt-0.5 text-clinic-brand" />
-          `requestCreditScore(patientId, treatmentCost)` puede conectarse con bureau, Open Finance o
-          proveedores BNPL.
-        </p>
-        <p className="flex items-start gap-2">
-          <TrendingUp size={18} className="mt-0.5 text-clinic-brand" />
-          `publishLoanToMarketplace(option)` puede derivar la operacion a inversores o red P2P.
-        </p>
-      </div>
+      <p className="mt-5 text-xs text-clinic-muted">
+        Nota tecnica: el modulo queda preparado para conectar scoring crediticio, pagos y fondeo P2P.
+      </p>
     </section>
   );
 }

@@ -1,5 +1,11 @@
 export type UserRole = "patient" | "doctor" | "admin";
-export type AppointmentStatus = "pending" | "confirmed" | "attended";
+export type AppointmentStatus =
+  | "pending"
+  | "confirmed"
+  | "attended"
+  | "cancelled"
+  | "rescheduled"
+  | "no_show";
 export type AppointmentType = "in_person" | "telemedicine";
 export type UrgencyLevel = "low" | "medium" | "high";
 
@@ -30,6 +36,7 @@ export type Appointment = {
   appointment_type: AppointmentType;
   status: AppointmentStatus;
   reason: string;
+  specialty: string | null;
   created_at: string;
 };
 

@@ -16,10 +16,10 @@ const kpis = [
     icon: Repeat2
   },
   {
-    title: "Ticket rentable",
+    title: "Ticket promedio",
     value: "$92K",
     delta: "+11%",
-    description: "Promedio en tratamientos financiados",
+    description: "Promedio de tratamientos del mes",
     icon: Trophy
   }
 ];
@@ -38,12 +38,12 @@ const currency = new Intl.NumberFormat("es-AR", {
 
 export function GrowthDashboard() {
   return (
-    <section className="rounded-lg border border-clinic-line bg-white p-5 shadow-soft">
+    <section className="rounded-lg border border-clinic-line bg-white p-5 shadow-sm">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h2 className="text-lg font-semibold text-clinic-ink">Growth analytics</h2>
+          <h2 className="text-lg font-semibold text-clinic-ink">Indicadores de gestion</h2>
           <p className="mt-1 text-sm text-clinic-muted">
-            Indicadores comerciales para optimizar agenda, retencion y rentabilidad.
+            Senales clave para mejorar agenda, retencion y rentabilidad.
           </p>
         </div>
         <div className="inline-flex items-center gap-2 rounded-lg bg-clinic-surface px-3 py-2 text-sm font-medium text-clinic-muted">
@@ -56,7 +56,7 @@ export function GrowthDashboard() {
         {kpis.map((kpi) => {
           const Icon = kpi.icon;
           return (
-            <article key={kpi.title} className="rounded-lg border border-clinic-line p-4">
+            <article key={kpi.title} className="rounded-lg border border-clinic-line bg-white p-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-clinic-muted">{kpi.title}</span>
                 <Icon size={19} className="text-clinic-brand" />

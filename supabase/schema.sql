@@ -1,7 +1,14 @@
 create extension if not exists "pgcrypto";
 
 create type public.user_role as enum ('patient', 'admin');
-create type public.appointment_status as enum ('pending', 'confirmed', 'attended');
+create type public.appointment_status as enum (
+  'pending',
+  'confirmed',
+  'attended',
+  'cancelled',
+  'rescheduled',
+  'no_show'
+);
 create type public.appointment_type as enum ('in_person', 'telemedicine');
 create type public.urgency_level as enum ('low', 'medium', 'high');
 
@@ -32,6 +39,7 @@ create table public.appointments (
   appointment_type public.appointment_type not null,
   status public.appointment_status not null default 'pending',
   reason text not null,
+  specialty text,
   created_at timestamptz not null default now(),
   constraint appointments_unique_slot unique (starts_at, appointment_type)
 );
