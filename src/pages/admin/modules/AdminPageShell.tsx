@@ -7,12 +7,14 @@ export function AdminPageShell({
   description,
   eyebrow,
   actionLabel,
+  onAction,
   children
 }: {
   title: string;
   description: string;
   eyebrow?: string;
   actionLabel?: string;
+  onAction?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -29,7 +31,11 @@ export function AdminPageShell({
             </h1>
             <p className="mt-2 max-w-2xl text-clinic-muted">{description}</p>
           </div>
-          {actionLabel && <Button variant="primary">{actionLabel}</Button>}
+          {actionLabel && (
+            <Button onClick={onAction} variant="primary">
+              {actionLabel}
+            </Button>
+          )}
         </section>
         {children}
       </main>

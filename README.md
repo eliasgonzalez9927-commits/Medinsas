@@ -12,6 +12,7 @@ clinic-saas-mvp/
     migrations/
       002_ai_whatsapp_agent.sql
       003_product_architecture.sql
+      004_connect_operational_base.sql
     schema.sql
   backend/
     src/
@@ -35,6 +36,7 @@ clinic-saas-mvp/
     contexts/
       AuthContext.tsx
     lib/
+      clinic-data.ts
       supabase.ts
     pages/
       admin/
@@ -50,6 +52,7 @@ clinic-saas-mvp/
       patient/
         PatientBooking.tsx
     types/
+      clinic.ts
       database.ts
     App.tsx
     main.tsx
@@ -60,7 +63,7 @@ clinic-saas-mvp/
 
 1. Crea un proyecto en Supabase.
 2. Ejecuta `supabase/schema.sql` en el SQL Editor.
-3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql` y `supabase/migrations/003_product_architecture.sql`.
+3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql` y `supabase/migrations/004_connect_operational_base.sql`.
 4. Copia `.env.example` a `.env` y completa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 5. Instala dependencias con `npm install`.
 6. Ejecuta `npm run dev`.
@@ -95,6 +98,19 @@ clinic-saas-mvp/
 
 Las secciones nuevas usan mocks realistas desde `src/data/clinicMockData.ts` para dejar la UX y
 la arquitectura listas antes de conectar todas las tablas reales de Supabase.
+
+## Base operativa conectada
+
+La capa `src/lib/clinic-data.ts` conecta a Supabase estos modulos:
+
+- Profesionales: listar, detalle por `id` o `slug`, crear, editar y activar/desactivar.
+- Servicios: listar, crear, editar y activar/desactivar.
+- Disponibilidad: listar reglas, crear/eliminar horarios, listar/crear/eliminar bloqueos.
+- Motor base de slots: `getAvailableSlots({ clinicId, professionalId, serviceId, date })`.
+
+La migracion `004_connect_operational_base.sql` agrega slugs, campos operativos, RLS inicial,
+policies de lectura publica minima y permisos de gestion para administradores. Tambien inserta
+datos demo reales para `Clinica Central`.
 
 ## Integracion WhatsApp
 

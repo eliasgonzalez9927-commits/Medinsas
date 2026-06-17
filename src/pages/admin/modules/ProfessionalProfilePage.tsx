@@ -1,23 +1,69 @@
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { CalendarDays, Copy, Stethoscope } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
-import { availabilityRules, professionals } from "../../../data/clinicMockData";
+import { getProfessionalById } from "../../../lib/clinic-data";
+import { ProfessionalWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
+
+const dayLabels = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
 
 export function ProfessionalProfilePage() {
   const { id } = useParams();
-  const professional = professionals.find((item) => item.id === id) ?? professionals[0];
-  const rules = availabilityRules.filter((rule) =>
-    rule.professionalName.includes(professional.lastName)
-  );
-  const bookingLink = `https://clinic-saas-mvp.vercel.app/reservar/clinica-central/${professional.id}`;
+  const [professional, setProfessional] = useState<ProfessionalWithRelations | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function load() {
+      if (!id) return;
+      setLoading(true);
+      setError("");
+      try {
+        setProfessional(await getProfessionalById(id));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "No pudimos cargar el profesional.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <AdminPageShell description="Cargando datos del profesional." eyebrow="Perfil profesional" title="Profesional">
+        <div className="rounded-lg border border-clinic-line bg-white p-8 text-center text-clinic-muted">
+          Cargando profesional...
+        </div>
+      </AdminPageShell>
+    );
+  }
+
+  if (!professional || error) {
+    return (
+      <AdminPageShell
+        description="Verifica que el profesional exista o que el seed inicial este cargado."
+        eyebrow="Perfil profesional"
+        title="No encontramos este profesional"
+      >
+        <SectionCard className="p-8 text-center">
+          <p className="text-clinic-muted">
+            {error || "No encontramos este profesional."}
+          </p>
+        </SectionCard>
+      </AdminPageShell>
+    );
+  }
+
+  const bookingLink = `https://clinic-saas-mvp.vercel.app/reservar/clinica-central/${professional.slug ?? professional.id}`;
 
   return (
     <AdminPageShell
       description="Datos, servicios, agenda, disponibilidad y link publico filtrado por profesional."
       eyebrow="Perfil profesional"
-      title={`Dr/a. ${professional.name} ${professional.lastName}`}
+      title={`Dr/a. ${professional.name} ${professional.last_name}`}
     >
       <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
         <SectionCard className="p-5">
@@ -26,30 +72,39 @@ export function ProfessionalProfilePage() {
           </div>
           <h2 className="mt-4 text-lg font-semibold text-clinic-ink">Datos basicos</h2>
           <dl className="mt-5 grid gap-3 text-sm">
-            <Info label="Email" value={professional.email} />
-            <Info label="Telefono" value={professional.phone} />
-            <Info label="Matricula" value={professional.licenseNumber} />
-            <Info label="Sede" value={professional.location} />
-            <Info label="Duracion promedio" value={`${professional.consultationMinutes} min`} />
+            <Info label="Email" value={professional.email ?? "Sin email"} />
+            <Info label="Telefono" value={professional.phone ?? "Sin telefono"} />
+            <Info label="Matricula" value={professional.license_number ?? "Sin cargar"} />
+            <Info label="Duracion promedio" value={`${professional.consultation_minutes} min`} />
           </dl>
-          <p className="mt-5 text-sm leading-6 text-clinic-muted">{professional.bio}</p>
+          <p className="mt-5 text-sm leading-6 text-clinic-muted">
+            {professional.bio ?? "Sin biografia cargada."}
+          </p>
         </SectionCard>
 
         <SectionCard className="p-5">
           <h2 className="text-lg font-semibold text-clinic-ink">Servicios y especialidades</h2>
           <div className="mt-4 flex flex-wrap gap-2">
-            {professional.specialties.map((specialty) => (
-              <span key={specialty} className="rounded-lg bg-teal-50 px-3 py-1 text-sm font-semibold text-clinic-brand">
-                {specialty}
-              </span>
-            ))}
+            {professional.specialties.length === 0 ? (
+              <span className="text-sm text-clinic-muted">Sin especialidades asignadas</span>
+            ) : (
+              professional.specialties.map((specialty) => (
+                <span key={specialty.id} className="rounded-lg bg-teal-50 px-3 py-1 text-sm font-semibold text-clinic-brand">
+                  {specialty.name}
+                </span>
+              ))
+            )}
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {professional.services.map((service) => (
-              <div key={service} className="rounded-lg border border-clinic-line bg-clinic-surface p-3 text-sm font-medium text-clinic-ink">
-                {service}
-              </div>
-            ))}
+            {professional.services.length === 0 ? (
+              <p className="text-sm text-clinic-muted">Sin servicios asignados.</p>
+            ) : (
+              professional.services.map((service) => (
+                <div key={service.id} className="rounded-lg border border-clinic-line bg-clinic-surface p-3 text-sm font-medium text-clinic-ink">
+                  {service.name}
+                </div>
+              ))
+            )}
           </div>
           <div className="mt-6 rounded-lg border border-clinic-line bg-white p-4">
             <p className="text-sm text-clinic-muted">Link publico de reserva</p>
@@ -68,14 +123,15 @@ export function ProfessionalProfilePage() {
             Horarios de atencion
           </h2>
           <div className="mt-4 space-y-3">
-            {rules.length === 0 ? (
+            {!professional.availability_rules || professional.availability_rules.length === 0 ? (
               <p className="text-sm text-clinic-muted">No hay reglas cargadas para este profesional.</p>
             ) : (
-              rules.map((rule) => (
+              professional.availability_rules.map((rule) => (
                 <div key={rule.id} className="rounded-lg border border-clinic-line p-3 text-sm">
-                  <p className="font-semibold text-clinic-ink">{rule.day}</p>
+                  <p className="font-semibold text-clinic-ink">{dayLabels[rule.day_of_week]}</p>
                   <p className="text-clinic-muted">
-                    {rule.startTime} a {rule.endTime} · turnos de {rule.slotDurationMinutes} min
+                    {rule.start_time.slice(0, 5)} a {rule.end_time.slice(0, 5)} · turnos de{" "}
+                    {rule.slot_duration_minutes} min
                   </p>
                 </div>
               ))
@@ -85,15 +141,9 @@ export function ProfessionalProfilePage() {
 
         <SectionCard className="p-5">
           <h2 className="text-lg font-semibold text-clinic-ink">Proximos turnos</h2>
-          <div className="mt-4 space-y-3">
-            {["Hoy 09:00 · Juan Gomez", "Hoy 11:30 · Laura Mendez", "Viernes 16:00 · Carla Fernandez"].map(
-              (appointment) => (
-                <div key={appointment} className="rounded-lg border border-clinic-line bg-clinic-surface p-3 text-sm font-medium text-clinic-ink">
-                  {appointment}
-                </div>
-              )
-            )}
-          </div>
+          <p className="mt-3 text-sm text-clinic-muted">
+            Proximo paso: conectar esta vista con `appointments` filtrado por `professional_id`.
+          </p>
         </SectionCard>
       </section>
     </AdminPageShell>
