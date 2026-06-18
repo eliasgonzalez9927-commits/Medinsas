@@ -643,6 +643,7 @@ function toPaymentStatusResponse(payment) {
       service_name: detail.serviceName,
       professional_name: detail.professionalName,
       clinic_name: detail.clinicName,
+      timezone: detail.timezone,
       clinic_phone: payment.clinics?.phone ?? null,
       location_name: payment.appointments?.locations?.name ?? null,
       location_address: detail.locationAddress,
@@ -660,14 +661,16 @@ function buildAppointmentDetail(payment) {
   const clinic = payment.clinics ?? {};
   const location = appointment.locations ?? {};
   const startsAt = appointment.starts_at ?? appointment.start_time ?? null;
+  const timezone = clinic.timezone ?? "America/Argentina/Mendoza";
   return {
     patientName: [patient.first_name, patient.last_name].filter(Boolean).join(" ") || "Paciente",
     serviceName: service.name ?? appointment.reason ?? "Turno",
     professionalName: [professional.name, professional.last_name].filter(Boolean).join(" ") || "Profesional a confirmar",
     clinicName: clinic.name ?? "Medin",
     locationAddress: location.address ?? clinic.address ?? "Dirección a confirmar",
-    dateLabel: startsAt ? new Intl.DateTimeFormat("es-AR", { dateStyle: "long", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(startsAt)) : "Fecha a confirmar",
-    timeLabel: startsAt ? new Intl.DateTimeFormat("es-AR", { timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(startsAt)) : "Hora a confirmar",
+    timezone,
+    dateLabel: startsAt ? new Intl.DateTimeFormat("es-AR", { dateStyle: "long", timeZone: timezone }).format(new Date(startsAt)) : "Fecha a confirmar",
+    timeLabel: startsAt ? new Intl.DateTimeFormat("es-AR", { timeStyle: "short", timeZone: timezone }).format(new Date(startsAt)) : "Hora a confirmar",
     durationMinutes: Number(service.duration_minutes ?? 30),
     servicePrice: Number(service.price ?? payment.amount ?? 0),
     hasSchedule: Boolean(startsAt)

@@ -47,7 +47,6 @@ export function AdminDashboard() {
   const [services, setServices] = useState<ServiceWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const today = new Date().toISOString().slice(0, 10);
 
   async function loadDashboard() {
     setLoading(true);
@@ -59,6 +58,7 @@ export function AdminDashboard() {
         setError("No encontramos la clinica configurada.");
         return;
       }
+      const today = getDateInTimeZone(new Date(), loadedClinic.timezone ?? undefined);
       const [loadedAppointments, loadedPatients, professionalResult, serviceResult] = await Promise.all([
         getAppointments(loadedClinic.id, { date: today }),
         getPatients(loadedClinic.id),
@@ -127,7 +127,7 @@ export function AdminDashboard() {
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
           <Metric title="Turnos hoy" value={String(summary.total)} helper="Actividad programada" icon={<Clock3 size={19} />} />
           <Metric title="Pendientes" value={String(summary.pending)} helper="Para confirmar" icon={<CalendarDays size={19} />} tone="warning" />
-          <Metric title="Proximo turno" value={summary.nextAppointment ? formatTime(summary.nextAppointment.starts_at) : "--"} helper={summary.nextAppointment?.patient ? `${summary.nextAppointment.patient.first_name} ${summary.nextAppointment.patient.last_name}` : "Sin proximos turnos"} icon={<CalendarCheck2 size={19} />} />
+          <Metric title="Proximo turno" value={summary.nextAppointment ? formatTime(summary.nextAppointment.starts_at, clinic?.timezone ?? undefined) : "--"} helper={summary.nextAppointment?.patient ? `${summary.nextAppointment.patient.first_name} ${summary.nextAppointment.patient.last_name}` : "Sin proximos turnos"} icon={<CalendarCheck2 size={19} />} />
           <Metric title="Confirmados" value={String(summary.confirmed)} helper="Pacientes listos" icon={<CheckCircle2 size={19} />} tone="success" />
           <Metric title="Cancelados / ausentes" value={String(summary.cancelled)} helper="Revisar seguimiento" icon={<UserX size={19} />} tone="danger" />
           <Metric title="Ocupacion" value={`${summary.occupancy}%`} helper="Capacidad estimada" icon={<Percent size={19} />} />
@@ -143,7 +143,7 @@ export function AdminDashboard() {
               <div className="divide-y divide-clinic-line">
                 {appointments.slice(0, 6).map((appointment) => (
                   <article key={appointment.id} className="grid gap-3 py-4 md:grid-cols-[80px_1fr_1fr_130px] md:items-center">
-                    <p className="font-semibold text-clinic-brand">{formatTime(appointment.starts_at)}</p>
+                    <p className="font-semibold text-clinic-brand">{formatTime(appointment.starts_at, clinic?.timezone ?? undefined)}</p>
                     <div>
                       <p className="font-semibold text-clinic-ink">
                         {appointment.patient ? `${appointment.patient.first_name} ${appointment.patient.last_name}` : "Paciente sin vincular"}
@@ -311,8 +311,19 @@ function Message({ children }: { children: string }) {
   return <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{children}</div>;
 }
 
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+function formatTime(value: string, timezone = "America/Argentina/Mendoza") {
+  return new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: timezone }).format(new Date(value));
+}
+
+function getDateInTimeZone(date: Date, timezone = "America/Argentina/Mendoza") {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
 }
 
 function sourceLabel(value: string) {

@@ -104,7 +104,7 @@ export function AgendaPage() {
         service_id: current.service_id || activeServices[0]?.id || "",
         location_id: current.location_id || loadedLocations[0]?.id || ""
       }));
-      await loadAppointments(loadedClinic.id);
+      await loadAppointments(loadedClinic.id, loadedClinic.timezone ?? "America/Argentina/Mendoza");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar la agenda.");
     } finally {
@@ -112,10 +112,11 @@ export function AgendaPage() {
     }
   }
 
-  async function loadAppointments(clinicId = clinic?.id) {
+  async function loadAppointments(clinicId = clinic?.id, timezone = clinic?.timezone ?? "America/Argentina/Mendoza") {
     if (!clinicId) return;
     const loadedAppointments = await getAppointments(clinicId, {
       date: selectedDate,
+      timezone,
       professionalId,
       serviceId,
       status
@@ -144,7 +145,8 @@ export function AgendaPage() {
       clinicId: clinic.id,
       professionalId: form.professional_id,
       serviceId: form.service_id,
-      date: form.date
+      date: form.date,
+      timezone: clinic.timezone ?? "America/Argentina/Mendoza"
     })
       .then((available) => {
         setSlots(available);
@@ -411,7 +413,7 @@ export function AgendaPage() {
                 key={appointment.id}
                 className="grid gap-4 px-5 py-4 lg:grid-cols-[90px_1fr_1fr_170px_360px] lg:items-center"
               >
-                <div className="font-semibold text-clinic-brand">{formatTime(appointment.starts_at)}</div>
+                <div className="font-semibold text-clinic-brand">{formatTime(appointment.starts_at, clinic?.timezone ?? undefined)}</div>
                 <div>
                   <p className="font-semibold text-clinic-ink">
                     {appointment.patient
@@ -533,10 +535,11 @@ function Select({
   );
 }
 
-function formatTime(value: string) {
+function formatTime(value: string, timezone = "America/Argentina/Mendoza") {
   return new Intl.DateTimeFormat("es-AR", {
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
+    timeZone: timezone
   }).format(new Date(value));
 }
 

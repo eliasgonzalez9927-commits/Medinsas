@@ -44,7 +44,7 @@ export function PublicBookingPage() {
   const [slots, setSlots] = useState<AvailableSlot[]>([]);
   const [serviceId, setServiceId] = useState("");
   const [professionalId, setProfessionalId] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState("");
   const [slotStartsAt, setSlotStartsAt] = useState("");
   const [form, setForm] = useState<BookingForm>(emptyForm);
   const [loading, setLoading] = useState(true);
@@ -65,6 +65,7 @@ export function PublicBookingPage() {
           setError("No encontramos la clinica solicitada.");
           return;
         }
+        setDate((current) => current || getDateInTimeZone(new Date(), loadedClinic.timezone ?? "America/Argentina/Mendoza"));
         const [serviceResult, professionalResult] = await Promise.all([
           getServices(loadedClinic.id),
           getProfessionals(loadedClinic.id)
@@ -225,7 +226,7 @@ export function PublicBookingPage() {
             {checkoutUrl ? "Para confirmar tu turno, completa el pago." : "Tu turno fue solicitado correctamente."}
           </h1>
           <p className="mt-3 text-clinic-muted">
-            {result.service} con Dr/a. {result.professional}, {formatDateTime(result.starts_at)}.
+            {result.service} con Dr/a. {result.professional}, {formatDateTime(result.starts_at, result.timezone ?? clinic?.timezone ?? undefined)}.
           </p>
           <div className="mt-5 rounded-lg bg-teal-50 px-4 py-3 text-sm font-medium text-clinic-brand">
             Estado: {checkoutUrl ? "pago pendiente" : result.status === "pending" ? "pendiente de confirmacion" : "confirmado"}
@@ -427,11 +428,23 @@ function Message({ children }: { children: string }) {
   return <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{children}</div>;
 }
 
-function formatDateTime(value: string) {
+function formatDateTime(value: string, timezone = "America/Argentina/Mendoza") {
   return new Intl.DateTimeFormat("es-AR", {
     dateStyle: "short",
-    timeStyle: "short"
+    timeStyle: "short",
+    timeZone: timezone
   }).format(new Date(value));
+}
+
+function getDateInTimeZone(date: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function requiresOnlinePayment(service?: ServiceWithRelations | null) {

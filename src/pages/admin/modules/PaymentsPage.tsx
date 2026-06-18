@@ -95,7 +95,7 @@ export function PaymentsPage() {
                     {payment.patients ? `${payment.patients.first_name} ${payment.patients.last_name}` : "Sin paciente"}
                   </p>
                   <p className="text-sm text-clinic-muted">
-                    {payment.services?.name ?? payment.notes ?? "Pago Mercado Pago"} · {formatDate(payment.created_at)}
+                    {payment.services?.name ?? payment.notes ?? "Pago Mercado Pago"} · {formatDate(payment.created_at, payment.clinics?.timezone ?? undefined)}
                   </p>
                 </div>
                 <StatusBadge status={payment.status} />
@@ -156,7 +156,7 @@ export function PaymentDetailPage() {
             <dl className="mt-5 grid gap-3 text-sm">
               <Info label="Estado" value={payment.status} />
               <Info label="Turno asociado" value={payment.appointment_id ?? "Sin turno asociado"} />
-              <Info label="Fecha y hora del turno" value={payment.appointments?.starts_at ? formatDate(payment.appointments.starts_at) : "Sin fecha/hora"} />
+              <Info label="Fecha y hora del turno" value={payment.appointments?.starts_at ? formatDate(payment.appointments.starts_at, payment.clinics?.timezone ?? undefined) : "Sin fecha/hora"} />
               <Info label="Estado del turno" value={payment.appointments?.status ?? "Sin turno"} />
               <Info label="Estado pago turno" value={payment.appointments?.payment_status ?? "Sin estado"} />
               <Info label="Provider payment id" value={payment.provider_payment_id ?? "Pendiente"} />
@@ -187,7 +187,7 @@ export function PaymentDetailPage() {
               ) : events.map((event) => (
                 <article key={event.id} className="px-5 py-4">
                   <p className="font-semibold text-clinic-ink">{event.event_type}</p>
-                  <p className="mt-1 text-sm text-clinic-muted">{formatDate(event.created_at)} · {event.provider_event_id ?? "Sin id proveedor"}</p>
+                  <p className="mt-1 text-sm text-clinic-muted">{formatDate(event.created_at, payment.clinics?.timezone ?? undefined)} · {event.provider_event_id ?? "Sin id proveedor"}</p>
                 </article>
               ))}
             </div>
@@ -392,8 +392,8 @@ function formatMoney(value: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(Number(value || 0));
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+function formatDate(value: string, timezone = "America/Argentina/Mendoza") {
+  return new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short", timeZone: timezone }).format(new Date(value));
 }
 
 function getPublicAppUrl() {

@@ -152,6 +152,19 @@ quita el bloqueo global de un turno por hora, agrega `appointment_events`, expon
 de slots disponibles y crea `create_public_booking(...)` con validacion anti doble reserva dentro
 de la base de datos. Los eventos quedan listos para conectar WhatsApp sin enviar mensajes todavia.
 
+### Timezones de agenda
+
+Los horarios de turnos se eligen y se muestran en la zona horaria de la clinica. Para la demo,
+`clinics.timezone` queda en `America/Argentina/Mendoza`.
+
+- El paciente elige fecha y hora local de la clinica.
+- La RPC `get_public_available_slots(...)` convierte esa hora local a UTC con `AT TIME ZONE`.
+- `appointments.starts_at` y `appointments.end_time` se guardan como `timestamptz`.
+- Las pantallas de agenda, pagos, retorno post-pago, emails y calendario formatean usando
+  `clinic.timezone`, no la timezone implicita del navegador.
+- La migracion `010_clinic_timezone_fix.sql` agrega `clinics.timezone` y corrige las RPC de
+  slots/reserva publica para evitar corrimientos como 09:30 -> 06:30.
+
 ## Acceso admin
 
 La migracion `006_auth_admin_access.sql` agrega los roles operativos `platform_admin`,

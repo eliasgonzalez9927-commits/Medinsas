@@ -24,6 +24,7 @@ type PaymentStatusResponse = {
     service_name: string;
     professional_name: string;
     clinic_name: string;
+    timezone: string;
     clinic_phone: string | null;
     location_name: string | null;
     location_address: string | null;
@@ -132,7 +133,7 @@ function PaymentReturnPage({ kind }: { kind: PaymentReturnKind }) {
               <Detail label="Paciente" value={payment.appointment.patient_name} />
               <Detail label="Servicio" value={payment.appointment.service_name} />
               <Detail label="Profesional" value={payment.appointment.professional_name} />
-              <Detail label="Fecha y hora" value={formatDateTime(payment.appointment.starts_at)} />
+              <Detail label="Fecha y hora" value={formatDateTime(payment.appointment.starts_at, payment.appointment.timezone)} />
               <Detail label="Clínica" value={payment.appointment.clinic_name} />
               <Detail label="Sede / dirección" value={payment.appointment.location_address ?? "A confirmar"} />
               <Detail label="Monto pagado" value={formatMoney(payment.amount, payment.currency)} />
@@ -140,7 +141,7 @@ function PaymentReturnPage({ kind }: { kind: PaymentReturnKind }) {
               <Detail label="Saldo pendiente" value={formatMoney(payment.remaining_amount, payment.currency)} />
               <Detail label="Estado del turno" value={translateAppointmentStatus(payment.appointment.status)} />
               <Detail label="Estado del pago" value={translatePaymentStatus(payment.status)} />
-              <Detail label="Acreditado" value={payment.paid_at ? formatDateTime(payment.paid_at) : "A confirmar"} />
+              <Detail label="Acreditado" value={payment.paid_at ? formatDateTime(payment.paid_at, payment.appointment.timezone) : "A confirmar"} />
             </div>
 
             {["pending", "in_process"].includes(payment.status) && (
@@ -241,6 +242,7 @@ function buildGoogleCalendarUrl(payment: PaymentStatusResponse) {
     action: "TEMPLATE",
     text: `Turno en ${payment.appointment.clinic_name} - ${payment.appointment.service_name}`,
     dates: `${toGoogleDate(start)}/${toGoogleDate(end)}`,
+    ctz: payment.appointment.timezone || "America/Argentina/Mendoza",
     location: payment.appointment.location_address ?? "",
     details: `Servicio: ${payment.appointment.service_name}\nProfesional: ${payment.appointment.professional_name}\nContacto: ${payment.appointment.clinic_phone ?? ""}`
   });
@@ -249,7 +251,7 @@ function buildGoogleCalendarUrl(payment: PaymentStatusResponse) {
 
 function buildWhatsAppUrl(payment: PaymentStatusResponse) {
   const phone = String(payment.appointment.clinic_phone ?? "").replace(/\D/g, "");
-  const text = encodeURIComponent(`Hola, tengo una consulta sobre mi turno de ${payment.appointment.service_name} del ${formatDateTime(payment.appointment.starts_at)}.`);
+  const text = encodeURIComponent(`Hola, tengo una consulta sobre mi turno de ${payment.appointment.service_name} del ${formatDateTime(payment.appointment.starts_at, payment.appointment.timezone)}.`);
   return `https://wa.me/${phone}?text=${text}`;
 }
 
@@ -258,7 +260,7 @@ function buildCopyText(payment: PaymentStatusResponse) {
     `Paciente: ${payment.appointment.patient_name}`,
     `Servicio: ${payment.appointment.service_name}`,
     `Profesional: ${payment.appointment.professional_name}`,
-    `Fecha y hora: ${formatDateTime(payment.appointment.starts_at)}`,
+    `Fecha y hora: ${formatDateTime(payment.appointment.starts_at, payment.appointment.timezone)}`,
     `Clínica: ${payment.appointment.clinic_name}`,
     `Dirección: ${payment.appointment.location_address ?? "A confirmar"}`,
     `Monto pagado: ${formatMoney(payment.amount, payment.currency)}`,
@@ -293,9 +295,9 @@ function translateAppointmentStatus(status?: string | null) {
   return labels[status ?? ""] ?? status ?? "Sin estado";
 }
 
-function formatDateTime(value?: string | null) {
+function formatDateTime(value?: string | null, timezone = "America/Argentina/Mendoza") {
   if (!value) return "A confirmar";
-  return new Intl.DateTimeFormat("es-AR", { dateStyle: "long", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("es-AR", { dateStyle: "long", timeStyle: "short", timeZone: timezone }).format(new Date(value));
 }
 
 function formatMoney(value: number, currency = "ARS") {

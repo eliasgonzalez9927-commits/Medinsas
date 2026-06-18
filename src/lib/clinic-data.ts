@@ -271,7 +271,7 @@ export async function getPayments(clinicId: string): Promise<PaymentWithRelation
   try {
     const { data, error } = await supabase
       .from("payments")
-      .select("*, patients(*), appointments(*), services(*)")
+      .select("*, clinics(*), patients(*), appointments(*), services(*)")
       .eq("clinic_id", clinicId)
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -286,7 +286,7 @@ export async function getPaymentById(id: string): Promise<PaymentWithRelations |
   try {
     const { data, error } = await supabase
       .from("payments")
-      .select("*, patients(*), appointments(*), services(*)")
+      .select("*, clinics(*), patients(*), appointments(*), services(*)")
       .eq("id", id)
       .maybeSingle();
     if (error) throw error;
@@ -698,10 +698,11 @@ export async function getAppointments(
       .eq("clinic_id", clinicId)
       .order("starts_at");
     if (filters.date) {
-      const start = new Date(`${filters.date}T00:00:00`);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 1);
-      query = query.gte("starts_at", start.toISOString()).lt("starts_at", end.toISOString());
+      const timezone = filters.timezone ?? "America/Argentina/Mendoza";
+      const start = zonedDateTimeToUtcIso(filters.date, "00:00", timezone);
+      const endDate = addDaysToDateString(filters.date, 1);
+      const end = zonedDateTimeToUtcIso(endDate, "00:00", timezone);
+      query = query.gte("starts_at", start).lt("starts_at", end);
     }
     if (filters.professionalId && filters.professionalId !== "all") {
       query = query.eq("professional_id", filters.professionalId);
@@ -833,18 +834,20 @@ export async function getAvailableSlots({
   clinicId,
   professionalId,
   serviceId,
-  date
+  date,
+  timezone = "America/Argentina/Mendoza"
 }: {
   clinicId: string;
   professionalId: string;
   serviceId: string;
   date: string;
+  timezone?: string;
 }): Promise<AvailableSlot[]> {
   const [rulesResult, blocks, serviceResult, appointments] = await Promise.all([
     getAvailabilityRules(clinicId, professionalId),
     getAvailabilityBlocks(clinicId, professionalId),
     getServices(clinicId),
-    getAppointments(clinicId, { date })
+    getAppointments(clinicId, { date, timezone })
   ]);
   const service = serviceResult.data.find((item) => item.id === serviceId);
   if (!service || !service.active) return [];
@@ -864,7 +867,7 @@ export async function getAvailableSlots({
     const end = timeToMinutes(rule.end_time);
     while (cursor + duration <= end) {
       const slot = minutesToTime(cursor);
-      const startsAt = new Date(`${date}T${slot}:00`).toISOString();
+      const startsAt = zonedDateTimeToUtcIso(date, slot, timezone);
       const endTime = new Date(new Date(startsAt).getTime() + duration * 60000).toISOString();
       const blocked = dayBlocks.some(
         (block) => cursor < timeToMinutes(block.end_time) && cursor + duration > timeToMinutes(block.start_time)
@@ -878,8 +881,8 @@ export async function getAvailableSlots({
         )
       );
       const isPastToday =
-        date === new Date().toISOString().slice(0, 10) &&
-        cursor <= new Date().getHours() * 60 + new Date().getMinutes();
+        date === getDateInTimeZone(new Date(), timezone) &&
+        cursor <= getMinutesInTimeZone(new Date(), timezone);
       if (!blocked && !occupied && !isPastToday) slots.push({ time: slot, startsAt, endTime });
       cursor += duration;
     }
@@ -1131,6 +1134,64 @@ function minutesToTime(value: number) {
 
 function rangesOverlap(startA: string, endA: string, startB: string, endB: string) {
   return new Date(startA) < new Date(endB) && new Date(endA) > new Date(startB);
+}
+
+function zonedDateTimeToUtcIso(date: string, time: string, timezone: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  const offsetMs = getTimeZoneOffsetMs(utcGuess, timezone);
+  return new Date(utcGuess.getTime() - offsetMs).toISOString();
+}
+
+function getTimeZoneOffsetMs(date: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const asUtc = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second)
+  );
+  return asUtc - date.getTime();
+}
+
+function getDateInTimeZone(date: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function getMinutesInTimeZone(date: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return Number(values.hour) * 60 + Number(values.minute);
+}
+
+function addDaysToDateString(date: string, days: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 }
 
 function dayLabelToNumber(day: string) {

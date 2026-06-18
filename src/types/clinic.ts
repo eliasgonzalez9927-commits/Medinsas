@@ -7,6 +7,7 @@ export type Clinic = {
   whatsapp?: string | null;
   email: string | null;
   address: string | null;
+  timezone?: string | null;
   logo_url: string | null;
   website_url?: string | null;
   active?: boolean;
@@ -309,6 +310,7 @@ export type AppointmentInput = {
 
 export type AppointmentFilters = {
   date?: string;
+  timezone?: string;
   professionalId?: string;
   status?: AppointmentStatus | "all";
   serviceId?: string;
@@ -334,6 +336,7 @@ export type PublicBookingResult = {
   status: AppointmentStatus;
   starts_at: string;
   end_time: string;
+  timezone?: string;
   service: string;
   professional: string;
 };
@@ -397,6 +400,7 @@ export type PaymentStatus =
   | string;
 
 export type PaymentWithRelations = Payment & {
+  clinics?: Clinic | null;
   patients?: Patient | null;
   appointments?: Appointment | null;
   services?: Service | null;
