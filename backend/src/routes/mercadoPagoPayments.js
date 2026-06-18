@@ -388,7 +388,7 @@ async function loadPaymentDetails(paymentId) {
 
 function resolveProviderPaymentId(query, payment) {
   const candidates = [
-    query.payment_id && !isUuid(String(query.payment_id)) ? query.payment_id : null,
+    query.payment_id && isLikelyProviderPaymentId(String(query.payment_id)) ? query.payment_id : null,
     query.collection_id,
     query.provider_payment_id,
     query["data.id"],
@@ -734,4 +734,8 @@ function verifyWebhook(req) {
 
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isLikelyProviderPaymentId(value) {
+  return /^\d{5,}$/.test(value);
 }
