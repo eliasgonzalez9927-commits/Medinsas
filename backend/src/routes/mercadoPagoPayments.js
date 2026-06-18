@@ -69,16 +69,43 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async 
 
 mercadoPagoPaymentsRouter.get("/payments/mercadopago/status", async (req, res, next) => {
   try {
-    const paymentId = String(req.query.payment_id ?? "");
-    if (!isUuid(paymentId)) return res.status(400).json({ error: "INVALID_PAYMENT_ID" });
-    const { data, error } = await supabase
-      .from("payments")
-      .select("id, status, amount, currency, checkout_url, provider_payment_id, provider_preference_id, appointment_id, patient_id, service_id, paid_at")
-      .eq("id", paymentId)
-      .maybeSingle();
-    if (error) throw error;
-    if (!data) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
-    res.status(200).json(data);
+    let payment = await resolvePaymentFromRequest(req.query);
+    const providerPaymentIdFromQuery = resolveProviderPaymentId(req.query, null);
+    let providerPayment = null;
+    if (!payment && providerPaymentIdFromQuery && config.MERCADO_PAGO_ACCESS_TOKEN) {
+      providerPayment = await fetchMercadoPagoPayment(providerPaymentIdFromQuery);
+      payment = await findPayment(providerPayment, providerPaymentIdFromQuery);
+    }
+    if (!payment) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+
+    const providerPaymentId = resolveProviderPaymentId(req.query, payment);
+    if (providerPaymentId && config.MERCADO_PAGO_ACCESS_TOKEN) {
+      providerPayment = providerPayment?.id && String(providerPayment.id) === String(providerPaymentId) ? providerPayment : await fetchMercadoPagoPayment(providerPaymentId);
+      await updatePaymentFromProvider(payment, providerPayment);
+    }
+
+    const updatedPayment = await loadPaymentDetails(payment.id);
+    if (!updatedPayment) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+    if (updatedPayment.status === "approved") {
+      await sendPaymentApprovedNotifications(updatedPayment);
+    }
+
+    res.status(200).json(toPaymentStatusResponse(updatedPayment));
+  } catch (error) {
+    next(error);
+  }
+});
+
+mercadoPagoPaymentsRouter.get("/appointments/:id/calendar.ics", async (req, res, next) => {
+  try {
+    const appointmentId = String(req.params.id ?? "");
+    if (!isUuid(appointmentId)) return res.status(400).json({ error: "INVALID_APPOINTMENT_ID" });
+    const appointment = await loadAppointmentDetails(appointmentId);
+    if (!appointment) return res.status(404).json({ error: "APPOINTMENT_NOT_FOUND" });
+    const ics = buildIcsEvent(appointment);
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="turno-medin-${appointment.id}.ics"`);
+    res.status(200).send(ics);
   } catch (error) {
     next(error);
   }
@@ -121,6 +148,10 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/webhook", async (req, res,
 
     if (payment && providerPayment) {
       await updatePaymentFromProvider(payment, providerPayment);
+      const updatedPayment = await loadPaymentDetails(payment.id);
+      if (updatedPayment?.status === "approved") {
+        await sendPaymentApprovedNotifications(updatedPayment);
+      }
     }
 
     res.status(200).json({ ok: true });
@@ -157,6 +188,16 @@ async function loadAppointment(appointmentId) {
   const { data, error } = await supabase
     .from("appointments")
     .select("*, clinics(*), patients(*), services(*)")
+    .eq("id", appointmentId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function loadAppointmentDetails(appointmentId) {
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("*, clinics(*), patients(*), services(*), professionals(*), locations(*)")
     .eq("id", appointmentId)
     .maybeSingle();
   if (error) throw error;
@@ -272,6 +313,12 @@ async function fetchMercadoPagoPayment(providerPaymentId) {
 }
 
 async function findPayment(providerPayment, providerPaymentId) {
+  const metadataPaymentId = providerPayment?.metadata?.payment_id;
+  if (metadataPaymentId && isUuid(String(metadataPaymentId))) {
+    const payment = await loadPaymentDetails(String(metadataPaymentId));
+    if (payment) return payment;
+  }
+
   if (providerPayment?.external_reference) {
     const { data, error } = await supabase
       .from("payments")
@@ -294,6 +341,63 @@ async function findPayment(providerPayment, providerPaymentId) {
   return null;
 }
 
+async function resolvePaymentFromRequest(query) {
+  const internalPaymentId = String(query.payment_id ?? "");
+  if (isUuid(internalPaymentId)) return loadPaymentDetails(internalPaymentId);
+
+  const externalReference = String(query.external_reference ?? "");
+  if (externalReference) {
+    const { data, error } = await supabase
+      .from("payments")
+      .select("*")
+      .eq("external_reference", externalReference)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) return data;
+  }
+
+  const providerPreferenceId = String(query.preference_id ?? query.provider_preference_id ?? "");
+  if (providerPreferenceId) {
+    const { data, error } = await supabase
+      .from("payments")
+      .select("*")
+      .eq("provider", "mercado_pago")
+      .eq("provider_preference_id", providerPreferenceId)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) return data;
+  }
+
+  const providerPaymentId = String(query.collection_id ?? query["data.id"] ?? query.provider_payment_id ?? "");
+  if (providerPaymentId) {
+    return findPayment(null, providerPaymentId);
+  }
+
+  return null;
+}
+
+async function loadPaymentDetails(paymentId) {
+  const { data, error } = await supabase
+    .from("payments")
+    .select("*, clinics(*), patients(*), services(*), appointments(*, professionals(*), locations(*))")
+    .eq("id", paymentId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+function resolveProviderPaymentId(query, payment) {
+  const candidates = [
+    query.payment_id && !isUuid(String(query.payment_id)) ? query.payment_id : null,
+    query.collection_id,
+    query.provider_payment_id,
+    query["data.id"],
+    query.mp_payment_id,
+    payment?.provider_payment_id
+  ];
+  return String(candidates.find((value) => value && value !== "null" && value !== "undefined") ?? "");
+}
+
 async function updatePaymentFromProvider(payment, providerPayment) {
   const status = normalizeStatus(providerPayment.status);
   await supabase
@@ -312,9 +416,19 @@ async function updatePaymentFromProvider(payment, providerPayment) {
   if (payment.appointment_id) {
     const appointmentPaymentStatus = mapAppointmentPaymentStatus(status, payment.notes);
     const update = { payment_status: appointmentPaymentStatus };
-    if (status === "approved") update.status = "confirmed";
+    if (status === "approved") update.status = await resolveApprovedAppointmentStatus(payment.clinic_id);
     await supabase.from("appointments").update(update).eq("id", payment.appointment_id);
   }
+}
+
+async function resolveApprovedAppointmentStatus(clinicId) {
+  const { data, error } = await supabase
+    .from("booking_settings")
+    .select("require_manual_confirmation")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.require_manual_confirmation ? "pending" : "confirmed";
 }
 
 function normalizeStatus(status) {
@@ -324,9 +438,286 @@ function normalizeStatus(status) {
 
 function mapAppointmentPaymentStatus(status, notes) {
   if (status === "approved") return String(notes ?? "").includes("Sena") ? "deposit_paid" : "paid";
-  if (status === "rejected") return "rejected";
+  if (status === "rejected" || status === "cancelled" || status === "expired") return "payment_failed";
   if (status === "refunded") return "refunded";
   return String(notes ?? "").includes("Sena") ? "deposit_pending" : "unpaid";
+}
+
+async function sendPaymentApprovedNotifications(payment) {
+  if (!config.RESEND_API_KEY) return;
+  await sendPatientPaymentEmail(payment);
+  await sendClinicPaymentEmail(payment);
+}
+
+async function sendPatientPaymentEmail(payment) {
+  const patient = payment.patients;
+  if (!patient?.email) return;
+  const alreadySent = await hasMessageLog({
+    relatedType: "payment_confirmation_email",
+    relatedId: payment.id,
+    recipient: patient.email
+  });
+  if (alreadySent) return;
+
+  const subject = isDepositPayment(payment) ? "Tu seña fue acreditada y tu turno quedó confirmado" : "Tu turno fue confirmado";
+  const body = buildPatientEmail(payment);
+  await sendLoggedEmail({
+    clinicId: payment.clinic_id,
+    patientId: payment.patient_id,
+    appointmentId: payment.appointment_id,
+    recipient: patient.email,
+    subject,
+    text: body.text,
+    html: body.html,
+    relatedType: "payment_confirmation_email",
+    relatedId: payment.id
+  });
+}
+
+async function sendClinicPaymentEmail(payment) {
+  const recipient = payment.clinics?.email;
+  if (!recipient) return;
+  const alreadySent = await hasMessageLog({
+    relatedType: "payment_internal_email",
+    relatedId: payment.id,
+    recipient
+  });
+  if (alreadySent) return;
+
+  const detail = buildAppointmentDetail(payment);
+  const text = [
+    "Nuevo turno confirmado con pago.",
+    "",
+    `Paciente: ${detail.patientName}`,
+    `Servicio: ${detail.serviceName}`,
+    `Profesional: ${detail.professionalName}`,
+    `Fecha: ${detail.dateLabel}`,
+    `Hora: ${detail.timeLabel}`,
+    `Monto pagado: ${formatMoney(payment.amount, payment.currency)}`,
+    `Payment ID: ${payment.id}`,
+    `Estado: ${payment.status}`
+  ].join("\n");
+
+  await sendLoggedEmail({
+    clinicId: payment.clinic_id,
+    patientId: payment.patient_id,
+    appointmentId: payment.appointment_id,
+    recipient,
+    subject: "Nuevo turno confirmado con pago",
+    text,
+    html: `<p>${escapeHtml(text).replace(/\n/g, "<br>")}</p>`,
+    relatedType: "payment_internal_email",
+    relatedId: payment.id
+  });
+}
+
+async function hasMessageLog({ relatedType, relatedId, recipient }) {
+  const { data, error } = await supabase
+    .from("message_logs")
+    .select("id")
+    .eq("related_entity_type", relatedType)
+    .eq("related_entity_id", relatedId)
+    .eq("recipient", recipient)
+    .in("status", ["pending", "sent"])
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+async function sendLoggedEmail({ clinicId, patientId, appointmentId, recipient, subject, text, html, relatedType, relatedId }) {
+  const { data: log, error: logError } = await supabase
+    .from("message_logs")
+    .insert({
+      clinic_id: clinicId,
+      patient_id: patientId,
+      appointment_id: appointmentId,
+      channel: "email",
+      provider: "resend",
+      recipient,
+      subject,
+      body_preview: stripHtml(text).slice(0, 180),
+      status: "pending",
+      related_entity_type: relatedType,
+      related_entity_id: relatedId
+    })
+    .select("id")
+    .single();
+  if (logError) throw logError;
+
+  try {
+    const sent = await sendWithResend({ to: recipient, subject, text, html });
+    await supabase
+      .from("message_logs")
+      .update({ status: "sent", provider_message_id: sent.id ?? null, sent_at: new Date().toISOString() })
+      .eq("id", log.id);
+  } catch (error) {
+    await supabase
+      .from("message_logs")
+      .update({ status: "failed", error_message: "No pudimos enviar el email con Resend." })
+      .eq("id", log.id);
+  }
+}
+
+async function sendWithResend({ to, subject, text, html }) {
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.RESEND_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: config.RESEND_FROM_EMAIL,
+      reply_to: config.RESEND_REPLY_TO_EMAIL || undefined,
+      to: [to],
+      subject,
+      text,
+      html
+    })
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error("Resend request failed");
+    error.statusCode = response.status;
+    error.details = body;
+    throw error;
+  }
+  return body;
+}
+
+function buildPatientEmail(payment) {
+  const detail = buildAppointmentDetail(payment);
+  const calendarUrl = `${(config.APP_PUBLIC_URL ?? "").replace(/\/$/, "")}/api/appointments/${payment.appointment_id}/calendar.ics`;
+  const remaining = Math.max(Number(detail.servicePrice) - Number(payment.amount), 0);
+  const lines = [
+    `Hola ${detail.patientName},`,
+    "",
+    "Tu turno fue confirmado.",
+    "",
+    "Detalle:",
+    "",
+    `Servicio: ${detail.serviceName}`,
+    `Profesional: ${detail.professionalName}`,
+    `Fecha: ${detail.dateLabel}`,
+    `Hora: ${detail.timeLabel}`,
+    `Clínica: ${detail.clinicName}`,
+    `Dirección: ${detail.locationAddress}`,
+    `Monto pagado: ${formatMoney(payment.amount, payment.currency)}`,
+    `Tipo de pago: ${isDepositPayment(payment) ? "Seña" : "Pago total"}`,
+    `Saldo pendiente: ${formatMoney(remaining, payment.currency)}`,
+    "",
+    "Si necesitás modificar o cancelar tu turno, comunicate con la clínica."
+  ];
+  return {
+    text: lines.join("\n"),
+    html: `<p>Hola ${escapeHtml(detail.patientName)},</p><p>Tu turno fue confirmado.</p><ul><li>Servicio: ${escapeHtml(detail.serviceName)}</li><li>Profesional: ${escapeHtml(detail.professionalName)}</li><li>Fecha: ${escapeHtml(detail.dateLabel)}</li><li>Hora: ${escapeHtml(detail.timeLabel)}</li><li>Clínica: ${escapeHtml(detail.clinicName)}</li><li>Dirección: ${escapeHtml(detail.locationAddress)}</li><li>Monto pagado: ${escapeHtml(formatMoney(payment.amount, payment.currency))}</li><li>Tipo de pago: ${isDepositPayment(payment) ? "Seña" : "Pago total"}</li><li>Saldo pendiente: ${escapeHtml(formatMoney(remaining, payment.currency))}</li></ul><p><a href="${escapeHtml(calendarUrl)}">Agregar al calendario</a></p><p>Si necesitás modificar o cancelar tu turno, comunicate con la clínica.</p>`
+  };
+}
+
+function toPaymentStatusResponse(payment) {
+  const detail = buildAppointmentDetail(payment);
+  const remainingAmount = Math.max(Number(detail.servicePrice) - Number(payment.amount), 0);
+  return {
+    id: payment.id,
+    status: payment.status,
+    status_detail: payment.status_detail,
+    amount: Number(payment.amount),
+    currency: payment.currency,
+    checkout_url: payment.checkout_url,
+    paid_at: payment.paid_at,
+    payment_type: isDepositPayment(payment) ? "deposit" : "full",
+    remaining_amount: remainingAmount,
+    appointment: {
+      id: payment.appointment_id,
+      status: payment.appointments?.status ?? null,
+      payment_status: payment.appointments?.payment_status ?? null,
+      start_time: payment.appointments?.start_time ?? null,
+      end_time: payment.appointments?.end_time ?? null,
+      patient_name: detail.patientName,
+      service_name: detail.serviceName,
+      professional_name: detail.professionalName,
+      clinic_name: detail.clinicName,
+      clinic_phone: payment.clinics?.phone ?? null,
+      location_name: payment.appointments?.locations?.name ?? null,
+      location_address: detail.locationAddress,
+      duration_minutes: detail.durationMinutes
+    }
+  };
+}
+
+function buildAppointmentDetail(payment) {
+  const appointment = payment.appointments ?? {};
+  const service = payment.services ?? {};
+  const patient = payment.patients ?? {};
+  const professional = appointment.professionals ?? {};
+  const clinic = payment.clinics ?? {};
+  const location = appointment.locations ?? {};
+  return {
+    patientName: [patient.first_name, patient.last_name].filter(Boolean).join(" ") || "Paciente",
+    serviceName: service.name ?? appointment.reason ?? "Turno",
+    professionalName: [professional.name, professional.last_name].filter(Boolean).join(" ") || "Profesional a confirmar",
+    clinicName: clinic.name ?? "Medin",
+    locationAddress: location.address ?? clinic.address ?? "Dirección a confirmar",
+    dateLabel: appointment.start_time ? new Intl.DateTimeFormat("es-AR", { dateStyle: "long", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(appointment.start_time)) : "Fecha a confirmar",
+    timeLabel: appointment.start_time ? new Intl.DateTimeFormat("es-AR", { timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(appointment.start_time)) : "Hora a confirmar",
+    durationMinutes: Number(service.duration_minutes ?? 30),
+    servicePrice: Number(service.price ?? payment.amount ?? 0)
+  };
+}
+
+function buildIcsEvent(appointment) {
+  const service = appointment.services ?? {};
+  const clinic = appointment.clinics ?? {};
+  const professional = appointment.professionals ?? {};
+  const location = appointment.locations ?? {};
+  const start = new Date(appointment.start_time);
+  const end = appointment.end_time ? new Date(appointment.end_time) : new Date(start.getTime() + Number(service.duration_minutes ?? 30) * 60_000);
+  const title = `Turno en ${clinic.name ?? "Medin"} - ${service.name ?? appointment.reason ?? "Consulta"}`;
+  const description = [
+    `Servicio: ${service.name ?? "Consulta"}`,
+    `Profesional: ${[professional.name, professional.last_name].filter(Boolean).join(" ") || "A confirmar"}`,
+    clinic.phone ? `Contacto: ${clinic.phone}` : ""
+  ].filter(Boolean).join("\\n");
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Medin//ClinicOS//ES",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${appointment.id}@medin`,
+    `DTSTAMP:${toIcsDate(new Date())}`,
+    `DTSTART:${toIcsDate(start)}`,
+    `DTEND:${toIcsDate(end)}`,
+    `SUMMARY:${escapeIcs(title)}`,
+    `LOCATION:${escapeIcs(location.address ?? clinic.address ?? "")}`,
+    `DESCRIPTION:${escapeIcs(description)}`,
+    "END:VEVENT",
+    "END:VCALENDAR"
+  ].join("\r\n");
+}
+
+function isDepositPayment(payment) {
+  return String(payment.notes ?? "").toLowerCase().includes("sena") || String(payment.notes ?? "").toLowerCase().includes("seña");
+}
+
+function formatMoney(value, currency = "ARS") {
+  return new Intl.NumberFormat("es-AR", { style: "currency", currency: currency || "ARS" }).format(Number(value ?? 0));
+}
+
+function toIcsDate(date) {
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+function escapeIcs(value) {
+  return String(value ?? "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+}
+
+function stripHtml(value) {
+  return String(value).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function verifyWebhook(req) {
