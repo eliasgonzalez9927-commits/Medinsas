@@ -2,6 +2,7 @@ import {
   Banknote,
   CalendarDays,
   ClipboardList,
+  FilePenLine,
   MessageCircle,
   LogOut,
   Menu,
@@ -10,6 +11,7 @@ import {
   Settings,
   SlidersHorizontal,
   Stethoscope,
+  ReceiptText,
   UserRound,
   UsersRound,
   WalletCards
@@ -30,6 +32,8 @@ const navItems = [
   { label: "Reservas online", icon: CalendarDays, to: "/admin/booking" },
   { label: "WhatsApp", icon: MessageCircle, to: "/admin/whatsapp" },
   { label: "Financiacion", icon: Banknote, to: "/admin/financiacion" },
+  { label: "Facturacion", icon: ReceiptText, to: "/admin/facturacion" },
+  { label: "Recetarios", icon: FilePenLine, to: "/admin/recetarios" },
   { label: "Reportes", icon: PieChart, to: "/admin/reportes" },
   { label: "Configuracion", icon: Settings, to: "/admin/configuracion" }
 ];

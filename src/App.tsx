@@ -7,9 +7,11 @@ import { Register } from "./pages/auth/Register";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { AgendaPage } from "./pages/admin/modules/AgendaPage";
 import { AvailabilityPage } from "./pages/admin/modules/AvailabilityPage";
+import { BillingDocumentsPage, BillingPage, BillingSettingsPage } from "./pages/admin/modules/BillingPage";
 import { FinancingPage, ReportsPage, SettingsPage } from "./pages/admin/modules/SecondaryModulePage";
 import { OnlineBookingPage } from "./pages/admin/modules/OnlineBookingPage";
 import { PatientsPage } from "./pages/admin/modules/PatientsPage";
+import { NewPrescriptionPage, PrescriptionSettingsPage, PrescriptionsPage } from "./pages/admin/modules/PrescriptionsPage";
 import { ProfessionalsPage } from "./pages/admin/modules/ProfessionalsPage";
 import { ProfessionalProfilePage } from "./pages/admin/modules/ProfessionalProfilePage";
 import { ServicesPage } from "./pages/admin/modules/ServicesPage";
@@ -54,6 +56,12 @@ export function App() {
         <Route path="/admin/reservas-online" element={<OnlineBookingPage />} />
         <Route path="/admin/whatsapp" element={<WhatsAppPage />} />
         <Route path="/admin/financiacion" element={<FinancingPage />} />
+        <Route path="/admin/facturacion" element={<BillingPage />} />
+        <Route path="/admin/facturacion/comprobantes" element={<BillingDocumentsPage />} />
+        <Route path="/admin/facturacion/configuracion" element={<BillingSettingsPage />} />
+        <Route path="/admin/recetarios" element={<PrescriptionsPage />} />
+        <Route path="/admin/recetarios/nuevo" element={<NewPrescriptionPage />} />
+        <Route path="/admin/recetarios/configuracion" element={<PrescriptionSettingsPage />} />
         <Route path="/admin/reportes" element={<ReportsPage />} />
         <Route path="/admin/configuracion" element={<SettingsPage />} />
       </Route>

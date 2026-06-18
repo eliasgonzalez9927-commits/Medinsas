@@ -7,10 +7,12 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  FilePenLine,
   Link2,
   MessageCircle,
   Percent,
   PlugZap,
+  ReceiptText,
   RefreshCw,
   UserX,
   UsersRound,
@@ -190,6 +192,8 @@ export function AdminDashboard() {
               <QuickLink icon={<WalletCards size={18} />} label="Servicios" to="/admin/servicios" />
               <QuickLink icon={<CalendarDays size={18} />} label="Disponibilidad" to="/admin/disponibilidad" />
               <QuickLink icon={<MessageCircle size={18} />} label="WhatsApp" to="/admin/whatsapp" />
+              <QuickLink icon={<ReceiptText size={18} />} label="Facturacion" to="/admin/facturacion" />
+              <QuickLink icon={<FilePenLine size={18} />} label="Recetarios" to="/admin/recetarios" />
             </div>
           </Panel>
         </section>

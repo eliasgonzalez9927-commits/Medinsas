@@ -15,6 +15,7 @@ clinic-saas-mvp/
       004_connect_operational_base.sql
       005_connect_agenda_patients_booking.sql
       006_auth_admin_access.sql
+      007_billing_prescriptions_foundation.sql
     schema.sql
   backend/
     src/
@@ -65,7 +66,7 @@ clinic-saas-mvp/
 
 1. Crea un proyecto en Supabase.
 2. Ejecuta `supabase/schema.sql` en el SQL Editor.
-3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql` y `supabase/migrations/006_auth_admin_access.sql`.
+3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql`, `supabase/migrations/006_auth_admin_access.sql` y `supabase/migrations/007_billing_prescriptions_foundation.sql`.
 4. Copia `.env.example` a `.env` y completa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 5. Instala dependencias con `npm install`.
 6. Ejecuta `npm run dev`.
@@ -83,6 +84,7 @@ clinic-saas-mvp/
 - Backend Node.js en `backend/` para operar Supabase desde WhatsApp con un agente OpenAI y tools por rol.
 - Row Level Security para separar acceso de pacientes y administradores.
 - Acceso admin protegido con Supabase Auth, perfiles, membresias por clinica y roles operativos.
+- Modulos preparados de facturacion y recetarios internos, sin integraciones fiscales o regulatorias activas.
 
 ## Rutas de producto
 
@@ -96,6 +98,12 @@ clinic-saas-mvp/
 - `/admin/booking`: configuracion de reservas online y links publicos.
 - `/admin/whatsapp`: plantillas y preparacion de flujos por WhatsApp.
 - `/admin/financiacion`: simulador de planes de pago.
+- `/admin/facturacion`: preparacion fiscal, comprobantes internos, pagos y estado ARCA.
+- `/admin/facturacion/comprobantes`: listado preparado de comprobantes.
+- `/admin/facturacion/configuracion`: datos fiscales, CUIT, condicion fiscal y puntos de venta.
+- `/admin/recetarios`: recetario interno, ordenes e indicaciones.
+- `/admin/recetarios/nuevo`: borrador de documento medico interno.
+- `/admin/recetarios/configuracion`: datos profesionales, matricula e integracion futura.
 - `/admin/reportes`: indicadores de gestion.
 - `/reservar/:clinicSlug`: flujo publico mobile-first para reserva de pacientes.
 
@@ -147,6 +155,21 @@ npm run admin:create
 
 Luego entra en `/login` con ese email y contrasena. Todas las rutas `/admin` redirigen a
 `/login` si no hay sesion activa.
+
+## Facturacion y recetarios
+
+La migracion `007_billing_prescriptions_foundation.sql` agrega las tablas `fiscal_settings`,
+`payments`, `invoices`, `invoice_items`, `prescription_settings`, `medical_documents` y
+`medical_document_items`, con RLS para administradores.
+
+Facturacion queda preparada para datos fiscales, CUIT, condicion fiscal, puntos de venta,
+comprobantes internos, facturas, recibos, notas de credito, pagos, PDF y estado de integracion
+ARCA. Mientras no exista WSAA/WSFE o proveedor externo configurado, la UI muestra:
+`Integracion ARCA pendiente de configuracion.`
+
+Recetarios queda preparado como `Recetario interno`, `Ordenes e indicaciones` y
+`Preparado para integracion con receta electronica`. No se presenta como integracion oficial
+activa hasta conectar una plataforma aprobada y completar la configuracion profesional.
 
 ## Integracion WhatsApp
 
