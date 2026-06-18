@@ -1,6 +1,6 @@
 import { FormEvent, InputHTMLAttributes, ReactNode, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { CalendarCheck, CheckCircle2, MessageCircle, Stethoscope } from "lucide-react";
+import { CalendarCheck, CheckCircle2, CreditCard, MessageCircle, Stethoscope } from "lucide-react";
 import {
   createPublicBooking,
   getClinicBySlug,
@@ -52,6 +52,7 @@ export function PublicBookingPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<PublicBookingResult | null>(null);
+  const [checkoutUrl, setCheckoutUrl] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -179,6 +180,25 @@ export function PublicBookingPage() {
         insurance: form.insurance || null,
         reason: form.reason || selectedService?.name || "Consulta"
       });
+      if (requiresOnlinePayment(selectedService)) {
+        const paymentResponse = await fetch("/api/payments/mercadopago/create-preference", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            appointmentId: booking.appointment_id,
+            amountType: selectedService?.deposit_required ? "deposit" : "full"
+          })
+        });
+        const paymentData = await paymentResponse.json().catch(() => ({}));
+        if (!paymentResponse.ok || !paymentData.checkout_url) {
+          throw new Error(
+            paymentData.error === "MERCADO_PAGO_NOT_CONFIGURED"
+              ? "El pago online todavia no esta configurado para esta clinica."
+              : "No pudimos generar el link de pago."
+          );
+        }
+        setCheckoutUrl(paymentData.checkout_url);
+      }
       setResult(booking);
     } catch (err) {
       console.error("Public booking submit failed", {
@@ -202,14 +222,23 @@ export function PublicBookingPage() {
             <CheckCircle2 size={28} />
           </div>
           <h1 className="mt-5 text-2xl font-semibold text-clinic-ink">
-            Tu turno fue solicitado correctamente.
+            {checkoutUrl ? "Para confirmar tu turno, completa el pago." : "Tu turno fue solicitado correctamente."}
           </h1>
           <p className="mt-3 text-clinic-muted">
             {result.service} con Dr/a. {result.professional}, {formatDateTime(result.starts_at)}.
           </p>
           <div className="mt-5 rounded-lg bg-teal-50 px-4 py-3 text-sm font-medium text-clinic-brand">
-            Estado: {result.status === "pending" ? "pendiente de confirmacion" : "confirmado"}
+            Estado: {checkoutUrl ? "pago pendiente" : result.status === "pending" ? "pendiente de confirmacion" : "confirmado"}
           </div>
+          {checkoutUrl && (
+            <a
+              href={checkoutUrl}
+              className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-clinic-brand px-5 py-3 font-semibold text-white hover:bg-teal-800"
+            >
+              <CreditCard size={18} />
+              Pagar con Mercado Pago
+            </a>
+          )}
         </section>
       </main>
     );
@@ -265,6 +294,11 @@ export function PublicBookingPage() {
                         <span className="mt-1 block text-sm text-clinic-muted">
                           {service.specialty?.name ?? "Servicio"} · {service.duration_minutes} min
                         </span>
+                        {requiresOnlinePayment(service) && (
+                          <span className="mt-2 inline-flex rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                            Requiere pago online {service.deposit_required ? `· Sena ${formatMoney(service.deposit_amount ?? service.price ?? 0)}` : ""}
+                          </span>
+                        )}
                       </label>
                     ))
                   )}
@@ -335,6 +369,11 @@ export function PublicBookingPage() {
                       {selectedService?.name ?? "Servicio"} · {date} ·{" "}
                       {slots.find((slot) => slot.startsAt === slotStartsAt)?.time ?? "Sin horario"}
                     </p>
+                    {requiresOnlinePayment(selectedService) && (
+                      <p className="mt-2 text-sm font-medium text-amber-700">
+                        Para confirmar tu turno, vas a continuar a Mercado Pago.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <button
@@ -342,7 +381,7 @@ export function PublicBookingPage() {
                   className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-clinic-brand px-4 py-3 font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <MessageCircle size={18} />
-                  {saving ? "Confirmando..." : "Confirmar solicitud"}
+                  {saving ? "Confirmando..." : requiresOnlinePayment(selectedService) ? "Continuar al pago" : "Confirmar solicitud"}
                 </button>
               </section>
             </>
@@ -393,4 +432,12 @@ function formatDateTime(value: string) {
     dateStyle: "short",
     timeStyle: "short"
   }).format(new Date(value));
+}
+
+function requiresOnlinePayment(service?: ServiceWithRelations | null) {
+  return Boolean(service?.allow_online_payment !== false && (service?.payment_required || service?.deposit_required));
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(Number(value || 0));
 }

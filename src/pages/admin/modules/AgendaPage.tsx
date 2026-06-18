@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { Clock3, MessageCircle, Plus, RefreshCw, UserCheck, UserX } from "lucide-react";
+import { Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
@@ -17,6 +17,7 @@ import {
   markAppointmentCompleted,
   markAppointmentNoShow
 } from "../../../lib/clinic-data";
+import { supabase } from "../../../lib/supabase";
 import {
   AppointmentInput,
   AppointmentStatus,
@@ -61,6 +62,7 @@ export function AgendaPage() {
   const [slots, setSlots] = useState<AvailableSlot[]>([]);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [paymentLinks, setPaymentLinks] = useState<Record<string, string>>({});
   const [form, setForm] = useState<AppointmentForm>({
     patient_id: "",
     professional_id: "",
@@ -242,6 +244,33 @@ export function AgendaPage() {
     }
   }
 
+  async function generatePaymentLink(appointment: AppointmentWithRelations) {
+    setError("");
+    try {
+      const { data } = await supabase.auth.getSession();
+      const response = await fetch("/api/payments/mercadopago/create-preference", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {})
+        },
+        body: JSON.stringify({
+          appointmentId: appointment.id,
+          amountType: appointment.service?.deposit_required ? "deposit" : "full"
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.checkout_url) {
+        throw new Error(payload.error === "MERCADO_PAGO_NOT_CONFIGURED" ? "Mercado Pago no esta configurado." : "No pudimos generar el link de pago.");
+      }
+      setPaymentLinks((current) => ({ ...current, [appointment.id]: payload.checkout_url }));
+      setNotice("Link de pago generado.");
+      await loadAppointments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos generar el link de pago.");
+    }
+  }
+
   return (
     <AdminPageShell
       actionLabel="Crear turno manual"
@@ -380,7 +409,7 @@ export function AgendaPage() {
             {appointments.map((appointment) => (
               <article
                 key={appointment.id}
-                className="grid gap-4 px-5 py-4 lg:grid-cols-[90px_1fr_1fr_150px_300px] lg:items-center"
+                className="grid gap-4 px-5 py-4 lg:grid-cols-[90px_1fr_1fr_170px_360px] lg:items-center"
               >
                 <div className="font-semibold text-clinic-brand">{formatTime(appointment.starts_at)}</div>
                 <div>
@@ -399,8 +428,25 @@ export function AgendaPage() {
                   </p>
                   <p className="text-sm text-clinic-muted">{appointment.service?.name ?? appointment.reason}</p>
                 </div>
-                <AppointmentStatusBadge status={appointment.status} />
+                <div className="grid gap-2">
+                  <AppointmentStatusBadge status={appointment.status} />
+                  <PaymentStatusBadge status={appointment.payment_status ?? "unpaid"} />
+                </div>
                 <div className="flex flex-wrap gap-2">
+                  <Button icon={<CreditCard size={16} />} onClick={() => generatePaymentLink(appointment)}>
+                    Generar link
+                  </Button>
+                  {paymentLinks[appointment.id] && (
+                    <Button
+                      icon={<Copy size={16} />}
+                      onClick={() => {
+                        navigator.clipboard?.writeText(paymentLinks[appointment.id]);
+                        setNotice("Link copiado.");
+                      }}
+                    >
+                      Copiar link
+                    </Button>
+                  )}
                   {appointment.status === "pending" && (
                     <Button onClick={() => handleStatus(appointment.id, "confirm")}>Confirmar</Button>
                   )}
@@ -502,6 +548,25 @@ function sourceLabel(value: string) {
     imported: "Importado"
   };
   return labels[value] ?? value;
+}
+
+function PaymentStatusBadge({ status }: { status: string }) {
+  const labels: Record<string, string> = {
+    unpaid: "Sin pago",
+    deposit_pending: "Sena pendiente",
+    deposit_paid: "Sena pagada",
+    paid: "Pagado",
+    rejected: "Rechazado",
+    refunded: "Reembolsado"
+  };
+  const tone = ["deposit_paid", "paid"].includes(status)
+    ? "bg-emerald-50 text-emerald-700"
+    : status === "deposit_pending"
+      ? "bg-amber-50 text-amber-700"
+      : ["rejected", "refunded"].includes(status)
+        ? "bg-red-50 text-red-700"
+        : "bg-clinic-surface text-clinic-muted";
+  return <span className={`rounded-lg px-2.5 py-1 text-center text-xs font-semibold ${tone}`}>{labels[status] ?? status}</span>;
 }
 
 function Message({ tone, children }: { tone: "success" | "error"; children: string }) {

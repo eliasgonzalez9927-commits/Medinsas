@@ -5,6 +5,7 @@ export const permissionMatrix = {
     ...all(false),
     canManageAppointments: true,
     canManagePatients: true,
+    canManageBilling: true,
     canSendMessages: true
   },
   professional: {

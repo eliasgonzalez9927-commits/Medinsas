@@ -64,6 +64,9 @@ export type Service = {
   financing_enabled: boolean;
   deposit_required: boolean;
   public_booking_enabled: boolean;
+  payment_required?: boolean;
+  deposit_amount?: number | null;
+  allow_online_payment?: boolean;
 };
 
 export type ProfessionalService = {
@@ -118,9 +121,20 @@ export type Appointment = {
   cancellation_reason: string | null;
   rescheduled_from_id: string | null;
   whatsapp_status: string | null;
+  payment_status?: AppointmentPaymentStatus;
+  deposit_amount?: number | null;
+  payment_required?: boolean;
   created_at: string;
   updated_at?: string;
 };
+
+export type AppointmentPaymentStatus =
+  | "unpaid"
+  | "deposit_pending"
+  | "deposit_paid"
+  | "paid"
+  | "rejected"
+  | "refunded";
 
 export type AppointmentEvent = {
   id: string;
@@ -211,6 +225,9 @@ export type ServiceInput = {
   financing_enabled?: boolean;
   deposit_required?: boolean;
   public_booking_enabled?: boolean;
+  payment_required?: boolean;
+  deposit_amount?: number | null;
+  allow_online_payment?: boolean;
 };
 
 export type AvailabilityRuleInput = {
@@ -347,15 +364,74 @@ export type Payment = {
   clinic_id: string;
   patient_id: string | null;
   appointment_id: string | null;
+  invoice_id?: string | null;
+  service_id?: string | null;
   amount: number;
   currency: string;
   method: string | null;
-  status: "pending" | "paid" | "cancelled" | "refunded" | string;
+  provider?: string;
+  provider_payment_id?: string | null;
+  provider_preference_id?: string | null;
   external_reference: string | null;
+  status: PaymentStatus;
+  status_detail?: string | null;
+  payment_method?: string | null;
+  payer_email?: string | null;
+  checkout_url?: string | null;
   paid_at: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type PaymentStatus =
+  | "pending"
+  | "in_process"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | "refunded"
+  | "charged_back"
+  | "expired"
+  | string;
+
+export type PaymentWithRelations = Payment & {
+  patients?: Patient | null;
+  appointments?: Appointment | null;
+  services?: Service | null;
+};
+
+export type PaymentSettings = {
+  id: string;
+  clinic_id: string;
+  provider: string;
+  active: boolean;
+  mode: "sandbox" | "production" | string;
+  public_key: string | null;
+  access_token_encrypted: string | null;
+  webhook_secret: string | null;
+  default_currency: string;
+  checkout_public_name: string | null;
+  collect_deposit_online: boolean;
+  deposit_type: "fixed" | "percentage" | string;
+  deposit_amount: number | null;
+  deposit_percentage: number | null;
+  payment_link_expiration_minutes: number | null;
+  support_email: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PaymentEvent = {
+  id: string;
+  payment_id: string | null;
+  clinic_id: string;
+  provider: string;
+  event_type: string;
+  provider_event_id: string | null;
+  payload: Record<string, unknown>;
+  processed_at: string | null;
+  created_at: string;
 };
 
 export type Invoice = {

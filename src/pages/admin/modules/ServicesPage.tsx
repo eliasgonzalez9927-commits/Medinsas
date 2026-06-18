@@ -27,6 +27,9 @@ type FormState = {
   duration_minutes: number;
   price: string;
   deposit_required: boolean;
+  payment_required: boolean;
+  deposit_amount: string;
+  allow_online_payment: boolean;
   financing_enabled: boolean;
   public_booking_enabled: boolean;
 };
@@ -38,6 +41,9 @@ const emptyForm: FormState = {
   duration_minutes: 30,
   price: "",
   deposit_required: false,
+  payment_required: false,
+  deposit_amount: "",
+  allow_online_payment: true,
   financing_enabled: false,
   public_booking_enabled: true
 };
@@ -98,6 +104,9 @@ export function ServicesPage() {
       duration_minutes: service.duration_minutes,
       price: service.price ? String(service.price) : "",
       deposit_required: service.deposit_required,
+      payment_required: Boolean(service.payment_required),
+      deposit_amount: service.deposit_amount ? String(service.deposit_amount) : "",
+      allow_online_payment: service.allow_online_payment !== false,
       financing_enabled: service.financing_enabled,
       public_booking_enabled: service.public_booking_enabled
     });
@@ -120,6 +129,9 @@ export function ServicesPage() {
         price: form.price ? Number(form.price) : null,
         active: true,
         deposit_required: form.deposit_required,
+        payment_required: form.payment_required,
+        deposit_amount: form.deposit_amount ? Number(form.deposit_amount) : null,
+        allow_online_payment: form.allow_online_payment,
         financing_enabled: form.financing_enabled,
         public_booking_enabled: form.public_booking_enabled
       };
@@ -196,6 +208,7 @@ export function ServicesPage() {
               type="number"
             />
             <Input label="Precio" value={form.price} onChange={(value) => setForm({ ...form, price: value })} type="number" />
+            <Input label="Monto de sena" value={form.deposit_amount} onChange={(value) => setForm({ ...form, deposit_amount: value })} type="number" />
             <label className="md:col-span-2">
               <span className="text-sm font-medium text-clinic-ink">Descripcion</span>
               <textarea
@@ -204,8 +217,10 @@ export function ServicesPage() {
                 className="mt-2 min-h-24 w-full resize-none rounded-lg border border-clinic-line px-3 py-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
               />
             </label>
-            <div className="grid gap-3 md:col-span-2 sm:grid-cols-3">
+            <div className="grid gap-3 md:col-span-2 sm:grid-cols-5">
               <Checkbox label="Requiere sena" checked={form.deposit_required} onChange={(checked) => setForm({ ...form, deposit_required: checked })} />
+              <Checkbox label="Requiere pago" checked={form.payment_required} onChange={(checked) => setForm({ ...form, payment_required: checked })} />
+              <Checkbox label="Pago online" checked={form.allow_online_payment} onChange={(checked) => setForm({ ...form, allow_online_payment: checked })} />
               <Checkbox label="Permite financiacion" checked={form.financing_enabled} onChange={(checked) => setForm({ ...form, financing_enabled: checked })} />
               <Checkbox label="Reservable online" checked={form.public_booking_enabled} onChange={(checked) => setForm({ ...form, public_booking_enabled: checked })} />
             </div>
@@ -255,6 +270,11 @@ export function ServicesPage() {
                 <p className="flex items-center gap-2 text-clinic-muted">
                   <BadgeDollarSign size={16} /> {currency.format(service.price ?? 0)}
                 </p>
+                {(service.payment_required || service.deposit_required) && (
+                  <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-700">
+                    Pago online {service.deposit_required ? `· Sena ${currency.format(service.deposit_amount ?? 0)}` : "requerido"}
+                  </p>
+                )}
                 <p className="text-clinic-muted">
                   Profesionales:{" "}
                   <span className="font-medium text-clinic-ink">

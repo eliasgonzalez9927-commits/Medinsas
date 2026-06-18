@@ -12,12 +12,14 @@ import { FinancingPage, ReportsPage } from "./pages/admin/modules/SecondaryModul
 import { MessagesPage } from "./pages/admin/modules/MessagesPage";
 import { OnlineBookingPage } from "./pages/admin/modules/OnlineBookingPage";
 import { PatientsPage } from "./pages/admin/modules/PatientsPage";
+import { PaymentDetailPage, PaymentSettingsPage, PaymentsPage } from "./pages/admin/modules/PaymentsPage";
 import { NewPrescriptionPage, PrescriptionSettingsPage, PrescriptionsPage } from "./pages/admin/modules/PrescriptionsPage";
 import { ProfessionalsPage } from "./pages/admin/modules/ProfessionalsPage";
 import { ProfessionalProfilePage } from "./pages/admin/modules/ProfessionalProfilePage";
 import { SettingsLocationsPage, SettingsNotificationsPage, SettingsPage, SettingsUsersPage } from "./pages/admin/modules/SettingsPage";
 import { ServicesPage } from "./pages/admin/modules/ServicesPage";
 import { WhatsAppPage } from "./pages/admin/modules/WhatsAppPage";
+import { PaymentFailurePage, PaymentPendingPage, PaymentSuccessPage } from "./pages/payments/PaymentReturnPage";
 import { PublicBookingPage } from "./pages/booking/PublicBookingPage";
 import { ClinicLanding } from "./pages/landing/ClinicLanding";
 import { PatientBooking } from "./pages/patient/PatientBooking";
@@ -37,6 +39,9 @@ export function App() {
       <Route path="/clinica-demo" element={<ClinicLanding />} />
       <Route path="/reservar/:clinicSlug" element={<PublicBookingPage />} />
       <Route path="/reservar/:clinicSlug/:filter" element={<PublicBookingPage />} />
+      <Route path="/pago/exitoso" element={<PaymentSuccessPage />} />
+      <Route path="/pago/pendiente" element={<PaymentPendingPage />} />
+      <Route path="/pago/fallido" element={<PaymentFailurePage />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<HomeRedirect />} />
       </Route>
@@ -58,6 +63,9 @@ export function App() {
         <Route path="/admin/reservas-online" element={<OnlineBookingPage />} />
         <Route path="/admin/whatsapp" element={<WhatsAppPage />} />
         <Route path="/admin/mensajes" element={<MessagesPage />} />
+        <Route path="/admin/pagos" element={<PaymentsPage />} />
+        <Route path="/admin/pagos/configuracion" element={<PaymentSettingsPage />} />
+        <Route path="/admin/pagos/:id" element={<PaymentDetailPage />} />
         <Route path="/admin/financiacion" element={<FinancingPage />} />
         <Route path="/admin/facturacion" element={<BillingPage />} />
         <Route path="/admin/facturacion/comprobantes" element={<BillingDocumentsPage />} />

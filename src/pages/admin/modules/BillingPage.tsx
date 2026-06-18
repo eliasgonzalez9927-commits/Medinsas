@@ -32,7 +32,7 @@ export function BillingPage() {
       <section className="grid gap-4 lg:grid-cols-3">
         <PreparedCard icon={<Building2 size={20} />} title="Datos fiscales" text="Razon social, CUIT, condicion fiscal y domicilio." to="/admin/facturacion/configuracion" />
         <PreparedCard icon={<ReceiptText size={20} />} title="Comprobantes" text="Borradores internos, facturas, recibos y notas de credito." to="/admin/facturacion/comprobantes" />
-        <PreparedCard icon={<WalletCards size={20} />} title="Pagos" text="Relacion con paciente, turno y comprobante." to="/admin/financiacion" />
+        <PreparedCard icon={<WalletCards size={20} />} title="Pagos" text="Relacion con paciente, turno y comprobante." to="/admin/pagos" />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">

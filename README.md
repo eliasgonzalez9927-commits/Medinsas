@@ -67,7 +67,7 @@ clinic-saas-mvp/
 
 1. Crea un proyecto en Supabase.
 2. Ejecuta `supabase/schema.sql` en el SQL Editor.
-3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql`, `supabase/migrations/006_auth_admin_access.sql`, `supabase/migrations/007_billing_prescriptions_foundation.sql` y `supabase/migrations/008_settings_users_messaging.sql`.
+3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql`, `supabase/migrations/006_auth_admin_access.sql`, `supabase/migrations/007_billing_prescriptions_foundation.sql`, `supabase/migrations/008_settings_users_messaging.sql` y `supabase/migrations/009_mercado_pago_payments.sql`.
 4. Copia `.env.example` a `.env` y completa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 5. Instala dependencias con `npm install`.
 6. Ejecuta `npm run dev`.
@@ -88,6 +88,7 @@ clinic-saas-mvp/
 - Modulos preparados de facturacion y recetarios internos, sin integraciones fiscales o regulatorias activas.
 - Roadmap de historia clinica unificada como modulo sensible, regulado y separado de la ficha operativa del paciente.
 - Configuracion operativa con clinica, sedes, horarios, usuarios/permisos, notificaciones y mensajeria por Resend desde backend.
+- Pagos con Mercado Pago Checkout Pro desde backend, con webhooks, estados de pago y relacion con turnos/servicios.
 
 ## Rutas de producto
 
@@ -101,6 +102,9 @@ clinic-saas-mvp/
 - `/admin/booking`: configuracion de reservas online y links publicos.
 - `/admin/whatsapp`: plantillas y preparacion de flujos por WhatsApp.
 - `/admin/mensajes`: comunicaciones por email a pacientes con confirmacion y logs.
+- `/admin/pagos`: listado y trazabilidad de pagos.
+- `/admin/pagos/:id`: detalle de pago y eventos.
+- `/admin/pagos/configuracion`: configuracion Mercado Pago.
 - `/admin/financiacion`: simulador de planes de pago.
 - `/admin/facturacion`: preparacion fiscal, comprobantes internos, pagos y estado ARCA.
 - `/admin/facturacion/comprobantes`: listado preparado de comprobantes.
@@ -114,6 +118,7 @@ clinic-saas-mvp/
 - `/admin/configuracion/notificaciones`: notificaciones automaticas.
 - `/admin/reportes`: indicadores de gestion.
 - `/reservar/:clinicSlug`: flujo publico mobile-first para reserva de pacientes.
+- `/pago/exitoso`, `/pago/pendiente`, `/pago/fallido`: retorno de Mercado Pago con consulta de estado interno.
 
 Las secciones de producto principales ya operan contra Supabase. Los mocks quedan solo como fallback
 visual en modulos que todavia no tengan datos reales cargados.
@@ -266,6 +271,60 @@ Los mensajes generales respetan `patients.email_opt_in`. Los emails transacciona
 quedan preparados con plantillas iniciales y logs; WhatsApp real y webhooks completos de Resend
 quedan pendientes. La ruta preparada `/api/webhooks/resend` queda lista para completar
 validacion de firma y eventos `delivered`, `bounced`, `opened` y `clicked`.
+
+## Pagos con Mercado Pago
+
+La migracion `009_mercado_pago_payments.sql` agrega:
+
+- `payment_settings`: configuracion por clinica/proveedor.
+- `payment_events`: eventos recibidos por webhook.
+- Columnas de Mercado Pago en `payments`: `provider`, `provider_payment_id`,
+  `provider_preference_id`, `external_reference`, `checkout_url`, `status_detail`,
+  `payment_method`, `payer_email`, `invoice_id` y `service_id`.
+- Columnas de pago en `appointments`: `payment_status`, `deposit_amount` y `payment_required`.
+- Columnas comerciales en `services`: `payment_required`, `deposit_required`,
+  `deposit_amount` y `allow_online_payment`.
+
+Estados separados:
+
+- Turno: `appointments.status` mantiene el estado operativo/clinico.
+- Pago del turno: `appointments.payment_status` usa `unpaid`, `deposit_pending`,
+  `deposit_paid`, `paid`, `rejected` o `refunded`.
+- Pago: `payments.status` usa estados Mercado Pago normalizados como `pending`,
+  `in_process`, `approved`, `rejected`, `cancelled`, `refunded`, `charged_back` o `expired`.
+
+Endpoints backend:
+
+```txt
+POST /api/payments/mercadopago/create-preference
+POST /api/payments/mercadopago/webhook
+GET  /api/payments/mercadopago/status?payment_id=...
+```
+
+Variables backend requeridas:
+
+```txt
+MERCADO_PAGO_ACCESS_TOKEN=
+MERCADO_PAGO_PUBLIC_KEY=
+MERCADO_PAGO_WEBHOOK_SECRET=
+MERCADO_PAGO_ENV=sandbox
+APP_PUBLIC_URL=https://clinic-saas-mvp.vercel.app
+```
+
+Para probar en modo test:
+
+1. Crear credenciales de prueba en Mercado Pago.
+2. Cargar `MERCADO_PAGO_ACCESS_TOKEN`, `MERCADO_PAGO_PUBLIC_KEY`,
+   `MERCADO_PAGO_WEBHOOK_SECRET`, `MERCADO_PAGO_ENV=sandbox` y `APP_PUBLIC_URL` en Vercel.
+3. Redeploy.
+4. Entrar a `/admin/pagos/configuracion` y activar Mercado Pago.
+5. En `/admin/servicios`, configurar un servicio con `Pago online`, `Requiere sena` y monto de sena.
+6. Probar `/reservar/clinica-central`, crear la reserva y continuar a Mercado Pago.
+7. Confirmar el estado en `/admin/pagos`.
+
+Medin no maneja datos de tarjeta ni guarda access tokens de Mercado Pago en frontend. La
+confirmacion confiable del pago ocurre por webhook y consulta backend a Mercado Pago, no por
+la URL de retorno del usuario.
 
 ## Integracion WhatsApp
 

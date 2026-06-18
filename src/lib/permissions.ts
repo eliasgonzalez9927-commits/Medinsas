@@ -17,6 +17,7 @@ const permissionsByRole: Record<UserRole, Record<PermissionKey, boolean>> = {
     ...all(false),
     canManageAppointments: true,
     canManagePatients: true,
+    canManageBilling: true,
     canSendMessages: true
   },
   professional: {

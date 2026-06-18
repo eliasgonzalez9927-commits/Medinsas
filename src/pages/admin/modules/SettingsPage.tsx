@@ -39,6 +39,7 @@ type SettingsTab =
   | "hours"
   | "users"
   | "notifications"
+  | "payments"
   | "booking"
   | "branding"
   | "fiscal"
@@ -50,6 +51,7 @@ const tabs: Array<{ id: SettingsTab; label: string; to: string }> = [
   { id: "hours", label: "Horarios generales", to: "/admin/configuracion#horarios" },
   { id: "users", label: "Usuarios y permisos", to: "/admin/configuracion/usuarios" },
   { id: "notifications", label: "Notificaciones", to: "/admin/configuracion/notificaciones" },
+  { id: "payments", label: "Pagos", to: "/admin/pagos/configuracion" },
   { id: "booking", label: "Reservas online", to: "/admin/booking" },
   { id: "branding", label: "Branding", to: "/admin/configuracion#branding" },
   { id: "fiscal", label: "Datos fiscales", to: "/admin/facturacion/configuracion" },

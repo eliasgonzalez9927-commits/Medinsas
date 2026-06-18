@@ -28,6 +28,9 @@ import {
   Patient,
   PatientInput,
   PatientWithAppointments,
+  PaymentEvent,
+  PaymentSettings,
+  PaymentWithRelations,
   Professional,
   ProfessionalInput,
   ProfessionalWithRelations,
@@ -261,6 +264,83 @@ export async function getMessageLogs(clinicId: string): Promise<MessageLog[]> {
   } catch (error) {
     console.error("Failed to load message logs", error);
     throw new FriendlyDataError("No pudimos cargar los envios.");
+  }
+}
+
+export async function getPayments(clinicId: string): Promise<PaymentWithRelations[]> {
+  try {
+    const { data, error } = await supabase
+      .from("payments")
+      .select("*, patients(*), appointments(*), services(*)")
+      .eq("clinic_id", clinicId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as PaymentWithRelations[];
+  } catch (error) {
+    console.error("Failed to load payments", error);
+    throw new FriendlyDataError("No pudimos cargar los pagos.");
+  }
+}
+
+export async function getPaymentById(id: string): Promise<PaymentWithRelations | null> {
+  try {
+    const { data, error } = await supabase
+      .from("payments")
+      .select("*, patients(*), appointments(*), services(*)")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw error;
+    return data as PaymentWithRelations | null;
+  } catch (error) {
+    console.error("Failed to load payment", error);
+    throw new FriendlyDataError("No pudimos cargar el pago.");
+  }
+}
+
+export async function getPaymentEvents(paymentId: string): Promise<PaymentEvent[]> {
+  try {
+    const { data, error } = await supabase
+      .from("payment_events")
+      .select("*")
+      .eq("payment_id", paymentId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as PaymentEvent[];
+  } catch (error) {
+    console.error("Failed to load payment events", error);
+    throw new FriendlyDataError("No pudimos cargar los eventos del pago.");
+  }
+}
+
+export async function getPaymentSettings(clinicId: string): Promise<PaymentSettings | null> {
+  try {
+    const { data, error } = await supabase
+      .from("payment_settings")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .eq("provider", "mercado_pago")
+      .maybeSingle();
+    if (error) throw error;
+    return data as PaymentSettings | null;
+  } catch (error) {
+    console.error("Failed to load payment settings", error);
+    throw new FriendlyDataError("No pudimos cargar la configuracion de pagos.");
+  }
+}
+
+export async function updatePaymentSettings(id: string, data: Partial<PaymentSettings>): Promise<PaymentSettings> {
+  try {
+    const { data: updated, error } = await supabase
+      .from("payment_settings")
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return updated as PaymentSettings;
+  } catch (error) {
+    console.error("Failed to update payment settings", error);
+    throw new FriendlyDataError("No pudimos guardar la configuracion de pagos.");
   }
 }
 
