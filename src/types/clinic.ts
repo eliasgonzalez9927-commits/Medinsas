@@ -2,10 +2,14 @@ export type Clinic = {
   id: string;
   name: string;
   slug: string;
+  legal_name?: string | null;
   phone: string | null;
+  whatsapp?: string | null;
   email: string | null;
   address: string | null;
   logo_url: string | null;
+  website_url?: string | null;
+  active?: boolean;
   created_at: string;
   updated_at?: string;
 };
@@ -17,6 +21,9 @@ export type Location = {
   address: string | null;
   phone: string | null;
   active: boolean;
+  is_primary?: boolean;
+  business_hours?: Array<Record<string, unknown>>;
+  updated_at?: string;
 };
 
 export type Professional = {
@@ -75,6 +82,9 @@ export type Patient = {
   insurance: string | null;
   birth_date: string | null;
   notes: string | null;
+  email_opt_in?: boolean;
+  whatsapp_opt_in?: boolean;
+  communication_notes?: string | null;
   created_at: string;
   updated_at?: string;
 };
@@ -233,6 +243,32 @@ export type PatientInput = {
   insurance?: string | null;
   birth_date?: string | null;
   notes?: string | null;
+  email_opt_in?: boolean;
+  whatsapp_opt_in?: boolean;
+  communication_notes?: string | null;
+};
+
+export type ClinicInput = {
+  name: string;
+  legal_name?: string | null;
+  slug: string;
+  phone?: string | null;
+  whatsapp?: string | null;
+  email?: string | null;
+  address?: string | null;
+  logo_url?: string | null;
+  website_url?: string | null;
+  active?: boolean;
+};
+
+export type LocationInput = {
+  clinic_id: string;
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+  active?: boolean;
+  is_primary?: boolean;
+  business_hours?: Array<Record<string, unknown>>;
 };
 
 export type AppointmentInput = {
@@ -404,5 +440,87 @@ export type MedicalDocumentItem = {
   frequency: string | null;
   duration: string | null;
   instructions: string | null;
+  created_at: string;
+};
+
+export type ClinicHours = {
+  id: string;
+  clinic_id: string;
+  day_of_week: number;
+  is_open: boolean;
+  opens_at: string | null;
+  closes_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ClinicMemberWithProfile = {
+  id: string;
+  clinic_id: string;
+  user_id: string;
+  role: string;
+  active: boolean;
+  location_id: string | null;
+  professional_id: string | null;
+  invitation_status: string;
+  created_at: string;
+  updated_at: string;
+  profiles?: {
+    full_name: string;
+    phone: string | null;
+    role: string;
+  } | null;
+  professionals?: Professional | null;
+  locations?: Location | null;
+};
+
+export type UserInvitation = {
+  id: string;
+  clinic_id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  location_id: string | null;
+  professional_id: string | null;
+  status: string;
+  invited_by: string | null;
+  invitation_token: string | null;
+  sent_at: string | null;
+  accepted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MessageTemplate = {
+  id: string;
+  clinic_id: string;
+  channel: "email" | "whatsapp_future" | string;
+  type: string;
+  name: string;
+  subject: string | null;
+  body: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MessageLog = {
+  id: string;
+  clinic_id: string;
+  patient_id: string | null;
+  user_id: string | null;
+  appointment_id: string | null;
+  channel: string;
+  provider: string;
+  recipient: string;
+  subject: string | null;
+  body_preview: string | null;
+  status: "pending" | "sent" | "failed" | "delivered" | "bounced" | "opened" | "clicked" | "omitted" | string;
+  provider_message_id: string | null;
+  error_message: string | null;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  sent_at: string | null;
   created_at: string;
 };

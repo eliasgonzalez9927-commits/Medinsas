@@ -2,6 +2,7 @@ import express from "express";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
 import { logger } from "./lib/logger.js";
+import { messagesRouter } from "./routes/messages.js";
 import { whatsappWebhookRouter } from "./routes/whatsappWebhook.js";
 import { config } from "./config.js";
 
@@ -24,6 +25,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use(whatsappWebhookRouter);
+app.use(messagesRouter);
 
 app.use((error, _req, res, _next) => {
   logger.error({ err: error }, "Unhandled request error");

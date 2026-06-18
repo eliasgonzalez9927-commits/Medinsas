@@ -16,6 +16,7 @@ clinic-saas-mvp/
       005_connect_agenda_patients_booking.sql
       006_auth_admin_access.sql
       007_billing_prescriptions_foundation.sql
+      008_settings_users_messaging.sql
     schema.sql
   backend/
     src/
@@ -66,7 +67,7 @@ clinic-saas-mvp/
 
 1. Crea un proyecto en Supabase.
 2. Ejecuta `supabase/schema.sql` en el SQL Editor.
-3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql`, `supabase/migrations/006_auth_admin_access.sql` y `supabase/migrations/007_billing_prescriptions_foundation.sql`.
+3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql`, `supabase/migrations/006_auth_admin_access.sql`, `supabase/migrations/007_billing_prescriptions_foundation.sql` y `supabase/migrations/008_settings_users_messaging.sql`.
 4. Copia `.env.example` a `.env` y completa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 5. Instala dependencias con `npm install`.
 6. Ejecuta `npm run dev`.
@@ -86,6 +87,7 @@ clinic-saas-mvp/
 - Acceso admin protegido con Supabase Auth, perfiles, membresias por clinica y roles operativos.
 - Modulos preparados de facturacion y recetarios internos, sin integraciones fiscales o regulatorias activas.
 - Roadmap de historia clinica unificada como modulo sensible, regulado y separado de la ficha operativa del paciente.
+- Configuracion operativa con clinica, sedes, horarios, usuarios/permisos, notificaciones y mensajeria por Resend desde backend.
 
 ## Rutas de producto
 
@@ -98,6 +100,7 @@ clinic-saas-mvp/
 - `/admin/servicios`: catalogo de servicios/tratamientos.
 - `/admin/booking`: configuracion de reservas online y links publicos.
 - `/admin/whatsapp`: plantillas y preparacion de flujos por WhatsApp.
+- `/admin/mensajes`: comunicaciones por email a pacientes con confirmacion y logs.
 - `/admin/financiacion`: simulador de planes de pago.
 - `/admin/facturacion`: preparacion fiscal, comprobantes internos, pagos y estado ARCA.
 - `/admin/facturacion/comprobantes`: listado preparado de comprobantes.
@@ -105,6 +108,10 @@ clinic-saas-mvp/
 - `/admin/recetarios`: recetario interno, ordenes e indicaciones.
 - `/admin/recetarios/nuevo`: borrador de documento medico interno.
 - `/admin/recetarios/configuracion`: datos profesionales, matricula e integracion futura.
+- `/admin/configuracion`: datos de clinica, branding e integraciones.
+- `/admin/configuracion/sedes`: gestion de sedes.
+- `/admin/configuracion/usuarios`: usuarios, roles e invitaciones.
+- `/admin/configuracion/notificaciones`: notificaciones automaticas.
 - `/admin/reportes`: indicadores de gestion.
 - `/reservar/:clinicSlug`: flujo publico mobile-first para reserva de pacientes.
 
@@ -212,6 +219,53 @@ Arquitectura de datos sugerida para una etapa posterior:
 Antes de implementar este modulo hay que definir RLS especifico, permisos por membresia clinica,
 politicas de acceso minimo necesario, retencion documental, exportacion segura, backups y un
 modelo de auditoria que no dependa solo del frontend.
+
+## Configuracion, usuarios y Resend
+
+La migracion `008_settings_users_messaging.sql` agrega columnas operativas a `clinics`,
+`locations`, `patients`, `clinic_members` y `booking_settings`. Tambien crea:
+
+- `clinic_hours`: horarios generales de apertura por dia.
+- `clinic_schedule_exceptions`: feriados, excepciones y bloqueos generales futuros.
+- `user_invitations`: invitaciones de usuarios por email, rol, sede y profesional asociado.
+- `message_templates`: plantillas por canal y tipo.
+- `message_logs`: auditoria basica de emails enviados, fallidos u omitidos.
+
+Permisos centralizados:
+
+- `platform_admin`: gestiona todo.
+- `clinic_admin`: gestiona su clinica, usuarios, agenda, pacientes, configuracion, reportes y modulos administrativos.
+- `receptionist`: gestiona agenda, pacientes, turnos, reservas y mensajes operativos.
+- `professional`: ve su agenda/pacientes asignados y documentos medicos; no edita configuracion general.
+
+Los helpers viven en `src/lib/permissions.ts` y el backend replica la matriz en
+`backend/src/security/permissions.js`.
+
+### Resend
+
+El envio de emails se hace desde backend en `/api/messages/send`. El frontend nunca
+lee `RESEND_API_KEY`.
+
+Variables backend:
+
+```txt
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=Medin <no-reply@tu-dominio.com>
+RESEND_REPLY_TO_EMAIL=soporte@tu-dominio.com
+```
+
+Pasos:
+
+1. Crear cuenta en Resend.
+2. Verificar dominio o remitente.
+3. Cargar `RESEND_API_KEY`, `RESEND_FROM_EMAIL` y `RESEND_REPLY_TO_EMAIL` en Vercel para el backend.
+4. Redeploy.
+5. Entrar a `/admin/mensajes`, elegir destinatarios, escribir asunto/mensaje y confirmar envio.
+
+Los mensajes generales respetan `patients.email_opt_in`. Los emails transaccionales de turnos
+quedan preparados con plantillas iniciales y logs; WhatsApp real y webhooks completos de Resend
+quedan pendientes. La ruta preparada `/api/webhooks/resend` queda lista para completar
+validacion de firma y eventos `delivered`, `bounced`, `opened` y `clicked`.
 
 ## Integracion WhatsApp
 

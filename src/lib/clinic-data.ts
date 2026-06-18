@@ -18,7 +18,13 @@ import {
   AvailableSlot,
   Clinic,
   ClinicDataResult,
+  ClinicHours,
+  ClinicInput,
+  ClinicMemberWithProfile,
   Location,
+  LocationInput,
+  MessageLog,
+  MessageTemplate,
   Patient,
   PatientInput,
   PatientWithAppointments,
@@ -30,7 +36,8 @@ import {
   Service,
   ServiceInput,
   ServiceWithRelations,
-  Specialty
+  Specialty,
+  UserInvitation
 } from "../types/clinic";
 
 const DEFAULT_CLINIC_SLUG = "clinica-central";
@@ -57,6 +64,22 @@ export async function getClinicBySlug(slug: string): Promise<Clinic | null> {
   }
 }
 
+export async function updateClinic(id: string, data: ClinicInput): Promise<Clinic> {
+  try {
+    const { data: updated, error } = await supabase
+      .from("clinics")
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return updated as Clinic;
+  } catch (error) {
+    console.error("Failed to update clinic", error);
+    throw new FriendlyDataError("No pudimos actualizar los datos de la clinica.");
+  }
+}
+
 export async function getLocations(clinicId: string): Promise<Location[]> {
   try {
     const { data, error } = await supabase
@@ -69,6 +92,175 @@ export async function getLocations(clinicId: string): Promise<Location[]> {
   } catch (error) {
     console.error("Failed to load locations", error);
     throw new FriendlyDataError("No pudimos cargar las sedes.");
+  }
+}
+
+export async function createLocation(data: LocationInput): Promise<Location> {
+  try {
+    const { data: created, error } = await supabase.from("locations").insert(data).select("*").single();
+    if (error) throw error;
+    return created as Location;
+  } catch (error) {
+    console.error("Failed to create location", error);
+    throw new FriendlyDataError("No pudimos crear la sede.");
+  }
+}
+
+export async function updateLocation(id: string, data: Partial<LocationInput>): Promise<Location> {
+  try {
+    const { data: updated, error } = await supabase
+      .from("locations")
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return updated as Location;
+  } catch (error) {
+    console.error("Failed to update location", error);
+    throw new FriendlyDataError("No pudimos actualizar la sede.");
+  }
+}
+
+export async function getClinicHours(clinicId: string): Promise<ClinicHours[]> {
+  try {
+    const { data, error } = await supabase
+      .from("clinic_hours")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .order("day_of_week");
+    if (error) throw error;
+    return (data ?? []) as ClinicHours[];
+  } catch (error) {
+    console.error("Failed to load clinic hours", error);
+    throw new FriendlyDataError("No pudimos cargar los horarios generales.");
+  }
+}
+
+export async function upsertClinicHour(hour: Partial<ClinicHours> & { clinic_id: string; day_of_week: number }) {
+  try {
+    const { data, error } = await supabase
+      .from("clinic_hours")
+      .upsert({ ...hour, updated_at: new Date().toISOString() }, { onConflict: "clinic_id,day_of_week" })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return data as ClinicHours;
+  } catch (error) {
+    console.error("Failed to save clinic hour", error);
+    throw new FriendlyDataError("No pudimos guardar el horario general.");
+  }
+}
+
+export async function getClinicMembers(clinicId: string): Promise<ClinicMemberWithProfile[]> {
+  try {
+    const { data: members, error } = await supabase
+      .from("clinic_members")
+      .select("*, professionals(*), locations(*)")
+      .eq("clinic_id", clinicId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    const userIds = (members ?? []).map((member: any) => member.user_id).filter(Boolean);
+    const { data: profiles, error: profileError } = userIds.length
+      ? await supabase.from("profiles").select("id, full_name, phone, role").in("id", userIds)
+      : { data: [], error: null };
+    if (profileError) throw profileError;
+    const profilesById = new Map((profiles ?? []).map((profile: any) => [profile.id, profile]));
+    return (members ?? []).map((member: any) => ({
+      ...member,
+      profiles: profilesById.get(member.user_id) ?? null
+    })) as ClinicMemberWithProfile[];
+  } catch (error) {
+    console.error("Failed to load clinic members", error);
+    throw new FriendlyDataError("No pudimos cargar los usuarios.");
+  }
+}
+
+export async function updateClinicMember(
+  id: string,
+  data: Partial<Pick<ClinicMemberWithProfile, "role" | "active" | "location_id" | "professional_id" | "invitation_status">>
+) {
+  try {
+    const { data: updated, error } = await supabase
+      .from("clinic_members")
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return updated as ClinicMemberWithProfile;
+  } catch (error) {
+    console.error("Failed to update clinic member", error);
+    throw new FriendlyDataError("No pudimos actualizar el usuario.");
+  }
+}
+
+export async function createUserInvitation(data: {
+  clinic_id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  location_id?: string | null;
+  professional_id?: string | null;
+  invited_by?: string | null;
+}) {
+  try {
+    const { data: created, error } = await supabase
+      .from("user_invitations")
+      .insert(data)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return created as UserInvitation;
+  } catch (error) {
+    console.error("Failed to create user invitation", error);
+    throw new FriendlyDataError("No pudimos crear la invitacion.");
+  }
+}
+
+export async function getUserInvitations(clinicId: string): Promise<UserInvitation[]> {
+  try {
+    const { data, error } = await supabase
+      .from("user_invitations")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as UserInvitation[];
+  } catch (error) {
+    console.error("Failed to load invitations", error);
+    throw new FriendlyDataError("No pudimos cargar las invitaciones.");
+  }
+}
+
+export async function getMessageTemplates(clinicId: string): Promise<MessageTemplate[]> {
+  try {
+    const { data, error } = await supabase
+      .from("message_templates")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .order("name");
+    if (error) throw error;
+    return (data ?? []) as MessageTemplate[];
+  } catch (error) {
+    console.error("Failed to load message templates", error);
+    throw new FriendlyDataError("No pudimos cargar las plantillas.");
+  }
+}
+
+export async function getMessageLogs(clinicId: string): Promise<MessageLog[]> {
+  try {
+    const { data, error } = await supabase
+      .from("message_logs")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    if (error) throw error;
+    return (data ?? []) as MessageLog[];
+  } catch (error) {
+    console.error("Failed to load message logs", error);
+    throw new FriendlyDataError("No pudimos cargar los envios.");
   }
 }
 

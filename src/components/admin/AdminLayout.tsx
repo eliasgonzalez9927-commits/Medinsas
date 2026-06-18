@@ -31,6 +31,7 @@ const navItems = [
   { label: "Disponibilidad", icon: SlidersHorizontal, to: "/admin/disponibilidad" },
   { label: "Reservas online", icon: CalendarDays, to: "/admin/booking" },
   { label: "WhatsApp", icon: MessageCircle, to: "/admin/whatsapp" },
+  { label: "Mensajes", icon: MessageCircle, to: "/admin/mensajes" },
   { label: "Financiacion", icon: Banknote, to: "/admin/financiacion" },
   { label: "Facturacion", icon: ReceiptText, to: "/admin/facturacion" },
   { label: "Recetarios", icon: FilePenLine, to: "/admin/recetarios" },

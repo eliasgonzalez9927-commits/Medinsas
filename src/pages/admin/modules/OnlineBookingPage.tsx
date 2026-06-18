@@ -51,6 +51,19 @@ export function OnlineBookingPage() {
           </div>
         </SectionCard>
       </section>
+      <SectionCard className="p-5">
+        <h2 className="font-semibold text-clinic-ink">Notificaciones automaticas</h2>
+        <p className="mt-1 text-sm text-clinic-muted">
+          Configuracion preparada para emails transaccionales de reservas. WhatsApp real queda para una integracion posterior.
+        </p>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          <Toggle label="Enviar email al paciente cuando solicita turno" checked />
+          <Toggle label="Enviar email cuando se confirma" checked />
+          <Toggle label="Enviar email cuando se cancela" checked />
+          <Toggle label="Enviar recordatorio por email" />
+          <Toggle label="Preparar WhatsApp futuro" />
+        </div>
+      </SectionCard>
     </AdminPageShell>
   );
 }
@@ -61,5 +74,14 @@ function Setting({ label, value }: { label: string; value: string }) {
       <p className="text-sm text-clinic-muted">{label}</p>
       <p className="mt-1 font-semibold text-clinic-ink">{value}</p>
     </div>
+  );
+}
+
+function Toggle({ label, checked = false }: { label: string; checked?: boolean }) {
+  return (
+    <label className="flex items-center justify-between rounded-lg border border-clinic-line bg-clinic-surface px-4 py-3">
+      <span className="text-sm font-medium text-clinic-ink">{label}</span>
+      <input defaultChecked={checked} type="checkbox" />
+    </label>
   );
 }

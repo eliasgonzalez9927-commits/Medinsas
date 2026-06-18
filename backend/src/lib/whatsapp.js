@@ -38,6 +38,9 @@ export function extractIncomingMessages(payload) {
 }
 
 export async function sendWhatsAppText({ to, text }) {
+  if (!config.WHATSAPP_ACCESS_TOKEN || !config.WHATSAPP_PHONE_NUMBER_ID) {
+    throw new Error("Meta WhatsApp API is not configured.");
+  }
   const url = `https://graph.facebook.com/${config.WHATSAPP_GRAPH_VERSION}/${config.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
   const response = await fetch(url, {

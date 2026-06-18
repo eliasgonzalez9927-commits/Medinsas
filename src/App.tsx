@@ -8,12 +8,14 @@ import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { AgendaPage } from "./pages/admin/modules/AgendaPage";
 import { AvailabilityPage } from "./pages/admin/modules/AvailabilityPage";
 import { BillingDocumentsPage, BillingPage, BillingSettingsPage } from "./pages/admin/modules/BillingPage";
-import { FinancingPage, ReportsPage, SettingsPage } from "./pages/admin/modules/SecondaryModulePage";
+import { FinancingPage, ReportsPage } from "./pages/admin/modules/SecondaryModulePage";
+import { MessagesPage } from "./pages/admin/modules/MessagesPage";
 import { OnlineBookingPage } from "./pages/admin/modules/OnlineBookingPage";
 import { PatientsPage } from "./pages/admin/modules/PatientsPage";
 import { NewPrescriptionPage, PrescriptionSettingsPage, PrescriptionsPage } from "./pages/admin/modules/PrescriptionsPage";
 import { ProfessionalsPage } from "./pages/admin/modules/ProfessionalsPage";
 import { ProfessionalProfilePage } from "./pages/admin/modules/ProfessionalProfilePage";
+import { SettingsLocationsPage, SettingsNotificationsPage, SettingsPage, SettingsUsersPage } from "./pages/admin/modules/SettingsPage";
 import { ServicesPage } from "./pages/admin/modules/ServicesPage";
 import { WhatsAppPage } from "./pages/admin/modules/WhatsAppPage";
 import { PublicBookingPage } from "./pages/booking/PublicBookingPage";
@@ -55,6 +57,7 @@ export function App() {
         <Route path="/admin/booking" element={<OnlineBookingPage />} />
         <Route path="/admin/reservas-online" element={<OnlineBookingPage />} />
         <Route path="/admin/whatsapp" element={<WhatsAppPage />} />
+        <Route path="/admin/mensajes" element={<MessagesPage />} />
         <Route path="/admin/financiacion" element={<FinancingPage />} />
         <Route path="/admin/facturacion" element={<BillingPage />} />
         <Route path="/admin/facturacion/comprobantes" element={<BillingDocumentsPage />} />
@@ -64,6 +67,9 @@ export function App() {
         <Route path="/admin/recetarios/configuracion" element={<PrescriptionSettingsPage />} />
         <Route path="/admin/reportes" element={<ReportsPage />} />
         <Route path="/admin/configuracion" element={<SettingsPage />} />
+        <Route path="/admin/configuracion/sedes" element={<SettingsLocationsPage />} />
+        <Route path="/admin/configuracion/usuarios" element={<SettingsUsersPage />} />
+        <Route path="/admin/configuracion/notificaciones" element={<SettingsNotificationsPage />} />
       </Route>
       <Route element={<ProtectedRoute roles={PROFESSIONAL_ROLES} />}>
         <Route path="/admin/mi-agenda" element={<AgendaPage />} />
