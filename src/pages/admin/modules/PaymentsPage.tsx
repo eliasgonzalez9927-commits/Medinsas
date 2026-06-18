@@ -89,7 +89,7 @@ export function PaymentsPage() {
         ) : (
           <div className="divide-y divide-clinic-line">
             {payments.map((payment) => (
-              <article key={payment.id} className="grid gap-3 px-5 py-4 lg:grid-cols-[1fr_140px_130px_130px_90px] lg:items-center">
+              <article key={payment.id} className="grid gap-3 px-5 py-4 lg:grid-cols-[1fr_140px_130px_130px_130px_90px] lg:items-center">
                 <div>
                   <p className="font-semibold text-clinic-ink">
                     {payment.patients ? `${payment.patients.first_name} ${payment.patients.last_name}` : "Sin paciente"}
@@ -100,6 +100,7 @@ export function PaymentsPage() {
                 </div>
                 <StatusBadge status={payment.status} />
                 <span className="text-sm font-semibold text-clinic-ink">{formatMoney(payment.amount)}</span>
+                <span className="text-sm text-clinic-muted">{getPaymentKind(payment).label}</span>
                 <span className="text-sm text-clinic-muted">{payment.provider ?? "manual"}</span>
                 <Link className="text-sm font-semibold text-clinic-brand" to={`/admin/pagos/${payment.id}`}>Ver</Link>
               </article>
@@ -159,6 +160,8 @@ export function PaymentDetailPage() {
               <Info label="Fecha y hora del turno" value={payment.appointments?.starts_at ? formatDate(payment.appointments.starts_at, payment.clinics?.timezone ?? undefined) : "Sin fecha/hora"} />
               <Info label="Estado del turno" value={payment.appointments?.status ?? "Sin turno"} />
               <Info label="Estado pago turno" value={payment.appointments?.payment_status ?? "Sin estado"} />
+              <Info label="Tipo de pago" value={getPaymentKind(payment).label} />
+              <Info label="Saldo pendiente" value={formatRemaining(getPaymentKind(payment).remainingAmount)} />
               <Info label="Provider payment id" value={payment.provider_payment_id ?? "Pendiente"} />
               <Info label="Preference id" value={payment.provider_preference_id ?? "Pendiente"} />
               <Info label="External reference" value={payment.external_reference ?? "Sin referencia"} />
@@ -390,6 +393,21 @@ function paymentStatusLabel(status: string) {
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(Number(value || 0));
+}
+
+function formatRemaining(value: number) {
+  return Number(value ?? 0) <= 0 ? "Sin saldo pendiente" : formatMoney(value);
+}
+
+function getPaymentKind(payment: PaymentWithRelations) {
+  const amount = Number(payment.amount ?? 0);
+  const price = Number(payment.services?.price ?? 0);
+  const remainingAmount = Math.max(price - amount, 0);
+  if (price > 0 && amount >= price) return { label: "Pago total", remainingAmount };
+  if (payment.services?.payment_required && !payment.services?.deposit_required) return { label: "Pago total", remainingAmount };
+  const notesLookLikeDeposit = String(payment.notes ?? "").toLowerCase().includes("sena") || String(payment.notes ?? "").toLowerCase().includes("seña");
+  if (payment.services?.deposit_required || notesLookLikeDeposit) return { label: "Seña", remainingAmount };
+  return { label: "Pago total", remainingAmount };
 }
 
 function formatDate(value: string, timezone = "America/Argentina/Mendoza") {

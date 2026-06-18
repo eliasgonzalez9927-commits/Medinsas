@@ -33,8 +33,9 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async 
 
     const amount = resolveAmount(appointment, payload.amountType);
     if (!amount || amount <= 0) return res.status(400).json({ error: "INVALID_AMOUNT" });
+    const initialKind = resolveInitialPaymentKind(appointment, amount, payload.amountType);
 
-    const payment = await createInternalPayment({ appointment, amount, amountType: payload.amountType });
+    const payment = await createInternalPayment({ appointment, amount, amountType: initialKind });
     const preference = await createMercadoPagoPreference({ appointment, payment, amount });
 
     await supabase
@@ -50,8 +51,8 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async 
       .from("appointments")
       .update({
         payment_required: true,
-        payment_status: payload.amountType === "deposit" ? "deposit_pending" : "unpaid",
-        deposit_amount: payload.amountType === "deposit" ? amount : appointment.deposit_amount
+        payment_status: initialKind === "deposit" ? "deposit_pending" : "unpaid",
+        deposit_amount: initialKind === "deposit" ? amount : appointment.deposit_amount
       })
       .eq("id", appointment.id);
 
@@ -212,6 +213,12 @@ function resolveAmount(appointment, amountType) {
   return price;
 }
 
+function resolveInitialPaymentKind(appointment, amount, requestedType) {
+  const price = Number(appointment.services?.price ?? 0);
+  if (price > 0 && Number(amount) >= price) return "full";
+  return requestedType === "deposit" ? "deposit" : "full";
+}
+
 function isPublicPaymentAllowed(appointment) {
   const service = appointment.services;
   return appointment.source === "online" && service?.allow_online_payment !== false && (service?.payment_required || service?.deposit_required);
@@ -239,7 +246,7 @@ async function createInternalPayment({ appointment, amount, amountType }) {
       status: "pending",
       provider: "mercado_pago",
       external_reference: externalReference,
-      notes: amountType === "deposit" ? "Sena de reserva online" : "Pago completo"
+      notes: amountType === "deposit" ? "Seña de reserva online" : "Pago completo"
     })
     .select("*")
     .single();
@@ -400,6 +407,9 @@ function resolveProviderPaymentId(query, payment) {
 
 async function updatePaymentFromProvider(payment, providerPayment) {
   const status = normalizeStatus(providerPayment.status);
+  const paymentDetails = payment.services || payment.appointments
+    ? payment
+    : await loadPaymentDetails(payment.id) ?? payment;
   await supabase
     .from("payments")
     .update({
@@ -414,7 +424,7 @@ async function updatePaymentFromProvider(payment, providerPayment) {
     .eq("id", payment.id);
 
   if (payment.appointment_id) {
-    const appointmentPaymentStatus = mapAppointmentPaymentStatus(status, payment.notes);
+    const appointmentPaymentStatus = mapAppointmentPaymentStatus(status, paymentDetails);
     const update = { payment_status: appointmentPaymentStatus };
     if (status === "approved") update.status = await resolveApprovedAppointmentStatus(payment.clinic_id);
     await supabase.from("appointments").update(update).eq("id", payment.appointment_id);
@@ -436,11 +446,11 @@ function normalizeStatus(status) {
   return allowed.has(status) ? status : "pending";
 }
 
-function mapAppointmentPaymentStatus(status, notes) {
-  if (status === "approved") return String(notes ?? "").includes("Sena") ? "deposit_paid" : "paid";
+function mapAppointmentPaymentStatus(status, payment) {
+  if (status === "approved") return resolvePaymentKind(payment).type === "deposit" ? "deposit_paid" : "paid";
   if (status === "rejected" || status === "cancelled" || status === "expired") return "payment_failed";
   if (status === "refunded") return "refunded";
-  return String(notes ?? "").includes("Sena") ? "deposit_pending" : "unpaid";
+  return resolvePaymentKind(payment).type === "deposit" ? "deposit_pending" : "unpaid";
 }
 
 async function sendPaymentApprovedNotifications(payment) {
@@ -460,9 +470,10 @@ async function sendPatientPaymentEmail(payment) {
   if (alreadySent) return;
 
   const detail = buildAppointmentDetail(payment);
+  const kind = resolvePaymentKind(payment);
   const subject = payment.appointments?.status === "confirmed" && detail.hasSchedule
     ? "Tu turno fue confirmado"
-    : isDepositPayment(payment) ? "Tu seña fue acreditada" : "Tu pago fue acreditado";
+    : kind.type === "deposit" ? "Tu seña fue acreditada" : "Tu pago fue acreditado";
   const body = buildPatientEmail(payment);
   await sendLoggedEmail({
     clinicId: payment.clinic_id,
@@ -591,8 +602,8 @@ function buildPatientEmail(payment) {
   const detail = buildAppointmentDetail(payment);
   const isConfirmed = payment.appointments?.status === "confirmed" && detail.hasSchedule;
   const calendarUrl = `${(config.APP_PUBLIC_URL ?? "").replace(/\/$/, "")}/api/appointments/${payment.appointment_id}/calendar.ics`;
-  const remaining = Math.max(Number(detail.servicePrice) - Number(payment.amount), 0);
-  const pendingCopy = isDepositPayment(payment)
+  const kind = resolvePaymentKind(payment);
+  const pendingCopy = kind.type === "deposit"
     ? "Recibimos tu seña. La clínica confirmará el día y horario de tu turno."
     : "Recibimos tu pago. La clínica confirmará el día y horario de tu turno.";
   const lines = [
@@ -609,20 +620,20 @@ function buildPatientEmail(payment) {
     `Clínica: ${detail.clinicName}`,
     `Dirección: ${detail.locationAddress}`,
     `Monto pagado: ${formatMoney(payment.amount, payment.currency)}`,
-    `Tipo de pago: ${isDepositPayment(payment) ? "Seña" : "Pago total"}`,
-    `Saldo pendiente: ${formatMoney(remaining, payment.currency)}`,
+    `Tipo de pago: ${kind.label}`,
+    `Saldo pendiente: ${formatMoney(kind.remainingAmount, payment.currency)}`,
     "",
     "Si necesitás modificar o cancelar tu turno, comunicate con la clínica."
   ];
   return {
     text: lines.join("\n"),
-    html: `<p>Hola ${escapeHtml(detail.patientName)},</p><p>${isConfirmed ? "Tu turno fue confirmado." : escapeHtml(pendingCopy)}</p><ul><li>Servicio: ${escapeHtml(detail.serviceName)}</li><li>Profesional: ${escapeHtml(detail.professionalName)}</li><li>Fecha: ${escapeHtml(detail.dateLabel)}</li><li>Hora: ${escapeHtml(detail.timeLabel)}</li><li>Clínica: ${escapeHtml(detail.clinicName)}</li><li>Dirección: ${escapeHtml(detail.locationAddress)}</li><li>Monto pagado: ${escapeHtml(formatMoney(payment.amount, payment.currency))}</li><li>Tipo de pago: ${isDepositPayment(payment) ? "Seña" : "Pago total"}</li><li>Saldo pendiente: ${escapeHtml(formatMoney(remaining, payment.currency))}</li></ul>${isConfirmed ? `<p><a href="${escapeHtml(calendarUrl)}">Agregar al calendario</a></p>` : ""}<p>Si necesitás modificar o cancelar tu turno, comunicate con la clínica.</p>`
+    html: `<p>Hola ${escapeHtml(detail.patientName)},</p><p>${isConfirmed ? "Tu turno fue confirmado." : escapeHtml(pendingCopy)}</p><ul><li>Servicio: ${escapeHtml(detail.serviceName)}</li><li>Profesional: ${escapeHtml(detail.professionalName)}</li><li>Fecha: ${escapeHtml(detail.dateLabel)}</li><li>Hora: ${escapeHtml(detail.timeLabel)}</li><li>Clínica: ${escapeHtml(detail.clinicName)}</li><li>Dirección: ${escapeHtml(detail.locationAddress)}</li><li>Monto pagado: ${escapeHtml(formatMoney(payment.amount, payment.currency))}</li><li>Tipo de pago: ${escapeHtml(kind.label)}</li><li>Saldo pendiente: ${escapeHtml(formatMoney(kind.remainingAmount, payment.currency))}</li></ul>${isConfirmed ? `<p><a href="${escapeHtml(calendarUrl)}">Agregar al calendario</a></p>` : ""}<p>Si necesitás modificar o cancelar tu turno, comunicate con la clínica.</p>`
   };
 }
 
 function toPaymentStatusResponse(payment) {
   const detail = buildAppointmentDetail(payment);
-  const remainingAmount = Math.max(Number(detail.servicePrice) - Number(payment.amount), 0);
+  const kind = resolvePaymentKind(payment);
   return {
     id: payment.id,
     status: payment.status,
@@ -631,8 +642,9 @@ function toPaymentStatusResponse(payment) {
     currency: payment.currency,
     checkout_url: payment.checkout_url,
     paid_at: payment.paid_at,
-    payment_type: isDepositPayment(payment) ? "deposit" : "full",
-    remaining_amount: remainingAmount,
+    payment_type: kind.type,
+    payment_type_label: kind.label,
+    remaining_amount: kind.remainingAmount,
     appointment: {
       id: payment.appointment_id,
       status: payment.appointments?.status ?? null,
@@ -716,8 +728,16 @@ function buildIcsEvent(appointment) {
   ].join("\r\n");
 }
 
-function isDepositPayment(payment) {
-  return String(payment.notes ?? "").toLowerCase().includes("sena") || String(payment.notes ?? "").toLowerCase().includes("seña");
+function resolvePaymentKind(payment) {
+  const amount = Number(payment.amount ?? 0);
+  const service = payment.services ?? {};
+  const price = Number(service.price ?? 0);
+  const remainingAmount = Math.max(price - amount, 0);
+  if (price > 0 && amount >= price) return { type: "full", label: "Pago total", remainingAmount };
+  if (service.payment_required && !service.deposit_required) return { type: "full", label: "Pago total", remainingAmount };
+  const notesLookLikeDeposit = String(payment.notes ?? "").toLowerCase().includes("sena") || String(payment.notes ?? "").toLowerCase().includes("seña");
+  if (service.deposit_required || notesLookLikeDeposit) return { type: "deposit", label: "Seña", remainingAmount };
+  return { type: "full", label: "Pago total", remainingAmount };
 }
 
 function formatMoney(value, currency = "ARS") {

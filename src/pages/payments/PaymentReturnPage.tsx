@@ -13,6 +13,7 @@ type PaymentStatusResponse = {
   checkout_url: string | null;
   paid_at: string | null;
   payment_type: "deposit" | "full";
+  payment_type_label: string;
   remaining_amount: number;
   appointment: {
     id: string | null;
@@ -137,8 +138,8 @@ function PaymentReturnPage({ kind }: { kind: PaymentReturnKind }) {
               <Detail label="Clínica" value={payment.appointment.clinic_name} />
               <Detail label="Sede / dirección" value={payment.appointment.location_address ?? "A confirmar"} />
               <Detail label="Monto pagado" value={formatMoney(payment.amount, payment.currency)} />
-              <Detail label="Tipo de pago" value={payment.payment_type === "deposit" ? "Seña" : "Pago total"} />
-              <Detail label="Saldo pendiente" value={formatMoney(payment.remaining_amount, payment.currency)} />
+              <Detail label="Tipo de pago" value={payment.payment_type_label} />
+              <Detail label="Saldo pendiente" value={formatRemaining(payment.remaining_amount, payment.currency)} />
               <Detail label="Estado del turno" value={translateAppointmentStatus(payment.appointment.status)} />
               <Detail label="Estado del pago" value={translatePaymentStatus(payment.status)} />
               <Detail label="Acreditado" value={payment.paid_at ? formatDateTime(payment.paid_at, payment.appointment.timezone) : "A confirmar"} />
@@ -264,8 +265,8 @@ function buildCopyText(payment: PaymentStatusResponse) {
     `Clínica: ${payment.appointment.clinic_name}`,
     `Dirección: ${payment.appointment.location_address ?? "A confirmar"}`,
     `Monto pagado: ${formatMoney(payment.amount, payment.currency)}`,
-    `Tipo de pago: ${payment.payment_type === "deposit" ? "Seña" : "Pago total"}`,
-    `Saldo pendiente: ${formatMoney(payment.remaining_amount, payment.currency)}`,
+    `Tipo de pago: ${payment.payment_type_label}`,
+    `Saldo pendiente: ${formatRemaining(payment.remaining_amount, payment.currency)}`,
     `Estado del turno: ${translateAppointmentStatus(payment.appointment.status)}`,
     `Estado del pago: ${translatePaymentStatus(payment.status)}`
   ].join("\n");
@@ -302,6 +303,10 @@ function formatDateTime(value?: string | null, timezone = "America/Argentina/Men
 
 function formatMoney(value: number, currency = "ARS") {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency }).format(Number(value ?? 0));
+}
+
+function formatRemaining(value: number, currency = "ARS") {
+  return Number(value ?? 0) <= 0 ? "Sin saldo pendiente" : formatMoney(value, currency);
 }
 
 function toGoogleDate(date: Date) {
