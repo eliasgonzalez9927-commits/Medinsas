@@ -138,6 +138,17 @@ export function ProfessionalsPage() {
     }
   }
 
+  async function copyBookingLink(professional: ProfessionalWithRelations) {
+    const slug = professional.slug ?? professional.id;
+    const link = `${window.location.origin}/reservar/clinica-central/${slug}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setNotice("Link de reserva copiado.");
+    } catch {
+      setError(`No pudimos copiar el link. Usa: ${link}`);
+    }
+  }
+
   return (
     <AdminPageShell
       actionLabel="Crear profesional"
@@ -236,7 +247,7 @@ export function ProfessionalsPage() {
                 <Button onClick={() => handleToggle(professional)}>
                   {professional.active ? "Desactivar" : "Activar"}
                 </Button>
-                <Button icon={<Copy size={16} />}>Copiar link</Button>
+                <Button icon={<Copy size={16} />} onClick={() => copyBookingLink(professional)}>Copiar link</Button>
               </div>
             </SectionCard>
           ))}

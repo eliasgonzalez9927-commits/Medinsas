@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { Clock3, MessageCircle, Plus, UserCheck, UserX } from "lucide-react";
+import { Clock3, MessageCircle, Plus, RefreshCw, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
@@ -179,6 +179,18 @@ export function AgendaPage() {
     }));
   }
 
+  async function refreshAgenda() {
+    setLoading(true);
+    setError("");
+    try {
+      await loadAppointments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos actualizar la agenda.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!clinic) return;
@@ -235,7 +247,9 @@ export function AgendaPage() {
       actionLabel="Crear turno manual"
       description="Vista operativa para recepcion: confirma, cancela, marca ausencias y ocupa huecos libres."
       eyebrow="Agenda clinica"
+      onCreateAppointment={openCreate}
       onAction={openCreate}
+      onRefresh={refreshAgenda}
       title="Agenda"
     >
       {notice && <Message tone="success">{notice}</Message>}
@@ -307,6 +321,17 @@ export function AgendaPage() {
       )}
 
       <SectionCard className="p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-semibold text-clinic-ink">Vista del dia</h2>
+            <p className="text-sm text-clinic-muted">Filtra, actualiza y crea turnos desde la misma agenda.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setSelectedDate(today)}>Hoy</Button>
+            <Button icon={<RefreshCw size={16} />} onClick={refreshAgenda}>Actualizar</Button>
+            <Button icon={<Plus size={16} />} onClick={openCreate} variant="primary">Nuevo turno</Button>
+          </div>
+        </div>
         <div className="grid gap-4 lg:grid-cols-[180px_1fr_1fr_180px]">
           <Input label="Fecha" value={selectedDate} onChange={setSelectedDate} type="date" />
           <Select label="Profesional" value={professionalId} onChange={setProfessionalId}>

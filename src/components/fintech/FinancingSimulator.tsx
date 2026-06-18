@@ -96,23 +96,48 @@ export function FinancingSimulator() {
         </label>
       </div>
 
+      <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-5">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+          <div>
+            <span className="inline-flex rounded-lg bg-blue-700 px-2.5 py-1 text-xs font-semibold text-white">
+              Plan recomendado
+            </span>
+            <h3 className="mt-4 text-2xl font-semibold text-clinic-ink">{bestOption.months} cuotas</h3>
+            <p className="mt-2 text-3xl font-semibold text-clinic-ink">
+              {currency.format(bestOption.monthlyPayment)} <span className="text-base font-medium text-clinic-muted">por mes</span>
+            </p>
+            <p className="mt-1 text-sm font-medium text-blue-700">Menor cuota para el paciente</p>
+          </div>
+          <dl className="grid min-w-64 gap-3 text-sm">
+            <div className="flex justify-between gap-4">
+              <dt className="text-clinic-muted">La clinica recibe</dt>
+              <dd className="font-semibold text-clinic-ink">{currency.format(bestOption.clinicAdvance)}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-clinic-muted">Fee estimado</dt>
+              <dd className="font-semibold text-clinic-ink">{currency.format(bestOption.platformFee)}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {options.map((option) => (
           <article
             key={option.months}
-            className={`rounded-lg border p-4 ${
+            className={`relative rounded-lg border p-4 ${
               option.months === bestOption.months
-                ? "border-clinic-accent bg-blue-50"
+                ? "border-clinic-accent bg-white ring-2 ring-blue-100"
                 : "border-clinic-line bg-white"
             }`}
           >
-            <div className="flex items-center justify-between">
+            {option.months === bestOption.months && (
+              <span className="mb-3 inline-flex rounded-lg bg-clinic-accent px-2 py-1 text-xs font-semibold text-white">
+                Recomendado
+              </span>
+            )}
+            <div className="flex items-center justify-between gap-3">
               <p className="font-semibold text-clinic-ink">{option.months} cuotas</p>
-              {option.months === bestOption.months && (
-                <span className="rounded-lg bg-clinic-accent px-2 py-1 text-xs font-semibold text-white">
-                  Plan recomendado
-                </span>
-              )}
             </div>
             <p className="mt-4 text-2xl font-semibold text-clinic-ink">
               {currency.format(option.monthlyPayment)}

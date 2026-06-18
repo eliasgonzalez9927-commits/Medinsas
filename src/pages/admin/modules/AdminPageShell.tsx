@@ -8,6 +8,8 @@ export function AdminPageShell({
   eyebrow,
   actionLabel,
   onAction,
+  onRefresh,
+  onCreateAppointment,
   children
 }: {
   title: string;
@@ -15,12 +17,14 @@ export function AdminPageShell({
   eyebrow?: string;
   actionLabel?: string;
   onAction?: () => void;
+  onRefresh?: () => void;
+  onCreateAppointment?: () => void;
   children: ReactNode;
 }) {
   return (
     <AdminLayout
-      onCreateAppointment={() => console.info("Nuevo turno: flujo pendiente de implementar.")}
-      onRefresh={() => window.location.reload()}
+      onCreateAppointment={onCreateAppointment ?? onAction ?? (() => undefined)}
+      onRefresh={onRefresh ?? (() => window.location.reload())}
     >
       <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <section className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">

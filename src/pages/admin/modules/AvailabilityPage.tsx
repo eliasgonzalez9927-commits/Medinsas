@@ -169,9 +169,27 @@ export function AvailabilityPage() {
       )}
       {error && <Message tone="error">{error}</Message>}
 
+      <section className="grid gap-4 lg:grid-cols-4">
+        {[
+          ["Lunes a viernes", "08:00 a 20:00"],
+          ["Sabado", "09:00 a 13:00"],
+          ["Domingo", "Cerrado"],
+          ["Feriados", "Cerrado"]
+        ].map(([label, value]) => (
+          <SectionCard key={label} className="p-4">
+            <p className="text-sm text-clinic-muted">{label}</p>
+            <p className="mt-2 text-lg font-semibold text-clinic-ink">{value}</p>
+          </SectionCard>
+        ))}
+      </section>
+
       <SectionCard className="p-5">
+        <h2 className="font-semibold text-clinic-ink">Disponibilidad por profesional</h2>
+        <p className="mt-1 text-sm text-clinic-muted">
+          Selecciona un profesional para revisar o cargar sus dias y horarios de atencion.
+        </p>
         <label className="block max-w-xl">
-          <span className="text-sm font-medium text-clinic-ink">Profesional</span>
+          <span className="mt-4 block text-sm font-medium text-clinic-ink">Profesional</span>
           <select
             value={professionalId}
             onChange={(event) => setProfessionalId(event.target.value)}
@@ -189,7 +207,7 @@ export function AvailabilityPage() {
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <SectionCard className="overflow-hidden">
           <div className="border-b border-clinic-line px-5 py-4">
-            <h2 className="font-semibold text-clinic-ink">Reglas de atencion</h2>
+            <h2 className="font-semibold text-clinic-ink">Dias y horarios de atencion</h2>
           </div>
           {loading ? (
             <div className="px-5 py-10 text-center text-clinic-muted">Cargando horarios...</div>
@@ -267,7 +285,8 @@ export function AvailabilityPage() {
 
       <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
         <SectionCard className="p-5">
-          <h2 className="font-semibold text-clinic-ink">Crear bloqueo</h2>
+          <h2 className="font-semibold text-clinic-ink">Crear bloqueo o excepcion</h2>
+          <p className="mt-1 text-sm text-clinic-muted">Feriados, ausencias, almuerzos o cambios puntuales.</p>
           <form onSubmit={handleCreateBlock} className="mt-4 grid gap-3">
             <Input label="Fecha" type="date" value={blockForm.date} onChange={(value) => setBlockForm({ ...blockForm, date: value })} />
             <Input label="Desde" type="time" value={blockForm.start_time} onChange={(value) => setBlockForm({ ...blockForm, start_time: value })} />
@@ -278,7 +297,7 @@ export function AvailabilityPage() {
         </SectionCard>
         <SectionCard className="overflow-hidden">
           <div className="border-b border-clinic-line px-5 py-4">
-            <h2 className="font-semibold text-clinic-ink">Bloqueos configurados</h2>
+            <h2 className="font-semibold text-clinic-ink">Bloqueos y excepciones</h2>
           </div>
           {blocks.length === 0 ? (
             <div className="px-5 py-8 text-center text-sm text-clinic-muted">No hay bloqueos cargados.</div>

@@ -16,7 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="grid h-9 w-9 place-items-center rounded-lg bg-clinic-brand text-white">
               <ClipboardList size={20} />
             </span>
-            ClinicOS
+            Medin
           </Link>
           <nav className="flex items-center gap-2">
             <NavLink

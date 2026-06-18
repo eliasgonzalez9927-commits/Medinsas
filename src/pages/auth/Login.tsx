@@ -41,7 +41,7 @@ export function Login() {
               <Activity />
             </span>
             <div>
-              <p className="text-xl font-semibold text-clinic-ink">ClinicOS</p>
+              <p className="text-xl font-semibold text-clinic-ink">Medin</p>
               <p className="text-sm text-clinic-muted">Gestion clinica modular</p>
             </div>
           </div>

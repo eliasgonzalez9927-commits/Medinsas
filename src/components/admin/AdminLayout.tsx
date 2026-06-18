@@ -57,7 +57,7 @@ export function AdminLayout({
                 <ClipboardList size={21} />
               </span>
               <div>
-                <p className="text-lg font-semibold text-clinic-ink">ClinicOS</p>
+                <p className="text-lg font-semibold text-clinic-ink">Medin</p>
                 <p className="text-xs font-medium text-clinic-muted">Gestion clinica</p>
               </div>
             </Link>
@@ -124,7 +124,7 @@ export function AdminLayout({
               <span className="grid h-9 w-9 place-items-center rounded-lg bg-clinic-brand text-white">
                 <ClipboardList size={19} />
               </span>
-              ClinicOS
+              Medin
             </Link>
 
             <div className="relative ml-auto hidden w-full max-w-xl md:block lg:ml-0">

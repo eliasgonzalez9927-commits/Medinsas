@@ -77,7 +77,13 @@ export function PublicBookingPage() {
         const professionalFromFilter = activeProfessionals.find(
           (professional) => professional.slug === filter || professional.id === filter
         );
-        const selectedService = serviceFromFilter ?? publicServices[0];
+        const selectedService =
+          serviceFromFilter ??
+          (professionalFromFilter
+            ? publicServices.find((service) =>
+                service.professionals.some((professional) => professional.id === professionalFromFilter.id)
+              )
+            : publicServices[0]);
         setServiceId(selectedService?.id ?? "");
         setProfessionalId(
           professionalFromFilter?.id ??
@@ -218,7 +224,7 @@ export function PublicBookingPage() {
           </div>
           <h1 className="mt-5 text-2xl font-semibold text-clinic-ink">Reservar turno</h1>
           <p className="mt-2 text-clinic-muted">
-            {clinic?.name ?? "ClinicOS"} · {clinic?.address ?? "Atencion presencial y telemedicina"}
+            {clinic?.name ?? "Medin"} · {clinic?.address ?? "Atencion presencial y telemedicina"}
           </p>
           <div className="mt-5 rounded-lg bg-teal-50 p-4 text-sm text-clinic-brand">
             La confirmacion y los recordatorios quedan preparados para WhatsApp.
