@@ -296,6 +296,7 @@ Estados separados:
 Endpoints backend:
 
 ```txt
+GET  /api/health/env
 POST /api/payments/mercadopago/create-preference
 POST /api/payments/mercadopago/webhook
 GET  /api/payments/mercadopago/status?payment_id=...
@@ -304,6 +305,8 @@ GET  /api/payments/mercadopago/status?payment_id=...
 Variables backend requeridas:
 
 ```txt
+SUPABASE_URL=https://nlouwkcytkmyjexperyt.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=
 MERCADO_PAGO_ACCESS_TOKEN=
 MERCADO_PAGO_PUBLIC_KEY=
 MERCADO_PAGO_WEBHOOK_SECRET=
@@ -315,12 +318,14 @@ Para probar en modo test:
 
 1. Crear credenciales de prueba en Mercado Pago.
 2. Cargar `MERCADO_PAGO_ACCESS_TOKEN`, `MERCADO_PAGO_PUBLIC_KEY`,
-   `MERCADO_PAGO_WEBHOOK_SECRET`, `MERCADO_PAGO_ENV=sandbox` y `APP_PUBLIC_URL` en Vercel.
-3. Redeploy.
-4. Entrar a `/admin/pagos/configuracion` y activar Mercado Pago.
-5. En `/admin/servicios`, configurar un servicio con `Pago online`, `Requiere sena` y monto de sena.
-6. Probar `/reservar/clinica-central`, crear la reserva y continuar a Mercado Pago.
-7. Confirmar el estado en `/admin/pagos`.
+   `MERCADO_PAGO_WEBHOOK_SECRET`, `MERCADO_PAGO_ENV=sandbox`, `APP_PUBLIC_URL`,
+   `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` en Vercel.
+3. Redeploy para que el backend lea las nuevas variables.
+4. Verificar `/api/health/env`; solo devuelve booleanos, nunca secretos.
+5. Entrar a `/admin/pagos/configuracion` y activar Mercado Pago.
+6. En `/admin/servicios`, configurar un servicio con `Pago online`, `Requiere sena` y monto de sena.
+7. Probar `/reservar/clinica-central`, crear la reserva y continuar a Mercado Pago.
+8. Confirmar el estado en `/admin/pagos`.
 
 Medin no maneja datos de tarjeta ni guarda access tokens de Mercado Pago en frontend. La
 confirmacion confiable del pago ocurre por webhook y consulta backend a Mercado Pago, no por

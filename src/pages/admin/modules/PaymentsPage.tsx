@@ -16,6 +16,16 @@ import { AdminPageShell } from "./AdminPageShell";
 
 const appUrl = "https://clinic-saas-mvp.vercel.app";
 
+type EnvHealth = {
+  mercadoPagoAccessToken: boolean;
+  mercadoPagoPublicKey: boolean;
+  mercadoPagoWebhookSecret: boolean;
+  mercadoPagoEnv: boolean;
+  appPublicUrl: boolean;
+  supabaseUrl: boolean;
+  supabaseServiceRoleKey: boolean;
+};
+
 export function PaymentsPage() {
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [payments, setPayments] = useState<PaymentWithRelations[]>([]);
@@ -196,6 +206,7 @@ export function PaymentSettingsPage() {
   });
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [envHealth, setEnvHealth] = useState<EnvHealth | null>(null);
 
   async function load() {
     try {
@@ -204,6 +215,10 @@ export function PaymentSettingsPage() {
       if (!loadedClinic) return;
       const loadedSettings = await getPaymentSettings(loadedClinic.id);
       setSettings(loadedSettings);
+      const healthResponse = await fetch("/api/health/env");
+      if (healthResponse.ok) {
+        setEnvHealth(await healthResponse.json());
+      }
       if (loadedSettings) {
         setForm({
           active: loadedSettings.active,
@@ -291,16 +306,36 @@ export function PaymentSettingsPage() {
           <p className="mt-2 text-sm text-clinic-muted">
             Estado UI: {settings?.active ? "conectado" : "no conectado"}. La conexion real depende de las variables backend.
           </p>
+          <div className="mt-4 grid gap-2">
+            <EnvRow label="Mercado Pago access token" ready={envHealth?.mercadoPagoAccessToken} />
+            <EnvRow label="Mercado Pago public key" ready={envHealth?.mercadoPagoPublicKey} />
+            <EnvRow label="Mercado Pago webhook secret" ready={envHealth?.mercadoPagoWebhookSecret} />
+            <EnvRow label={`Modo ${form.mode === "production" ? "produccion" : "sandbox"}`} ready={envHealth?.mercadoPagoEnv} />
+            <EnvRow label="APP_PUBLIC_URL" ready={envHealth?.appPublicUrl} />
+            <EnvRow label="Supabase server URL" ready={envHealth?.supabaseUrl} />
+            <EnvRow label="Supabase service role key" ready={envHealth?.supabaseServiceRoleKey} />
+          </div>
           <div className="mt-4 rounded-lg bg-clinic-surface p-3 text-sm">
             <p className="font-semibold text-clinic-ink">Webhook URL</p>
-            <p className="mt-1 break-all text-clinic-muted">{appUrl}/api/payments/mercadopago/webhook</p>
+            <p className="mt-1 break-all text-clinic-muted">{getPublicAppUrl()}/api/payments/mercadopago/webhook</p>
           </div>
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            Variables requeridas en Vercel: MERCADO_PAGO_ACCESS_TOKEN, MERCADO_PAGO_PUBLIC_KEY, MERCADO_PAGO_WEBHOOK_SECRET, MERCADO_PAGO_ENV y APP_PUBLIC_URL.
+            Variables requeridas en Vercel: MERCADO_PAGO_ACCESS_TOKEN, MERCADO_PAGO_PUBLIC_KEY, MERCADO_PAGO_WEBHOOK_SECRET, MERCADO_PAGO_ENV, APP_PUBLIC_URL, SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.
           </div>
         </SectionCard>
       </section>
     </AdminPageShell>
+  );
+}
+
+function EnvRow({ label, ready }: { label: string; ready?: boolean }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-clinic-line px-3 py-2 text-sm">
+      <span className="font-medium text-clinic-ink">{label}</span>
+      <span className={`rounded-lg px-2 py-1 text-xs font-semibold ${ready ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+        {ready ? "Configurado" : "Falta variable"}
+      </span>
+    </div>
   );
 }
 
@@ -350,4 +385,9 @@ function formatMoney(value: number) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function getPublicAppUrl() {
+  if (typeof window !== "undefined" && window.location.origin) return window.location.origin;
+  return appUrl;
 }

@@ -25,6 +25,18 @@ app.get("/health", (_req, res) => {
   res.status(200).json({ ok: true });
 });
 
+app.get("/health/env", (_req, res) => {
+  res.status(200).json({
+    mercadoPagoAccessToken: Boolean(config.MERCADO_PAGO_ACCESS_TOKEN),
+    mercadoPagoPublicKey: Boolean(config.MERCADO_PAGO_PUBLIC_KEY),
+    mercadoPagoWebhookSecret: Boolean(config.MERCADO_PAGO_WEBHOOK_SECRET),
+    mercadoPagoEnv: Boolean(config.MERCADO_PAGO_ENV),
+    appPublicUrl: Boolean(config.APP_PUBLIC_URL),
+    supabaseUrl: Boolean(config.SUPABASE_URL),
+    supabaseServiceRoleKey: Boolean(config.SUPABASE_SERVICE_ROLE_KEY)
+  });
+});
+
 app.use(whatsappWebhookRouter);
 app.use(messagesRouter);
 app.use(mercadoPagoPaymentsRouter);

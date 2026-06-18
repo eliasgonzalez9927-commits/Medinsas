@@ -14,8 +14,9 @@ const createPreferenceSchema = z.object({
 
 mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async (req, res, next) => {
   try {
-    if (!config.MERCADO_PAGO_ACCESS_TOKEN) {
-      return res.status(503).json({ error: "MERCADO_PAGO_NOT_CONFIGURED" });
+    const missingConfiguration = getCreatePreferenceConfigError();
+    if (missingConfiguration) {
+      return res.status(503).json({ error: missingConfiguration });
     }
     const payload = createPreferenceSchema.parse(req.body);
     const auth = await authenticateOptional(req);
@@ -173,6 +174,13 @@ function resolveAmount(appointment, amountType) {
 function isPublicPaymentAllowed(appointment) {
   const service = appointment.services;
   return appointment.source === "online" && service?.allow_online_payment !== false && (service?.payment_required || service?.deposit_required);
+}
+
+function getCreatePreferenceConfigError() {
+  if (!config.SUPABASE_URL || !config.SUPABASE_SERVICE_ROLE_KEY) return "SUPABASE_SERVER_NOT_CONFIGURED";
+  if (!config.MERCADO_PAGO_ACCESS_TOKEN) return "MERCADO_PAGO_NOT_CONFIGURED";
+  if (!config.APP_PUBLIC_URL) return "APP_PUBLIC_URL_NOT_CONFIGURED";
+  return null;
 }
 
 async function createInternalPayment({ appointment, amount, amountType }) {
