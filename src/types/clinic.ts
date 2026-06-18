@@ -133,6 +133,7 @@ export type AppointmentPaymentStatus =
   | "deposit_pending"
   | "deposit_paid"
   | "paid"
+  | "payment_failed"
   | "rejected"
   | "refunded";
 

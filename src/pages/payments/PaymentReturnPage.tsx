@@ -18,7 +18,7 @@ type PaymentStatusResponse = {
     id: string | null;
     status: string | null;
     payment_status: string | null;
-    start_time: string | null;
+    starts_at: string | null;
     end_time: string | null;
     patient_name: string;
     service_name: string;
@@ -28,6 +28,7 @@ type PaymentStatusResponse = {
     location_name: string | null;
     location_address: string | null;
     duration_minutes: number;
+    has_schedule: boolean;
   };
 };
 
@@ -95,8 +96,9 @@ function PaymentReturnPage({ kind }: { kind: PaymentReturnKind }) {
 
   const content = resolveContent(kind, payment);
   const Icon = content.icon;
+  const canUseCalendar = Boolean(payment?.appointment.has_schedule && payment.appointment.starts_at);
   const googleCalendarUrl = payment ? buildGoogleCalendarUrl(payment) : "";
-  const icsUrl = payment?.appointment.id ? `/api/appointments/${payment.appointment.id}/calendar.ics` : "";
+  const icsUrl = payment?.appointment.id && canUseCalendar ? `/api/appointments/${payment.appointment.id}/calendar.ics` : "";
   const whatsappUrl = payment?.appointment.clinic_phone ? buildWhatsAppUrl(payment) : "";
 
   async function copyAppointment() {
@@ -130,7 +132,7 @@ function PaymentReturnPage({ kind }: { kind: PaymentReturnKind }) {
               <Detail label="Paciente" value={payment.appointment.patient_name} />
               <Detail label="Servicio" value={payment.appointment.service_name} />
               <Detail label="Profesional" value={payment.appointment.professional_name} />
-              <Detail label="Fecha y hora" value={formatDateTime(payment.appointment.start_time)} />
+              <Detail label="Fecha y hora" value={formatDateTime(payment.appointment.starts_at)} />
               <Detail label="Clínica" value={payment.appointment.clinic_name} />
               <Detail label="Sede / dirección" value={payment.appointment.location_address ?? "A confirmar"} />
               <Detail label="Monto pagado" value={formatMoney(payment.amount, payment.currency)} />
@@ -148,8 +150,15 @@ function PaymentReturnPage({ kind }: { kind: PaymentReturnKind }) {
               </div>
             )}
 
+            {payment.status === "approved" && !canUseCalendar && (
+              <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                <p className="font-semibold">{payment.payment_type === "deposit" ? "Tu seña fue acreditada." : "Tu pago fue acreditado."}</p>
+                <p className="mt-1">La clínica confirmará el día y horario del turno.</p>
+              </div>
+            )}
+
             <div className="mt-6 flex flex-wrap gap-3">
-              {payment.status === "approved" && (
+              {payment.status === "approved" && canUseCalendar && (
                 <a className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-clinic-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800" href={googleCalendarUrl} target="_blank" rel="noreferrer">
                   <CalendarPlus size={16} /> Agregar a Google Calendar
                 </a>
@@ -199,11 +208,12 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 function resolveContent(kind: PaymentReturnKind, payment?: PaymentStatusResponse | null) {
   if (payment?.status === "approved") {
+    const isConfirmed = payment.appointment.status === "confirmed" && payment.appointment.has_schedule;
     return {
       icon: CheckCircle2,
       iconClass: "bg-emerald-50 text-emerald-700",
-      title: payment.payment_type === "deposit" ? "Tu seña fue acreditada" : "Tu turno está confirmado",
-      description: payment.payment_type === "deposit" ? "Registramos el pago de la seña y guardamos los datos de tu turno." : "Registramos el pago y guardamos los datos de tu turno."
+      title: isConfirmed ? "Tu turno está confirmado" : payment.payment_type === "deposit" ? "Tu seña fue acreditada" : "Tu pago fue acreditado",
+      description: isConfirmed ? "Tu pago fue acreditado y guardamos los datos de tu turno." : "La clínica recibió tu solicitud y confirmará el turno."
     };
   }
   if (kind === "failure" || ["rejected", "cancelled", "expired"].includes(payment?.status ?? "")) {
@@ -223,7 +233,7 @@ function resolveContent(kind: PaymentReturnKind, payment?: PaymentStatusResponse
 }
 
 function buildGoogleCalendarUrl(payment: PaymentStatusResponse) {
-  const start = payment.appointment.start_time ? new Date(payment.appointment.start_time) : new Date();
+  const start = payment.appointment.starts_at ? new Date(payment.appointment.starts_at) : new Date();
   const end = payment.appointment.end_time
     ? new Date(payment.appointment.end_time)
     : new Date(start.getTime() + Number(payment.appointment.duration_minutes ?? 30) * 60_000);
@@ -239,7 +249,7 @@ function buildGoogleCalendarUrl(payment: PaymentStatusResponse) {
 
 function buildWhatsAppUrl(payment: PaymentStatusResponse) {
   const phone = String(payment.appointment.clinic_phone ?? "").replace(/\D/g, "");
-  const text = encodeURIComponent(`Hola, tengo una consulta sobre mi turno de ${payment.appointment.service_name} del ${formatDateTime(payment.appointment.start_time)}.`);
+  const text = encodeURIComponent(`Hola, tengo una consulta sobre mi turno de ${payment.appointment.service_name} del ${formatDateTime(payment.appointment.starts_at)}.`);
   return `https://wa.me/${phone}?text=${text}`;
 }
 
@@ -248,7 +258,7 @@ function buildCopyText(payment: PaymentStatusResponse) {
     `Paciente: ${payment.appointment.patient_name}`,
     `Servicio: ${payment.appointment.service_name}`,
     `Profesional: ${payment.appointment.professional_name}`,
-    `Fecha y hora: ${formatDateTime(payment.appointment.start_time)}`,
+    `Fecha y hora: ${formatDateTime(payment.appointment.starts_at)}`,
     `Clínica: ${payment.appointment.clinic_name}`,
     `Dirección: ${payment.appointment.location_address ?? "A confirmar"}`,
     `Monto pagado: ${formatMoney(payment.amount, payment.currency)}`,

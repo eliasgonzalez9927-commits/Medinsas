@@ -459,7 +459,10 @@ async function sendPatientPaymentEmail(payment) {
   });
   if (alreadySent) return;
 
-  const subject = isDepositPayment(payment) ? "Tu seña fue acreditada y tu turno quedó confirmado" : "Tu turno fue confirmado";
+  const detail = buildAppointmentDetail(payment);
+  const subject = payment.appointments?.status === "confirmed" && detail.hasSchedule
+    ? "Tu turno fue confirmado"
+    : isDepositPayment(payment) ? "Tu seña fue acreditada" : "Tu pago fue acreditado";
   const body = buildPatientEmail(payment);
   await sendLoggedEmail({
     clinicId: payment.clinic_id,
@@ -586,12 +589,16 @@ async function sendWithResend({ to, subject, text, html }) {
 
 function buildPatientEmail(payment) {
   const detail = buildAppointmentDetail(payment);
+  const isConfirmed = payment.appointments?.status === "confirmed" && detail.hasSchedule;
   const calendarUrl = `${(config.APP_PUBLIC_URL ?? "").replace(/\/$/, "")}/api/appointments/${payment.appointment_id}/calendar.ics`;
   const remaining = Math.max(Number(detail.servicePrice) - Number(payment.amount), 0);
+  const pendingCopy = isDepositPayment(payment)
+    ? "Recibimos tu seña. La clínica confirmará el día y horario de tu turno."
+    : "Recibimos tu pago. La clínica confirmará el día y horario de tu turno.";
   const lines = [
     `Hola ${detail.patientName},`,
     "",
-    "Tu turno fue confirmado.",
+    isConfirmed ? "Tu turno fue confirmado." : pendingCopy,
     "",
     "Detalle:",
     "",
@@ -609,7 +616,7 @@ function buildPatientEmail(payment) {
   ];
   return {
     text: lines.join("\n"),
-    html: `<p>Hola ${escapeHtml(detail.patientName)},</p><p>Tu turno fue confirmado.</p><ul><li>Servicio: ${escapeHtml(detail.serviceName)}</li><li>Profesional: ${escapeHtml(detail.professionalName)}</li><li>Fecha: ${escapeHtml(detail.dateLabel)}</li><li>Hora: ${escapeHtml(detail.timeLabel)}</li><li>Clínica: ${escapeHtml(detail.clinicName)}</li><li>Dirección: ${escapeHtml(detail.locationAddress)}</li><li>Monto pagado: ${escapeHtml(formatMoney(payment.amount, payment.currency))}</li><li>Tipo de pago: ${isDepositPayment(payment) ? "Seña" : "Pago total"}</li><li>Saldo pendiente: ${escapeHtml(formatMoney(remaining, payment.currency))}</li></ul><p><a href="${escapeHtml(calendarUrl)}">Agregar al calendario</a></p><p>Si necesitás modificar o cancelar tu turno, comunicate con la clínica.</p>`
+    html: `<p>Hola ${escapeHtml(detail.patientName)},</p><p>${isConfirmed ? "Tu turno fue confirmado." : escapeHtml(pendingCopy)}</p><ul><li>Servicio: ${escapeHtml(detail.serviceName)}</li><li>Profesional: ${escapeHtml(detail.professionalName)}</li><li>Fecha: ${escapeHtml(detail.dateLabel)}</li><li>Hora: ${escapeHtml(detail.timeLabel)}</li><li>Clínica: ${escapeHtml(detail.clinicName)}</li><li>Dirección: ${escapeHtml(detail.locationAddress)}</li><li>Monto pagado: ${escapeHtml(formatMoney(payment.amount, payment.currency))}</li><li>Tipo de pago: ${isDepositPayment(payment) ? "Seña" : "Pago total"}</li><li>Saldo pendiente: ${escapeHtml(formatMoney(remaining, payment.currency))}</li></ul>${isConfirmed ? `<p><a href="${escapeHtml(calendarUrl)}">Agregar al calendario</a></p>` : ""}<p>Si necesitás modificar o cancelar tu turno, comunicate con la clínica.</p>`
   };
 }
 
@@ -630,7 +637,7 @@ function toPaymentStatusResponse(payment) {
       id: payment.appointment_id,
       status: payment.appointments?.status ?? null,
       payment_status: payment.appointments?.payment_status ?? null,
-      start_time: payment.appointments?.start_time ?? null,
+      starts_at: payment.appointments?.starts_at ?? null,
       end_time: payment.appointments?.end_time ?? null,
       patient_name: detail.patientName,
       service_name: detail.serviceName,
@@ -639,7 +646,8 @@ function toPaymentStatusResponse(payment) {
       clinic_phone: payment.clinics?.phone ?? null,
       location_name: payment.appointments?.locations?.name ?? null,
       location_address: detail.locationAddress,
-      duration_minutes: detail.durationMinutes
+      duration_minutes: detail.durationMinutes,
+      has_schedule: detail.hasSchedule
     }
   };
 }
@@ -651,16 +659,18 @@ function buildAppointmentDetail(payment) {
   const professional = appointment.professionals ?? {};
   const clinic = payment.clinics ?? {};
   const location = appointment.locations ?? {};
+  const startsAt = appointment.starts_at ?? appointment.start_time ?? null;
   return {
     patientName: [patient.first_name, patient.last_name].filter(Boolean).join(" ") || "Paciente",
     serviceName: service.name ?? appointment.reason ?? "Turno",
     professionalName: [professional.name, professional.last_name].filter(Boolean).join(" ") || "Profesional a confirmar",
     clinicName: clinic.name ?? "Medin",
     locationAddress: location.address ?? clinic.address ?? "Dirección a confirmar",
-    dateLabel: appointment.start_time ? new Intl.DateTimeFormat("es-AR", { dateStyle: "long", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(appointment.start_time)) : "Fecha a confirmar",
-    timeLabel: appointment.start_time ? new Intl.DateTimeFormat("es-AR", { timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(appointment.start_time)) : "Hora a confirmar",
+    dateLabel: startsAt ? new Intl.DateTimeFormat("es-AR", { dateStyle: "long", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(startsAt)) : "Fecha a confirmar",
+    timeLabel: startsAt ? new Intl.DateTimeFormat("es-AR", { timeStyle: "short", timeZone: "America/Argentina/Buenos_Aires" }).format(new Date(startsAt)) : "Hora a confirmar",
     durationMinutes: Number(service.duration_minutes ?? 30),
-    servicePrice: Number(service.price ?? payment.amount ?? 0)
+    servicePrice: Number(service.price ?? payment.amount ?? 0),
+    hasSchedule: Boolean(startsAt)
   };
 }
 
@@ -669,7 +679,14 @@ function buildIcsEvent(appointment) {
   const clinic = appointment.clinics ?? {};
   const professional = appointment.professionals ?? {};
   const location = appointment.locations ?? {};
-  const start = new Date(appointment.start_time);
+  const startsAt = appointment.starts_at ?? appointment.start_time;
+  if (!startsAt) {
+    const error = new Error("Appointment has no schedule");
+    error.statusCode = 422;
+    error.code = "APPOINTMENT_WITHOUT_SCHEDULE";
+    throw error;
+  }
+  const start = new Date(startsAt);
   const end = appointment.end_time ? new Date(appointment.end_time) : new Date(start.getTime() + Number(service.duration_minutes ?? 30) * 60_000);
   const title = `Turno en ${clinic.name ?? "Medin"} - ${service.name ?? appointment.reason ?? "Consulta"}`;
   const description = [

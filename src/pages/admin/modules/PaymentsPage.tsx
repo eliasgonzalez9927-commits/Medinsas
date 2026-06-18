@@ -155,11 +155,20 @@ export function PaymentDetailPage() {
             </div>
             <dl className="mt-5 grid gap-3 text-sm">
               <Info label="Estado" value={payment.status} />
+              <Info label="Turno asociado" value={payment.appointment_id ?? "Sin turno asociado"} />
+              <Info label="Fecha y hora del turno" value={payment.appointments?.starts_at ? formatDate(payment.appointments.starts_at) : "Sin fecha/hora"} />
+              <Info label="Estado del turno" value={payment.appointments?.status ?? "Sin turno"} />
+              <Info label="Estado pago turno" value={payment.appointments?.payment_status ?? "Sin estado"} />
               <Info label="Provider payment id" value={payment.provider_payment_id ?? "Pendiente"} />
               <Info label="Preference id" value={payment.provider_preference_id ?? "Pendiente"} />
               <Info label="External reference" value={payment.external_reference ?? "Sin referencia"} />
               <Info label="Metodo" value={payment.payment_method ?? "Pendiente"} />
             </dl>
+            {(!payment.appointment_id || !payment.appointments?.starts_at) && (
+              <p className="mt-5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                Advertencia: este pago no tiene un turno asociado con fecha y hora. Revisar la reserva original antes de contactar al paciente.
+              </p>
+            )}
             {payment.checkout_url && (
               <a className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line px-4 py-2 text-sm font-semibold" href={payment.checkout_url}>
                 <ExternalLink size={16} /> Abrir checkout
