@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { CreditCard, ExternalLink, Settings, WalletCards } from "lucide-react";
+import { CreditCard, ExternalLink, RefreshCw, Settings, WalletCards } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
 import {
@@ -11,6 +11,7 @@ import {
   getPaymentSettings,
   updatePaymentSettings
 } from "../../../lib/clinic-data";
+import { supabase } from "../../../lib/supabase";
 import { Clinic, PaymentEvent, PaymentSettings, PaymentWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
 
@@ -31,6 +32,7 @@ export function PaymentsPage() {
   const [payments, setPayments] = useState<PaymentWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [syncingId, setSyncingId] = useState("");
 
   async function load() {
     setLoading(true);
@@ -52,28 +54,44 @@ export function PaymentsPage() {
   }, []);
 
   const summary = useMemo(() => {
-    const approved = payments.filter((payment) => payment.status === "approved");
-    const pending = payments.filter((payment) => ["pending", "in_process"].includes(payment.status));
+    const approved = payments.filter((payment) => getEffectivePaymentStatus(payment) === "approved");
+    const pending = payments.filter((payment) => ["pending", "in_process"].includes(getEffectivePaymentStatus(payment)));
+    const expired = payments.filter((payment) => getEffectivePaymentStatus(payment) === "expired");
     return {
       total: payments.length,
       approved: approved.length,
       pending: pending.length,
+      expired: expired.length,
       amount: approved.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0)
     };
   }, [payments]);
 
+  async function syncPayment(paymentId: string) {
+    setSyncingId(paymentId);
+    setError("");
+    try {
+      await syncPaymentStatus(paymentId);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos actualizar el estado.");
+    } finally {
+      setSyncingId("");
+    }
+  }
+
   return (
     <AdminPageShell
-      description="Links de pago, senas, pagos de turnos y trazabilidad con Mercado Pago."
+      description="Links de pago, señas, pagos de turnos y trazabilidad con Mercado Pago."
       eyebrow="Finanzas"
       onRefresh={load}
       title="Pagos"
     >
       {error && <Message tone="error">{error}</Message>}
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-5">
         <Metric label="Pagos" value={String(summary.total)} />
         <Metric label="Aprobados" value={String(summary.approved)} />
         <Metric label="Pendientes" value={String(summary.pending)} />
+        <Metric label="Vencidos" value={String(summary.expired)} />
         <Metric label="Cobrado" value={formatMoney(summary.amount)} />
       </section>
 
@@ -89,20 +107,32 @@ export function PaymentsPage() {
         ) : (
           <div className="divide-y divide-clinic-line">
             {payments.map((payment) => (
-              <article key={payment.id} className="grid gap-3 px-5 py-4 lg:grid-cols-[1fr_140px_130px_130px_130px_90px] lg:items-center">
+              <article key={payment.id} className="grid gap-3 px-5 py-4 xl:grid-cols-[1.2fr_1.2fr_120px_120px_110px_110px_150px] xl:items-center">
                 <div>
                   <p className="font-semibold text-clinic-ink">
                     {payment.patients ? `${payment.patients.first_name} ${payment.patients.last_name}` : "Sin paciente"}
                   </p>
-                  <p className="text-sm text-clinic-muted">
-                    {payment.services?.name ?? payment.notes ?? "Pago Mercado Pago"} · {formatDate(payment.created_at, payment.clinics?.timezone ?? undefined)}
-                  </p>
+                  <p className="text-sm text-clinic-muted">{payment.services?.name ?? payment.notes ?? "Pago Mercado Pago"}</p>
                 </div>
-                <StatusBadge status={payment.status} />
+                <div className="text-sm text-clinic-muted">
+                  <p><span className="font-semibold text-clinic-ink">Turno:</span> {payment.appointments?.starts_at ? formatDate(payment.appointments.starts_at, payment.clinics?.timezone ?? undefined) : "Sin fecha"}</p>
+                  <p><span className="font-semibold text-clinic-ink">Pago:</span> {formatDate(payment.paid_at ?? payment.created_at, payment.clinics?.timezone ?? undefined)}</p>
+                </div>
+                <StatusBadge status={getEffectivePaymentStatus(payment)} />
                 <span className="text-sm font-semibold text-clinic-ink">{formatMoney(payment.amount)}</span>
                 <span className="text-sm text-clinic-muted">{getPaymentKind(payment).label}</span>
                 <span className="text-sm text-clinic-muted">{payment.provider ?? "manual"}</span>
-                <Link className="text-sm font-semibold text-clinic-brand" to={`/admin/pagos/${payment.id}`}>Ver</Link>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-clinic-line px-3 py-1.5 text-xs font-semibold text-clinic-ink hover:bg-clinic-surface disabled:opacity-60"
+                    disabled={syncingId === payment.id}
+                    onClick={() => syncPayment(payment.id)}
+                    type="button"
+                  >
+                    <RefreshCw size={14} /> {syncingId === payment.id ? "Actualizando" : "Actualizar estado"}
+                  </button>
+                  <Link className="inline-flex min-h-9 items-center rounded-lg px-2 py-1.5 text-sm font-semibold text-clinic-brand" to={`/admin/pagos/${payment.id}`}>Ver</Link>
+                </div>
               </article>
             ))}
           </div>
@@ -117,6 +147,8 @@ export function PaymentDetailPage() {
   const [payment, setPayment] = useState<PaymentWithRelations | null>(null);
   const [events, setEvents] = useState<PaymentEvent[]>([]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [syncing, setSyncing] = useState(false);
 
   async function load() {
     try {
@@ -132,6 +164,22 @@ export function PaymentDetailPage() {
     load();
   }, [id]);
 
+  async function syncCurrentPayment() {
+    if (!payment) return;
+    setSyncing(true);
+    setNotice("");
+    setError("");
+    try {
+      await syncPaymentStatus(payment.id);
+      setNotice("Estado actualizado desde Mercado Pago.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos actualizar el estado.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   return (
     <AdminPageShell
       description="Detalle operativo del pago, relacion con turno y eventos recibidos desde Mercado Pago."
@@ -139,6 +187,7 @@ export function PaymentDetailPage() {
       onRefresh={load}
       title="Detalle de pago"
     >
+      {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
       {!payment ? (
         <SectionCard className="p-8 text-center text-clinic-muted">Cargando pago...</SectionCard>
@@ -155,18 +204,28 @@ export function PaymentDetailPage() {
               </div>
             </div>
             <dl className="mt-5 grid gap-3 text-sm">
-              <Info label="Estado" value={payment.status} />
+              <Info label="Estado del pago" value={paymentStatusLabel(getEffectivePaymentStatus(payment))} />
               <Info label="Turno asociado" value={payment.appointment_id ?? "Sin turno asociado"} />
               <Info label="Fecha y hora del turno" value={payment.appointments?.starts_at ? formatDate(payment.appointments.starts_at, payment.clinics?.timezone ?? undefined) : "Sin fecha/hora"} />
+              <Info label="Fecha/hora del pago" value={payment.paid_at ? formatDate(payment.paid_at, payment.clinics?.timezone ?? undefined) : "Sin acreditacion"} />
+              <Info label="Creado" value={formatDate(payment.created_at, payment.clinics?.timezone ?? undefined)} />
+              <Info label="Vencimiento" value={payment.expires_at ? formatDate(payment.expires_at, payment.clinics?.timezone ?? undefined) : "Sin vencimiento"} />
               <Info label="Estado del turno" value={payment.appointments?.status ?? "Sin turno"} />
               <Info label="Estado pago turno" value={payment.appointments?.payment_status ?? "Sin estado"} />
               <Info label="Tipo de pago" value={getPaymentKind(payment).label} />
+              <Info label="Monto pagado" value={formatMoney(payment.amount)} />
               <Info label="Saldo pendiente" value={formatRemaining(getPaymentKind(payment).remainingAmount)} />
+              <Info label="Proveedor" value={payment.provider ?? "manual"} />
               <Info label="Provider payment id" value={payment.provider_payment_id ?? "Pendiente"} />
               <Info label="Preference id" value={payment.provider_preference_id ?? "Pendiente"} />
               <Info label="External reference" value={payment.external_reference ?? "Sin referencia"} />
               <Info label="Metodo" value={payment.payment_method ?? "Pendiente"} />
             </dl>
+            <div className="mt-5">
+              <Button icon={<RefreshCw size={16} />} onClick={syncCurrentPayment} disabled={syncing}>
+                {syncing ? "Actualizando..." : "Actualizar estado"}
+              </Button>
+            </div>
             {(!payment.appointment_id || !payment.appointments?.starts_at) && (
               <p className="mt-5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
                 Advertencia: este pago no tiene un turno asociado con fecha y hora. Revisar la reserva original antes de contactar al paciente.
@@ -356,7 +415,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const tone = status === "approved" ? "bg-emerald-50 text-emerald-700" : ["pending", "in_process"].includes(status) ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700";
+  const tone = status === "approved" ? "bg-emerald-50 text-emerald-700" : ["pending", "in_process"].includes(status) ? "bg-amber-50 text-amber-700" : status === "expired" ? "bg-slate-100 text-slate-700" : "bg-red-50 text-red-700";
   return <span className={`rounded-lg px-3 py-2 text-center text-xs font-semibold ${tone}`}>{paymentStatusLabel(status)}</span>;
 }
 
@@ -386,9 +445,16 @@ function paymentStatusLabel(status: string) {
     cancelled: "Cancelado",
     refunded: "Reembolsado",
     charged_back: "Contracargo",
-    expired: "Expirado"
+    expired: "Vencido"
   };
   return labels[status] ?? status;
+}
+
+function getEffectivePaymentStatus(payment: PaymentWithRelations) {
+  if (["pending", "in_process"].includes(payment.status) && payment.expires_at && new Date(payment.expires_at).getTime() <= Date.now()) {
+    return "expired";
+  }
+  return payment.status;
 }
 
 function formatMoney(value: number) {
@@ -408,6 +474,20 @@ function getPaymentKind(payment: PaymentWithRelations) {
   const notesLookLikeDeposit = String(payment.notes ?? "").toLowerCase().includes("sena") || String(payment.notes ?? "").toLowerCase().includes("seña");
   if (payment.services?.deposit_required || notesLookLikeDeposit) return { label: "Seña", remainingAmount };
   return { label: "Pago total", remainingAmount };
+}
+
+async function syncPaymentStatus(paymentId: string) {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const response = await fetch(`/api/payments/mercadopago/${paymentId}/sync`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error === "UNAUTHORIZED" ? "Necesitas iniciar sesion nuevamente." : payload.error ?? "No pudimos actualizar el estado.");
+  }
+  return payload;
 }
 
 function formatDate(value: string, timezone = "America/Argentina/Mendoza") {

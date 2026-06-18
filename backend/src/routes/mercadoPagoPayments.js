@@ -35,7 +35,8 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async 
     if (!amount || amount <= 0) return res.status(400).json({ error: "INVALID_AMOUNT" });
     const initialKind = resolveInitialPaymentKind(appointment, amount, payload.amountType);
 
-    const payment = await createInternalPayment({ appointment, amount, amountType: initialKind });
+    const expiresAt = await resolvePaymentExpiration(appointment.clinic_id);
+    const payment = await createInternalPayment({ appointment, amount, amountType: initialKind, expiresAt });
     const preference = await createMercadoPagoPreference({ appointment, payment, amount });
 
     await supabase
@@ -86,6 +87,42 @@ mercadoPagoPaymentsRouter.get("/payments/mercadopago/status", async (req, res, n
     }
 
     const updatedPayment = await loadPaymentDetails(payment.id);
+    if (!updatedPayment) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+    await expirePaymentIfNeeded(updatedPayment);
+    const finalPayment = await loadPaymentDetails(payment.id);
+    if (!finalPayment) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+    if (finalPayment.status === "approved") {
+      await sendPaymentApprovedNotifications(finalPayment);
+    }
+
+    res.status(200).json(toPaymentStatusResponse(finalPayment));
+  } catch (error) {
+    next(error);
+  }
+});
+
+mercadoPagoPaymentsRouter.post("/payments/mercadopago/:id/sync", async (req, res, next) => {
+  try {
+    const paymentId = String(req.params.id ?? "");
+    if (!isUuid(paymentId)) return res.status(400).json({ error: "INVALID_PAYMENT_ID" });
+    const auth = await authenticateOptional(req);
+    if (!auth?.role) return res.status(401).json({ error: "UNAUTHORIZED" });
+    assertPermission(auth.role, "canManageBilling");
+
+    const payment = await loadPaymentDetails(paymentId);
+    if (!payment) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+    if (auth.clinicId && auth.role !== "platform_admin" && auth.clinicId !== payment.clinic_id) {
+      return res.status(403).json({ error: "FORBIDDEN_CLINIC" });
+    }
+
+    if (payment.provider_payment_id && config.MERCADO_PAGO_ACCESS_TOKEN) {
+      const providerPayment = await fetchMercadoPagoPayment(payment.provider_payment_id);
+      await updatePaymentFromProvider(payment, providerPayment);
+    } else {
+      await expirePaymentIfNeeded(payment);
+    }
+
+    const updatedPayment = await loadPaymentDetails(paymentId);
     if (!updatedPayment) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
     if (updatedPayment.status === "approved") {
       await sendPaymentApprovedNotifications(updatedPayment);
@@ -231,25 +268,37 @@ function getCreatePreferenceConfigError() {
   return null;
 }
 
-async function createInternalPayment({ appointment, amount, amountType }) {
+async function createInternalPayment({ appointment, amount, amountType, expiresAt }) {
   const externalReference = `medin_${appointment.id}_${Date.now()}`;
+  const payload = {
+    clinic_id: appointment.clinic_id,
+    patient_id: appointment.patient_id,
+    appointment_id: appointment.id,
+    service_id: appointment.service_id,
+    amount,
+    currency: "ARS",
+    method: "mercado_pago_checkout_pro",
+    status: "pending",
+    provider: "mercado_pago",
+    external_reference: externalReference,
+    expires_at: expiresAt,
+    notes: amountType === "deposit" ? "Seña de reserva online" : "Pago completo"
+  };
   const { data, error } = await supabase
     .from("payments")
-    .insert({
-      clinic_id: appointment.clinic_id,
-      patient_id: appointment.patient_id,
-      appointment_id: appointment.id,
-      service_id: appointment.service_id,
-      amount,
-      currency: "ARS",
-      method: "mercado_pago_checkout_pro",
-      status: "pending",
-      provider: "mercado_pago",
-      external_reference: externalReference,
-      notes: amountType === "deposit" ? "Seña de reserva online" : "Pago completo"
-    })
+    .insert(payload)
     .select("*")
     .single();
+  if (error?.code === "PGRST204" || error?.code === "42703") {
+    const { expires_at: _expiresAt, ...fallbackPayload } = payload;
+    const fallback = await supabase
+      .from("payments")
+      .insert(fallbackPayload)
+      .select("*")
+      .single();
+    if (fallback.error) throw fallback.error;
+    return fallback.data;
+  }
   if (error) throw error;
   return data;
 }
@@ -284,6 +333,8 @@ async function createMercadoPagoPreference({ appointment, payment, amount }) {
         failure: `${publicUrl}/pago/fallido?payment_id=${payment.id}`,
         pending: `${publicUrl}/pago/pendiente?payment_id=${payment.id}`
       },
+      expires: Boolean(payment.expires_at),
+      expiration_date_to: payment.expires_at ?? undefined,
       notification_url: `${publicUrl}/api/payments/mercadopago/webhook`,
       metadata: {
         clinic_id: appointment.clinic_id,
@@ -429,6 +480,38 @@ async function updatePaymentFromProvider(payment, providerPayment) {
     if (status === "approved") update.status = await resolveApprovedAppointmentStatus(payment.clinic_id);
     await supabase.from("appointments").update(update).eq("id", payment.appointment_id);
   }
+}
+
+async function resolvePaymentExpiration(clinicId) {
+  const { data, error } = await supabase
+    .from("payment_settings")
+    .select("payment_link_expiration_minutes")
+    .eq("clinic_id", clinicId)
+    .eq("provider", "mercado_pago")
+    .maybeSingle();
+  if (error) throw error;
+  const minutes = Number(data?.payment_link_expiration_minutes || 1440);
+  return new Date(Date.now() + Math.max(minutes, 15) * 60_000).toISOString();
+}
+
+async function expirePaymentIfNeeded(payment) {
+  if (!["pending", "in_process"].includes(payment.status)) return false;
+  if (!payment.expires_at || new Date(payment.expires_at).getTime() > Date.now()) return false;
+  await supabase
+    .from("payments")
+    .update({
+      status: "expired",
+      status_detail: "expired_by_medin",
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", payment.id);
+  if (payment.appointment_id) {
+    await supabase
+      .from("appointments")
+      .update({ payment_status: "payment_failed" })
+      .eq("id", payment.appointment_id);
+  }
+  return true;
 }
 
 async function resolveApprovedAppointmentStatus(clinicId) {

@@ -382,6 +382,7 @@ export type Payment = {
   payment_method?: string | null;
   payer_email?: string | null;
   checkout_url?: string | null;
+  expires_at?: string | null;
   paid_at: string | null;
   notes: string | null;
   created_at: string;

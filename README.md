@@ -313,6 +313,7 @@ GET  /api/health/env
 POST /api/payments/mercadopago/create-preference
 POST /api/payments/mercadopago/webhook
 GET  /api/payments/mercadopago/status?payment_id=...
+POST /api/payments/mercadopago/:id/sync
 ```
 
 Variables backend requeridas:
@@ -343,6 +344,11 @@ Para probar en modo test:
 Medin no maneja datos de tarjeta ni guarda access tokens de Mercado Pago en frontend. La
 confirmacion confiable del pago ocurre por webhook y consulta backend a Mercado Pago, no por
 la URL de retorno del usuario.
+
+La migracion `011_payment_expiration_admin_tools.sql` agrega `payments.expires_at`. En
+`/admin/pagos`, un pago `pending` o `in_process` con `expires_at` pasado se muestra como
+`Vencido`; no cuenta como pendiente ni cobrado. El boton `Actualizar estado` consulta el backend
+para sincronizar con Mercado Pago o marcar el pago como vencido si corresponde.
 
 ## Integracion WhatsApp
 
