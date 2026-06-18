@@ -43,9 +43,9 @@ export function AdminLayout({
   onRefresh: () => void;
   onCreateAppointment: () => void;
 }) {
-  const { profile, signOut, user } = useAuth();
+  const { profile, role, signOut, user } = useAuth();
   const displayName = profile?.full_name ?? user?.email ?? "Equipo clinico";
-  const displayRole = profile?.role ? roleLabels[profile.role] : "Usuario";
+  const displayRole = role ? roleLabels[role] : "Usuario";
 
   return (
     <div className="min-h-screen bg-[#f6f8fb] text-clinic-ink">

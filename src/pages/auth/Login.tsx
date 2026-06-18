@@ -1,11 +1,11 @@
 import { FormEvent, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Activity, ArrowRight } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
+import { getPostLoginPath } from "../../lib/auth-roles";
 
 export function Login() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,9 +18,13 @@ export function Login() {
     setSubmitting(true);
 
     try {
-      await signIn(email, password);
-      const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
-      navigate(from ?? "/admin", { replace: true });
+      const snapshot = await signIn(email, password);
+      const nextPath = getPostLoginPath(snapshot.role);
+      if (!nextPath || nextPath === "/patient/book") {
+        setError("Sin permisos para acceder al panel.");
+        return;
+      }
+      navigate(nextPath, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesion.");
     } finally {
@@ -43,7 +47,7 @@ export function Login() {
           </div>
 
           <h1 className="text-3xl font-semibold tracking-normal text-clinic-ink">
-            Accede al panel
+            Acceso al panel
           </h1>
           <p className="mt-3 text-clinic-muted">
             Ingresa con tu usuario del equipo para administrar agenda, pacientes y reservas.
@@ -90,10 +94,7 @@ export function Login() {
           </form>
 
           <p className="mt-6 text-sm text-clinic-muted">
-            No tienes cuenta?{" "}
-            <Link to="/register" className="font-semibold text-clinic-brand">
-              Crear acceso paciente
-            </Link>
+            Los accesos del equipo son creados por administracion.
           </p>
         </div>
       </section>

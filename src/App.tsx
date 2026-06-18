@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { ADMIN_ROLES, isAdminRole } from "./lib/auth-roles";
+import { ADMIN_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-roles";
 import { Login } from "./pages/auth/Login";
 import { Register } from "./pages/auth/Register";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
@@ -19,10 +19,10 @@ import { ClinicLanding } from "./pages/landing/ClinicLanding";
 import { PatientBooking } from "./pages/patient/PatientBooking";
 
 function HomeRedirect() {
-  const { profile, loading } = useAuth();
+  const { role, loading } = useAuth();
 
   if (loading) return null;
-  return <Navigate to={isAdminRole(profile?.role) ? "/admin" : "/patient/book"} replace />;
+  return <Navigate to={getPostLoginPath(role) ?? "/login"} replace />;
 }
 
 export function App() {
@@ -56,6 +56,10 @@ export function App() {
         <Route path="/admin/financiacion" element={<FinancingPage />} />
         <Route path="/admin/reportes" element={<ReportsPage />} />
         <Route path="/admin/configuracion" element={<SettingsPage />} />
+      </Route>
+      <Route element={<ProtectedRoute roles={PROFESSIONAL_ROLES} />}>
+        <Route path="/admin/mi-agenda" element={<AgendaPage />} />
+        <Route path="/medico" element={<Navigate to="/admin/mi-agenda" replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

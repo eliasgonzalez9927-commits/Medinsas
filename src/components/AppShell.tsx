@@ -2,11 +2,11 @@ import { CalendarDays, ClipboardList, LogOut, UserRound } from "lucide-react";
 import { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { isAdminRole } from "../lib/auth-roles";
+import { isStaffRole } from "../lib/auth-roles";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { profile, signOut } = useAuth();
-  const isAdmin = isAdminRole(profile?.role);
+  const { profile, role, signOut } = useAuth();
+  const isStaff = isStaffRole(role);
 
   return (
     <div className="min-h-screen bg-clinic-surface">
@@ -20,16 +20,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
           <nav className="flex items-center gap-2">
             <NavLink
-              to={isAdmin ? "/admin" : "/patient/book"}
+              to={isStaff ? "/admin" : "/patient/book"}
               className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-clinic-muted hover:bg-clinic-surface"
             >
               <CalendarDays size={18} />
-              {isAdmin ? "Administracion" : "Reservar"}
+              {isStaff ? "Administracion" : "Reservar"}
             </NavLink>
-            <div className="hidden items-center gap-2 rounded-lg border border-clinic-line px-3 py-2 text-sm text-clinic-muted sm:flex">
+            <Link
+              to={isStaff ? "/admin" : "/patient/book"}
+              className="hidden items-center gap-2 rounded-lg border border-clinic-line px-3 py-2 text-sm text-clinic-muted hover:bg-clinic-surface sm:flex"
+            >
               <UserRound size={18} />
               {profile?.full_name}
-            </div>
+            </Link>
             <button
               type="button"
               onClick={signOut}

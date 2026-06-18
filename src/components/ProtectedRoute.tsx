@@ -3,7 +3,7 @@ import { UserRole } from "../types/database";
 import { useAuth } from "../contexts/AuthContext";
 
 export function ProtectedRoute({ roles }: { roles?: UserRole[] }) {
-  const { profile, user, loading } = useAuth();
+  const { role, user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -17,8 +17,18 @@ export function ProtectedRoute({ roles }: { roles?: UserRole[] }) {
   }
 
   if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
-  if (roles && !profile) return <Navigate to="/login" replace />;
-  if (roles && profile && !roles.includes(profile.role)) return <Navigate to="/" replace />;
+  if (roles && (!role || !roles.includes(role))) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-clinic-surface px-4">
+        <section className="w-full max-w-md rounded-lg border border-clinic-line bg-white p-6 text-center shadow-soft">
+          <h1 className="text-2xl font-semibold text-clinic-ink">Sin permisos</h1>
+          <p className="mt-2 text-sm text-clinic-muted">
+            Tu usuario no tiene permisos para acceder a esta seccion.
+          </p>
+        </section>
+      </main>
+    );
+  }
 
   return <Outlet />;
 }
