@@ -85,6 +85,7 @@ clinic-saas-mvp/
 - Row Level Security para separar acceso de pacientes y administradores.
 - Acceso admin protegido con Supabase Auth, perfiles, membresias por clinica y roles operativos.
 - Modulos preparados de facturacion y recetarios internos, sin integraciones fiscales o regulatorias activas.
+- Roadmap de historia clinica unificada como modulo sensible, regulado y separado de la ficha operativa del paciente.
 
 ## Rutas de producto
 
@@ -109,6 +110,14 @@ clinic-saas-mvp/
 
 Las secciones de producto principales ya operan contra Supabase. Los mocks quedan solo como fallback
 visual en modulos que todavia no tengan datos reales cargados.
+
+## Rutas futuras planificadas
+
+- `/admin/historia-clinica`: vista clinica unificada para busqueda y supervision con permisos estrictos.
+- `/admin/pacientes/:id/historia-clinica`: historia clinica longitudinal de un paciente especifico.
+
+Estas rutas no deben activarse como simples notas administrativas. Requieren modelo de datos,
+auditoria, permisos por rol y trazabilidad antes de exponerse en produccion.
 
 ## Base operativa conectada
 
@@ -170,6 +179,39 @@ ARCA. Mientras no exista WSAA/WSFE o proveedor externo configurado, la UI muestr
 Recetarios queda preparado como `Recetario interno`, `Ordenes e indicaciones` y
 `Preparado para integracion con receta electronica`. No se presenta como integracion oficial
 activa hasta conectar una plataforma aprobada y completar la configuracion profesional.
+
+## Roadmap: historia clinica unificada
+
+La historia clinica unificada queda definida como un modulo futuro sensible y regulado. Debe
+estar separado de `patients`, que hoy representa la base operativa de contacto, agenda y gestion
+administrativa. No debe implementarse como un campo de notas ni como texto libre mezclado con
+datos administrativos.
+
+Alcance funcional previsto:
+
+- Ficha clinica del paciente, independiente de la ficha administrativa.
+- Historial de turnos y relacion con `appointments`.
+- Evoluciones medicas por encuentro o episodio.
+- Notas clinicas, diagnosticos y motivos de consulta.
+- Indicaciones, recetas internas y ordenes de estudios vinculadas a `medical_documents`.
+- Archivos adjuntos clinicos con metadatos de origen, tipo documental y paciente asociado.
+- Profesional responsable de cada registro.
+- Fecha y hora inmutable de creacion, actualizacion y emision cuando aplique.
+- Auditoria de lectura y escritura por usuario, rol, accion, IP/contexto y recurso accedido.
+- Permisos por rol para `platform_admin`, `clinic_admin`, `receptionist`, `professional` y futuros roles clinicos.
+- Privacidad, trazabilidad y separacion entre informacion clinica, operativa y financiera.
+
+Arquitectura de datos sugerida para una etapa posterior:
+
+- `clinical_records`: contenedor longitudinal por paciente y clinica.
+- `clinical_entries`: evoluciones, notas clinicas, diagnosticos, motivos e indicaciones.
+- `clinical_attachments`: documentos, imagenes o estudios adjuntos.
+- `clinical_record_access_logs`: auditoria de lectura, escritura, exportacion y cambios de permisos.
+- Relaciones con `patients`, `appointments`, `professionals`, `medical_documents` y `medical_document_items`.
+
+Antes de implementar este modulo hay que definir RLS especifico, permisos por membresia clinica,
+politicas de acceso minimo necesario, retencion documental, exportacion segura, backups y un
+modelo de auditoria que no dependa solo del frontend.
 
 ## Integracion WhatsApp
 
