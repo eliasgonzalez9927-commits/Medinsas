@@ -86,6 +86,11 @@ export function PublicBookingPage() {
             ""
         );
       } catch (err) {
+        console.error("Public booking load failed", {
+          clinicSlug,
+          filter,
+          error: err
+        });
         setError(err instanceof Error ? err.message : "No pudimos cargar la reserva online.");
       } finally {
         setLoading(false);
@@ -132,7 +137,16 @@ export function PublicBookingPage() {
           available.some((slot) => slot.startsAt === current) ? current : available[0]?.startsAt ?? ""
         );
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "No pudimos cargar horarios."))
+      .catch((err) => {
+        console.error("Public booking slots failed", {
+          clinicSlug: clinic.slug,
+          professionalId,
+          serviceId,
+          date,
+          error: err
+        });
+        setError(err instanceof Error ? err.message : "No pudimos cargar horarios.");
+      })
       .finally(() => setSlotsLoading(false));
   }, [clinic?.slug, professionalId, serviceId, date]);
 
@@ -161,6 +175,13 @@ export function PublicBookingPage() {
       });
       setResult(booking);
     } catch (err) {
+      console.error("Public booking submit failed", {
+        clinicSlug,
+        professionalId,
+        serviceId,
+        slotStartsAt,
+        error: err
+      });
       setError(err instanceof Error ? err.message : "No pudimos crear la reserva.");
     } finally {
       setSaving(false);
