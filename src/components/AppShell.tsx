@@ -2,10 +2,11 @@ import { CalendarDays, ClipboardList, LogOut, UserRound } from "lucide-react";
 import { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { isAdminRole } from "../lib/auth-roles";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { profile, signOut } = useAuth();
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = isAdminRole(profile?.role);
 
   return (
     <div className="min-h-screen bg-clinic-surface">

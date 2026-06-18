@@ -17,6 +17,7 @@ import {
 import { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import { roleLabels } from "../../lib/auth-roles";
 import { Button } from "../ui/Button";
 
 const navItems = [
@@ -42,7 +43,9 @@ export function AdminLayout({
   onRefresh: () => void;
   onCreateAppointment: () => void;
 }) {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, user } = useAuth();
+  const displayName = profile?.full_name ?? user?.email ?? "Equipo clinico";
+  const displayRole = profile?.role ? roleLabels[profile.role] : "Usuario";
 
   return (
     <div className="min-h-screen bg-[#f6f8fb] text-clinic-ink">
@@ -90,9 +93,9 @@ export function AdminLayout({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-clinic-ink">
-                  {profile?.full_name ?? "Equipo clinico"}
+                  {displayName}
                 </p>
-                <p className="text-xs text-clinic-muted">Administrador</p>
+                <p className="text-xs text-clinic-muted">{displayRole}</p>
               </div>
               <button
                 type="button"
@@ -136,11 +139,18 @@ export function AdminLayout({
             </div>
 
             <div className="ml-auto flex items-center gap-2">
+              <div className="hidden min-w-0 text-right xl:block">
+                <p className="truncate text-sm font-semibold text-clinic-ink">{displayName}</p>
+                <p className="text-xs text-clinic-muted">{displayRole}</p>
+              </div>
               <Button className="hidden sm:inline-flex" onClick={onRefresh} variant="secondary">
                 Actualizar
               </Button>
               <Button onClick={onCreateAppointment} variant="primary">
                 Nuevo turno
+              </Button>
+              <Button icon={<LogOut size={16} />} onClick={signOut} variant="secondary">
+                Cerrar sesión
               </Button>
             </div>
           </div>

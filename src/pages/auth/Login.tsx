@@ -1,10 +1,11 @@
 import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Activity, ArrowRight } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 
 export function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,7 +19,8 @@ export function Login() {
 
     try {
       await signIn(email, password);
-      navigate("/");
+      const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+      navigate(from ?? "/admin", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesion.");
     } finally {
@@ -41,10 +43,10 @@ export function Login() {
           </div>
 
           <h1 className="text-3xl font-semibold tracking-normal text-clinic-ink">
-            Accede a tu portal
+            Accede al panel
           </h1>
           <p className="mt-3 text-clinic-muted">
-            Reserva turnos, registra triaje previo o administra la agenda de la clinica.
+            Ingresa con tu usuario del equipo para administrar agenda, pacientes y reservas.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
@@ -56,7 +58,7 @@ export function Login() {
                 onChange={(event) => setEmail(event.target.value)}
                 required
                 className="mt-2 w-full rounded-lg border border-clinic-line bg-white px-4 py-3 outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
-                placeholder="paciente@clinica.com"
+                placeholder="admin@medin.local"
               />
             </label>
             <label className="block">
@@ -90,7 +92,7 @@ export function Login() {
           <p className="mt-6 text-sm text-clinic-muted">
             No tienes cuenta?{" "}
             <Link to="/register" className="font-semibold text-clinic-brand">
-              Registrate
+              Crear acceso paciente
             </Link>
           </p>
         </div>
@@ -101,7 +103,7 @@ export function Login() {
             MVP para clinicas
           </p>
           <h2 className="mt-4 text-4xl font-semibold tracking-normal">
-            Reservas, triaje inicial y seguimiento operativo en una sola vista.
+            Agenda, pacientes y seguimiento operativo en una sola vista.
           </h2>
         </div>
       </aside>

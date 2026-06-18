@@ -1,4 +1,11 @@
-export type UserRole = "patient" | "doctor" | "admin";
+export type UserRole =
+  | "platform_admin"
+  | "clinic_admin"
+  | "receptionist"
+  | "professional"
+  | "patient"
+  | "admin"
+  | "doctor";
 export type AppointmentStatus =
   | "pending"
   | "confirmed"
@@ -17,6 +24,16 @@ export type Profile = {
   phone: string | null;
   role: UserRole;
   created_at: string;
+};
+
+export type ClinicMember = {
+  id: string;
+  clinic_id: string;
+  user_id: string;
+  role: UserRole;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 export type TriageResult = {

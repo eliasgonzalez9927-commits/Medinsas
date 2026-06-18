@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ADMIN_ROLES, isAdminRole } from "./lib/auth-roles";
 import { Login } from "./pages/auth/Login";
 import { Register } from "./pages/auth/Register";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
@@ -21,7 +22,7 @@ function HomeRedirect() {
   const { profile, loading } = useAuth();
 
   if (loading) return null;
-  return <Navigate to={profile?.role === "admin" ? "/admin" : "/patient/book"} replace />;
+  return <Navigate to={isAdminRole(profile?.role) ? "/admin" : "/patient/book"} replace />;
 }
 
 export function App() {
@@ -38,7 +39,7 @@ export function App() {
       <Route element={<ProtectedRoute roles={["patient"]} />}>
         <Route path="/patient/book" element={<PatientBooking />} />
       </Route>
-      <Route element={<ProtectedRoute roles={["admin"]} />}>
+      <Route element={<ProtectedRoute roles={ADMIN_ROLES} />}>
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/agenda" element={<AgendaPage />} />
         <Route path="/admin/profesionales" element={<ProfessionalsPage />} />

@@ -1,9 +1,10 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { UserRole } from "../types/database";
 import { useAuth } from "../contexts/AuthContext";
 
 export function ProtectedRoute({ roles }: { roles?: UserRole[] }) {
   const { profile, user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -15,7 +16,8 @@ export function ProtectedRoute({ roles }: { roles?: UserRole[] }) {
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
+  if (roles && !profile) return <Navigate to="/login" replace />;
   if (roles && profile && !roles.includes(profile.role)) return <Navigate to="/" replace />;
 
   return <Outlet />;

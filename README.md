@@ -14,6 +14,7 @@ clinic-saas-mvp/
       003_product_architecture.sql
       004_connect_operational_base.sql
       005_connect_agenda_patients_booking.sql
+      006_auth_admin_access.sql
     schema.sql
   backend/
     src/
@@ -64,7 +65,7 @@ clinic-saas-mvp/
 
 1. Crea un proyecto en Supabase.
 2. Ejecuta `supabase/schema.sql` en el SQL Editor.
-3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql` y `supabase/migrations/005_connect_agenda_patients_booking.sql`.
+3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql` y `supabase/migrations/006_auth_admin_access.sql`.
 4. Copia `.env.example` a `.env` y completa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 5. Instala dependencias con `npm install`.
 6. Ejecuta `npm run dev`.
@@ -81,6 +82,7 @@ clinic-saas-mvp/
 - Webhook base `supabase/functions/whatsapp-funnel.js` para automatizaciones de WhatsApp.
 - Backend Node.js en `backend/` para operar Supabase desde WhatsApp con un agente OpenAI y tools por rol.
 - Row Level Security para separar acceso de pacientes y administradores.
+- Acceso admin protegido con Supabase Auth, perfiles, membresias por clinica y roles operativos.
 
 ## Rutas de producto
 
@@ -120,6 +122,31 @@ La migracion `005_connect_agenda_patients_booking.sql` conecta `appointments` co
 quita el bloqueo global de un turno por hora, agrega `appointment_events`, expone la RPC publica
 de slots disponibles y crea `create_public_booking(...)` con validacion anti doble reserva dentro
 de la base de datos. Los eventos quedan listos para conectar WhatsApp sin enviar mensajes todavia.
+
+## Acceso admin
+
+La migracion `006_auth_admin_access.sql` agrega los roles operativos `platform_admin`,
+`clinic_admin`, `receptionist` y `professional`, crea `clinic_members` y actualiza
+`public.is_admin()` para proteger las rutas y las policies.
+
+Para crear el primer administrador, usa la Supabase Admin API desde tu maquina o un entorno backend.
+La `SUPABASE_SERVICE_ROLE_KEY` no debe tener prefijo `VITE_` ni subirse al frontend.
+
+Ejemplo local:
+
+```bash
+SUPABASE_URL="https://tu-proyecto.supabase.co" \
+SUPABASE_SERVICE_ROLE_KEY="tu-service-role-key" \
+ADMIN_EMAIL="admin@medin.local" \
+ADMIN_PASSWORD="Medin.Admin.2026!" \
+ADMIN_FULL_NAME="Admin Medin" \
+ADMIN_ROLE="platform_admin" \
+CLINIC_SLUG="clinica-central" \
+npm run admin:create
+```
+
+Luego entra en `/login` con ese email y contrasena. Todas las rutas `/admin` redirigen a
+`/login` si no hay sesion activa.
 
 ## Integracion WhatsApp
 
