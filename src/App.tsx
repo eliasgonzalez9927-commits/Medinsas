@@ -11,6 +11,7 @@ import { BillingDocumentsPage, BillingPage, BillingSettingsPage } from "./pages/
 import { FinancingPage, ReportsPage } from "./pages/admin/modules/SecondaryModulePage";
 import { MessagesPage } from "./pages/admin/modules/MessagesPage";
 import { OnlineBookingPage } from "./pages/admin/modules/OnlineBookingPage";
+import { OnboardingPage } from "./pages/admin/modules/OnboardingPage";
 import { PatientsPage } from "./pages/admin/modules/PatientsPage";
 import { PaymentDetailPage, PaymentSettingsPage, PaymentsPage } from "./pages/admin/modules/PaymentsPage";
 import { NewPrescriptionPage, PrescriptionSettingsPage, PrescriptionsPage } from "./pages/admin/modules/PrescriptionsPage";
@@ -23,6 +24,7 @@ import { PaymentFailurePage, PaymentPendingPage, PaymentSuccessPage } from "./pa
 import { PublicBookingPage } from "./pages/booking/PublicBookingPage";
 import { ClinicLanding } from "./pages/landing/ClinicLanding";
 import { PatientBooking } from "./pages/patient/PatientBooking";
+import { SuperadminClinicDetailPage, SuperadminClinicsPage, SuperadminDashboard } from "./pages/superadmin/SuperadminPages";
 
 function HomeRedirect() {
   const { role, loading } = useAuth();
@@ -50,6 +52,7 @@ export function App() {
       </Route>
       <Route element={<ProtectedRoute roles={ADMIN_ROLES} />}>
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/onboarding" element={<OnboardingPage />} />
         <Route path="/admin/agenda" element={<AgendaPage />} />
         <Route path="/admin/profesionales" element={<ProfessionalsPage />} />
         <Route path="/admin/profesionales/:id" element={<ProfessionalProfilePage />} />
@@ -78,6 +81,11 @@ export function App() {
         <Route path="/admin/configuracion/sedes" element={<SettingsLocationsPage />} />
         <Route path="/admin/configuracion/usuarios" element={<SettingsUsersPage />} />
         <Route path="/admin/configuracion/notificaciones" element={<SettingsNotificationsPage />} />
+      </Route>
+      <Route element={<ProtectedRoute roles={["platform_admin"]} />}>
+        <Route path="/superadmin" element={<SuperadminDashboard />} />
+        <Route path="/superadmin/clinicas" element={<SuperadminClinicsPage />} />
+        <Route path="/superadmin/clinicas/:id" element={<SuperadminClinicDetailPage />} />
       </Route>
       <Route element={<ProtectedRoute roles={PROFESSIONAL_ROLES} />}>
         <Route path="/admin/mi-agenda" element={<AgendaPage />} />

@@ -171,6 +171,38 @@ La migracion `006_auth_admin_access.sql` agrega los roles operativos `platform_a
 `clinic_admin`, `receptionist` y `professional`, crea `clinic_members` y actualiza
 `public.is_admin()` para proteger las rutas y las policies.
 
+## Superadmin y onboarding SaaS
+
+La migracion `012_superadmin_onboarding.sql` agrega la base multi-clinica para operar Medin como
+SaaS:
+
+- `subscription_plans` con planes iniciales `Básico`, `Pro` y `Enterprise`.
+- `clinic_subscriptions` para estado comercial de cada clinica: `trial`, `active`,
+  `past_due`, `suspended` o `cancelled`.
+- `clinic_modules` para habilitar u ocultar módulos por clínica.
+- `clinic_onboarding_steps` para seguimiento asistido.
+- `audit_logs` para eventos sensibles como alta/edicion de clinicas, cambios de módulos,
+  cambios de suscripción y pasos de onboarding.
+
+Rutas agregadas:
+
+```txt
+/superadmin
+/superadmin/clinicas
+/superadmin/clinicas/:id
+/admin/onboarding
+```
+
+`/superadmin` está protegida para `platform_admin`. Un `clinic_admin` continúa entrando solo al
+panel de su clínica. Al crear una clínica desde Superadmin se crea la base operativa mínima:
+`clinics`, `booking_settings`, `fiscal_settings`, `payment_settings`, suscripción, módulos y
+checklist de onboarding. El slug se valida como único antes de insertar.
+
+El sidebar de `/admin` consulta `clinic_modules`: los módulos base (`Dashboard`, `Agenda`,
+`Pacientes`, `Profesionales`, `Servicios`, `Disponibilidad` y `Configuración`) quedan visibles;
+módulos opcionales como `Pagos`, `Facturación`, `Recetarios`, `WhatsApp`, `Mensajes`,
+`Financiación` y `Reportes` se muestran solo si están habilitados para la clínica.
+
 Para crear el primer administrador, usa la Supabase Admin API desde tu maquina o un entorno backend.
 La `SUPABASE_SERVICE_ROLE_KEY` no debe tener prefijo `VITE_` ni subirse al frontend.
 

@@ -3,6 +3,9 @@ export type Clinic = {
   name: string;
   slug: string;
   legal_name?: string | null;
+  cuit?: string | null;
+  status?: string | null;
+  plan?: string | null;
   phone: string | null;
   whatsapp?: string | null;
   email: string | null;

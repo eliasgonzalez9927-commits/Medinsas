@@ -16,28 +16,32 @@ import {
   UsersRound,
   WalletCards
 } from "lucide-react";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { roleLabels } from "../../lib/auth-roles";
+import { getDefaultClinic } from "../../lib/clinic-data";
+import { BASE_MODULES } from "../../lib/modules";
+import { supabase } from "../../lib/supabase";
 import { Button } from "../ui/Button";
 
 const navItems = [
-  { label: "Dashboard", icon: ClipboardList, to: "/admin" },
-  { label: "Agenda", icon: CalendarDays, to: "/admin/agenda" },
-  { label: "Pacientes", icon: UsersRound, to: "/admin/pacientes" },
-  { label: "Profesionales", icon: Stethoscope, to: "/admin/profesionales" },
-  { label: "Servicios", icon: WalletCards, to: "/admin/servicios" },
-  { label: "Disponibilidad", icon: SlidersHorizontal, to: "/admin/disponibilidad" },
-  { label: "Reservas online", icon: CalendarDays, to: "/admin/booking" },
-  { label: "WhatsApp", icon: MessageCircle, to: "/admin/whatsapp" },
-  { label: "Mensajes", icon: MessageCircle, to: "/admin/mensajes" },
-  { label: "Pagos", icon: WalletCards, to: "/admin/pagos" },
-  { label: "Financiacion", icon: Banknote, to: "/admin/financiacion" },
-  { label: "Facturacion", icon: ReceiptText, to: "/admin/facturacion" },
-  { label: "Recetarios", icon: FilePenLine, to: "/admin/recetarios" },
-  { label: "Reportes", icon: PieChart, to: "/admin/reportes" },
-  { label: "Configuracion", icon: Settings, to: "/admin/configuracion" }
+  { label: "Dashboard", icon: ClipboardList, to: "/admin", base: true },
+  { label: "Agenda", icon: CalendarDays, to: "/admin/agenda", moduleKey: "agenda", base: true },
+  { label: "Pacientes", icon: UsersRound, to: "/admin/pacientes", moduleKey: "pacientes", base: true },
+  { label: "Profesionales", icon: Stethoscope, to: "/admin/profesionales", moduleKey: "profesionales", base: true },
+  { label: "Servicios", icon: WalletCards, to: "/admin/servicios", moduleKey: "servicios", base: true },
+  { label: "Disponibilidad", icon: SlidersHorizontal, to: "/admin/disponibilidad", moduleKey: "disponibilidad", base: true },
+  { label: "Onboarding", icon: ClipboardList, to: "/admin/onboarding", base: true },
+  { label: "Reservas online", icon: CalendarDays, to: "/admin/booking", moduleKey: "reservas_online" },
+  { label: "WhatsApp", icon: MessageCircle, to: "/admin/whatsapp", moduleKey: "whatsapp" },
+  { label: "Mensajes", icon: MessageCircle, to: "/admin/mensajes", moduleKey: "mensajes" },
+  { label: "Pagos", icon: WalletCards, to: "/admin/pagos", moduleKey: "pagos" },
+  { label: "Financiacion", icon: Banknote, to: "/admin/financiacion", moduleKey: "financiacion" },
+  { label: "Facturacion", icon: ReceiptText, to: "/admin/facturacion", moduleKey: "facturacion" },
+  { label: "Recetarios", icon: FilePenLine, to: "/admin/recetarios", moduleKey: "recetarios" },
+  { label: "Reportes", icon: PieChart, to: "/admin/reportes", moduleKey: "reportes" },
+  { label: "Configuracion", icon: Settings, to: "/admin/configuracion", base: true }
 ];
 
 export function AdminLayout({
@@ -50,8 +54,24 @@ export function AdminLayout({
   onCreateAppointment: () => void;
 }) {
   const { profile, role, signOut, user } = useAuth();
+  const [modules, setModules] = useState<Record<string, boolean>>({});
   const displayName = profile?.full_name ?? user?.email ?? "Equipo clinico";
   const displayRole = role ? roleLabels[role] : "Usuario";
+  const visibleNavItems = useMemo(() => navItems.filter((item) => {
+    if (item.base || !item.moduleKey) return true;
+    if (BASE_MODULES.includes(item.moduleKey as any)) return true;
+    return modules[item.moduleKey] ?? false;
+  }), [modules]);
+
+  useEffect(() => {
+    async function loadModules() {
+      const clinic = await getDefaultClinic().catch(() => null);
+      if (!clinic) return;
+      const { data } = await supabase.from("clinic_modules").select("module_key, enabled").eq("clinic_id", clinic.id);
+      setModules(Object.fromEntries((data ?? []).map((item: any) => [item.module_key, item.enabled])));
+    }
+    loadModules();
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#f6f8fb] text-clinic-ink">
@@ -70,7 +90,12 @@ export function AdminLayout({
           </div>
 
           <nav className="flex-1 space-y-1 px-4 py-5">
-            {navItems.map((item) => {
+            {role === "platform_admin" && (
+              <NavLink to="/superadmin" className="mb-2 flex items-center gap-3 rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-medium text-white">
+                <Settings size={18} /> Superadmin
+              </NavLink>
+            )}
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               return (
                 <NavLink

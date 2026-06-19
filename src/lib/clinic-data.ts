@@ -53,6 +53,31 @@ export class FriendlyDataError extends Error {
 }
 
 export async function getDefaultClinic() {
+  try {
+    const { data: auth } = await supabase.auth.getUser();
+    if (auth.user) {
+      const { data: member, error: memberError } = await supabase
+        .from("clinic_members")
+        .select("clinic_id")
+        .eq("user_id", auth.user.id)
+        .eq("active", true)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (memberError) throw memberError;
+      if (member?.clinic_id) {
+        const { data: clinic, error } = await supabase
+          .from("clinics")
+          .select("*")
+          .eq("id", member.clinic_id)
+          .maybeSingle();
+        if (error) throw error;
+        if (clinic) return clinic as Clinic;
+      }
+    }
+  } catch (error) {
+    console.error("Failed to resolve member clinic", error);
+  }
   return getClinicBySlug(DEFAULT_CLINIC_SLUG);
 }
 
