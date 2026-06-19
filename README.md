@@ -388,7 +388,7 @@ MERCADO_PAGO_ACCESS_TOKEN=
 MERCADO_PAGO_PUBLIC_KEY=
 MERCADO_PAGO_WEBHOOK_SECRET=
 MERCADO_PAGO_ENV=sandbox
-APP_PUBLIC_URL=https://app.medin.com.ar
+APP_PUBLIC_URL=https://clinic-saas-mvp.vercel.app
 ```
 
 Para probar en modo test:
@@ -424,8 +424,9 @@ Para usar `https://app.medin.com.ar` como dominio final:
 5. Cambiar el webhook de Mercado Pago a `https://app.medin.com.ar/api/payments/mercadopago/webhook`.
 6. Probar una reserva con seña desde `https://app.medin.com.ar/reservar/clinica-central`.
 
-`APP_PUBLIC_URL` es server-side y no debe llevar prefijo `VITE_`. El frontend genera links publicos
-desde `window.location.origin`, con fallback a `https://app.medin.com.ar`.
+`APP_PUBLIC_URL` es server-side y no debe llevar prefijo `VITE_`. Mientras el dominio final no este
+validado, debe mantenerse en `https://clinic-saas-mvp.vercel.app`. El frontend genera links publicos
+desde `window.location.origin`, con ese mismo fallback temporal.
 
 ## Integracion WhatsApp
 

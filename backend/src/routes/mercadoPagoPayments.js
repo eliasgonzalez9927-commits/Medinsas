@@ -2,10 +2,14 @@ import crypto from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { config } from "../config.js";
+import { logger } from "../lib/logger.js";
 import { supabase } from "../lib/supabase.js";
 import { assertPermission } from "../security/permissions.js";
 
 export const mercadoPagoPaymentsRouter = Router();
+
+// Keep checkout returns working on the currently deployed domain until the final domain is live.
+const FALLBACK_PUBLIC_URL = "https://clinic-saas-mvp.vercel.app";
 
 const createPreferenceSchema = z.object({
   appointmentId: z.string().uuid(),
@@ -46,6 +50,21 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async 
 
     const expiresAt = await resolvePaymentExpiration(appointment.clinic_id);
     const payment = await createInternalPayment({ appointment, amount, amountType: initialKind, expiresAt });
+    logger.info(
+      {
+        event: "mercado_pago_preference_requested",
+        appointmentId: appointment.id,
+        paymentId: payment.id,
+        externalReference: payment.external_reference,
+        amount,
+        amountType: initialKind,
+        expiresAt: payment.expires_at ?? null,
+        mercadoPagoEnv: config.MERCADO_PAGO_ENV,
+        publicUrl: resolvePublicUrl(),
+        appPublicUrlConfigured: Boolean(config.APP_PUBLIC_URL)
+      },
+      "Creating Mercado Pago checkout preference"
+    );
     const preference = await createMercadoPagoPreference({ appointment, payment, amount });
 
     await supabase
@@ -427,8 +446,11 @@ function isPublicPaymentAllowed(appointment) {
 function getCreatePreferenceConfigError() {
   if (!config.SUPABASE_URL || !config.SUPABASE_SERVICE_ROLE_KEY) return "SUPABASE_SERVER_NOT_CONFIGURED";
   if (!config.MERCADO_PAGO_ACCESS_TOKEN) return "MERCADO_PAGO_NOT_CONFIGURED";
-  if (!config.APP_PUBLIC_URL) return "APP_PUBLIC_URL_NOT_CONFIGURED";
   return null;
+}
+
+function resolvePublicUrl() {
+  return (config.APP_PUBLIC_URL || FALLBACK_PUBLIC_URL).replace(/\/$/, "");
 }
 
 async function createInternalPayment({ appointment, amount, amountType, expiresAt }) {
@@ -467,56 +489,113 @@ async function createInternalPayment({ appointment, amount, amountType, expiresA
 }
 
 async function createMercadoPagoPreference({ appointment, payment, amount }) {
-  const publicUrl = (config.APP_PUBLIC_URL ?? "https://app.medin.com.ar").replace(/\/$/, "");
+  const publicUrl = resolvePublicUrl();
   const service = appointment.services;
   const patient = appointment.patients;
+  const preferencePayload = {
+    items: [
+      {
+        title: service?.name ?? appointment.reason ?? "Turno Medin",
+        quantity: 1,
+        unit_price: Number(amount),
+        currency_id: "ARS"
+      }
+    ],
+    payer: {
+      name: patient?.first_name,
+      surname: patient?.last_name,
+      email: patient?.email ?? undefined
+    },
+    external_reference: payment.external_reference,
+    back_urls: {
+      success: `${publicUrl}/pago/exitoso?payment_id=${payment.id}`,
+      failure: `${publicUrl}/pago/fallido?payment_id=${payment.id}`,
+      pending: `${publicUrl}/pago/pendiente?payment_id=${payment.id}`
+    },
+    expires: Boolean(payment.expires_at),
+    expiration_date_from: payment.expires_at ? new Date().toISOString() : undefined,
+    expiration_date_to: payment.expires_at ?? undefined,
+    notification_url: `${publicUrl}/api/payments/mercadopago/webhook`,
+    metadata: {
+      clinic_id: appointment.clinic_id,
+      patient_id: appointment.patient_id,
+      appointment_id: appointment.id,
+      service_id: appointment.service_id,
+      payment_id: payment.id
+    }
+  };
+  logger.info(
+    {
+      event: "mercado_pago_preference_payload",
+      appointmentId: appointment.id,
+      paymentId: payment.id,
+      externalReference: payment.external_reference,
+      mercadoPagoEnv: config.MERCADO_PAGO_ENV,
+      payload: {
+        item: preferencePayload.items[0],
+        hasPayerEmail: Boolean(patient?.email),
+        backUrls: preferencePayload.back_urls,
+        expires: preferencePayload.expires,
+        expirationDateFrom: preferencePayload.expiration_date_from ?? null,
+        expirationDateTo: preferencePayload.expiration_date_to ?? null,
+        notificationUrl: preferencePayload.notification_url
+      }
+    },
+    "Mercado Pago preference payload prepared"
+  );
   const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.MERCADO_PAGO_ACCESS_TOKEN}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      items: [
-        {
-          title: service?.name ?? appointment.reason ?? "Turno Medin",
-          quantity: 1,
-          unit_price: Number(amount),
-          currency_id: "ARS"
-        }
-      ],
-      payer: {
-        name: patient?.first_name,
-        surname: patient?.last_name,
-        email: patient?.email ?? undefined
-      },
-      external_reference: payment.external_reference,
-      back_urls: {
-        success: `${publicUrl}/pago/exitoso?payment_id=${payment.id}`,
-        failure: `${publicUrl}/pago/fallido?payment_id=${payment.id}`,
-        pending: `${publicUrl}/pago/pendiente?payment_id=${payment.id}`
-      },
-      expires: Boolean(payment.expires_at),
-      expiration_date_to: payment.expires_at ?? undefined,
-      notification_url: `${publicUrl}/api/payments/mercadopago/webhook`,
-      metadata: {
-        clinic_id: appointment.clinic_id,
-        patient_id: appointment.patient_id,
-        appointment_id: appointment.id,
-        service_id: appointment.service_id,
-        payment_id: payment.id
-      }
-    })
+    body: JSON.stringify(preferencePayload)
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
+    logger.warn(
+      {
+        event: "mercado_pago_preference_failed",
+        appointmentId: appointment.id,
+        paymentId: payment.id,
+        externalReference: payment.external_reference,
+        mercadoPagoStatus: response.status,
+        mercadoPagoError: summarizeMercadoPagoError(body)
+      },
+      "Mercado Pago rejected checkout preference"
+    );
     const error = new Error("Mercado Pago preference failed");
     error.statusCode = response.status;
     error.code = "MERCADO_PAGO_ERROR";
     error.details = body;
     throw error;
   }
+  logger.info(
+    {
+      event: "mercado_pago_preference_created",
+      appointmentId: appointment.id,
+      paymentId: payment.id,
+      externalReference: payment.external_reference,
+      providerPreferenceId: body.id ?? null,
+      hasCheckoutUrl: Boolean(body.init_point ?? body.sandbox_init_point)
+    },
+    "Mercado Pago checkout preference created"
+  );
   return body;
+}
+
+function summarizeMercadoPagoError(body) {
+  return {
+    message: typeof body?.message === "string" ? body.message : null,
+    error: typeof body?.error === "string" ? body.error : null,
+    status: Number.isFinite(Number(body?.status)) ? Number(body.status) : null,
+    causes: Array.isArray(body?.cause)
+      ? body.cause.slice(0, 5).map((cause) => ({
+          code: typeof cause?.code === "string" ? cause.code : null,
+          description: typeof cause?.description === "string" ? cause.description : null
+        }))
+      : []
+  };
 }
 
 async function fetchMercadoPagoPayment(providerPaymentId) {
@@ -1035,7 +1114,7 @@ async function ensureAppointmentPublicLink(appointmentId) {
 }
 
 function buildPublicAppointmentUrl(token) {
-  const publicUrl = (config.APP_PUBLIC_URL ?? "https://app.medin.com.ar").replace(/\/$/, "");
+  const publicUrl = resolvePublicUrl();
   return `${publicUrl}/mi-turno/${token}`;
 }
 

@@ -1,4 +1,4 @@
-const FALLBACK_PUBLIC_URL = "https://app.medin.com.ar";
+const FALLBACK_PUBLIC_URL = "https://clinic-saas-mvp.vercel.app";
 
 export function getPublicAppUrl() {
   if (typeof window !== "undefined" && window.location.origin) return window.location.origin;
