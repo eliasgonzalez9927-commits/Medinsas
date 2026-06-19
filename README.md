@@ -67,7 +67,7 @@ clinic-saas-mvp/
 
 1. Crea un proyecto en Supabase.
 2. Ejecuta `supabase/schema.sql` en el SQL Editor.
-3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql`, `supabase/migrations/006_auth_admin_access.sql`, `supabase/migrations/007_billing_prescriptions_foundation.sql`, `supabase/migrations/008_settings_users_messaging.sql` y `supabase/migrations/009_mercado_pago_payments.sql`.
+3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql`, `supabase/migrations/006_auth_admin_access.sql`, `supabase/migrations/007_billing_prescriptions_foundation.sql`, `supabase/migrations/008_settings_users_messaging.sql`, `supabase/migrations/009_mercado_pago_payments.sql`, `supabase/migrations/010_clinic_timezone_fix.sql`, `supabase/migrations/011_payment_expiration_admin_tools.sql`, `supabase/migrations/012_superadmin_onboarding.sql` y `supabase/migrations/013_patient_access_foundation.sql`.
 4. Copia `.env.example` a `.env` y completa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 5. Instala dependencias con `npm install`.
 6. Ejecuta `npm run dev`.
@@ -89,6 +89,7 @@ clinic-saas-mvp/
 - Roadmap de historia clinica unificada como modulo sensible, regulado y separado de la ficha operativa del paciente.
 - Configuracion operativa con clinica, sedes, horarios, usuarios/permisos, notificaciones y mensajeria por Resend desde backend.
 - Pagos con Mercado Pago Checkout Pro desde backend, con webhooks, estados de pago y relacion con turnos/servicios.
+- Acceso paciente por link privado de turno en `/mi-turno/:token`, sin obligar al paciente a crear usuario para reservar.
 
 ## Rutas de producto
 
@@ -119,6 +120,7 @@ clinic-saas-mvp/
 - `/admin/reportes`: indicadores de gestion.
 - `/reservar/:clinicSlug`: flujo publico mobile-first para reserva de pacientes.
 - `/pago/exitoso`, `/pago/pendiente`, `/pago/fallido`: retorno de Mercado Pago con consulta de estado interno.
+- `/mi-turno/:token`: consulta privada del turno por token seguro, con calendario, datos de pago y solicitudes de reprogramacion/cancelacion.
 
 Las secciones de producto principales ya operan contra Supabase. Los mocks quedan solo como fallback
 visual en modulos que todavia no tengan datos reales cargados.
@@ -127,9 +129,38 @@ visual en modulos que todavia no tengan datos reales cargados.
 
 - `/admin/historia-clinica`: vista clinica unificada para busqueda y supervision con permisos estrictos.
 - `/admin/pacientes/:id/historia-clinica`: historia clinica longitudinal de un paciente especifico.
+- `/paciente/login`: acceso futuro por magic link, email + codigo o WhatsApp.
+- `/paciente`: inicio del portal paciente.
+- `/paciente/turnos`: proximos turnos e historial.
+- `/paciente/pagos`: pagos, saldos y comprobantes disponibles.
+- `/paciente/documentos`: indicaciones, ordenes y documentos cuando el modulo regulado este listo.
 
 Estas rutas no deben activarse como simples notas administrativas. Requieren modelo de datos,
 auditoria, permisos por rol y trazabilidad antes de exponerse en produccion.
+
+## Acceso paciente
+
+El MVP no obliga al paciente a crear usuario para reservar. El flujo recomendado es:
+
+1. El paciente entra a `/reservar/:clinicSlug`.
+2. Elige servicio, profesional, fecha y horario.
+3. Carga sus datos operativos.
+4. Paga seña o pago total si corresponde.
+5. Vuelve al post-pago y recibe un link privado para consultar el turno.
+
+La migracion `013_patient_access_foundation.sql` crea:
+
+- `appointment_public_links`: tokens privados no adivinables asociados a turnos, con vencimiento y revocacion opcional.
+- `appointment_requests`: solicitudes de cancelacion o reprogramacion iniciadas por paciente, siempre pendientes de aprobacion.
+
+La ruta `/mi-turno/:token` muestra solo informacion operativa: paciente, servicio, profesional, fecha,
+clinica, direccion, estado del turno, estado del pago, monto pagado y saldo pendiente. Tambien permite
+agregar a Google Calendar, descargar `.ics`, copiar datos, contactar a la clinica y solicitar
+cancelacion o reprogramacion.
+
+No debe mostrar historia clinica, diagnosticos, notas internas, evoluciones, indicaciones sensibles ni
+datos medicos regulados. El portal paciente futuro deberia implementarse con magic link, codigo por
+email o WhatsApp, sin contrasena obligatoria en la primera version.
 
 ## Base operativa conectada
 

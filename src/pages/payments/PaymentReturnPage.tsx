@@ -15,6 +15,7 @@ type PaymentStatusResponse = {
   payment_type: "deposit" | "full";
   payment_type_label: string;
   remaining_amount: number;
+  private_url: string | null;
   appointment: {
     id: string | null;
     status: string | null;
@@ -178,6 +179,11 @@ function PaymentReturnPage({ kind }: { kind: PaymentReturnKind }) {
                   <MessageCircle size={16} /> Contactar clínica
                 </a>
               )}
+              {payment.private_url && (
+                <a className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-clinic-line px-4 py-2 text-sm font-semibold text-clinic-ink hover:bg-clinic-surface" href={payment.private_url}>
+                  Ver mi turno
+                </a>
+              )}
               {payment.checkout_url && payment.status !== "approved" && (
                 <a className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-clinic-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800" href={payment.checkout_url}>
                   Reintentar pago
@@ -268,8 +274,9 @@ function buildCopyText(payment: PaymentStatusResponse) {
     `Tipo de pago: ${payment.payment_type_label}`,
     `Saldo pendiente: ${formatRemaining(payment.remaining_amount, payment.currency)}`,
     `Estado del turno: ${translateAppointmentStatus(payment.appointment.status)}`,
-    `Estado del pago: ${translatePaymentStatus(payment.status)}`
-  ].join("\n");
+    `Estado del pago: ${translatePaymentStatus(payment.status)}`,
+    payment.private_url ? `Link privado del turno: ${payment.private_url}` : ""
+  ].filter(Boolean).join("\n");
 }
 
 function translatePaymentStatus(status?: string | null) {

@@ -24,6 +24,7 @@ import { PaymentFailurePage, PaymentPendingPage, PaymentSuccessPage } from "./pa
 import { PublicBookingPage } from "./pages/booking/PublicBookingPage";
 import { ClinicLanding } from "./pages/landing/ClinicLanding";
 import { PatientBooking } from "./pages/patient/PatientBooking";
+import { PublicAppointmentPage } from "./pages/patient/PublicAppointmentPage";
 import { SuperadminClinicDetailPage, SuperadminClinicsPage, SuperadminDashboard } from "./pages/superadmin/SuperadminPages";
 
 function HomeRedirect() {
@@ -44,6 +45,7 @@ export function App() {
       <Route path="/pago/exitoso" element={<PaymentSuccessPage />} />
       <Route path="/pago/pendiente" element={<PaymentPendingPage />} />
       <Route path="/pago/fallido" element={<PaymentFailurePage />} />
+      <Route path="/mi-turno/:token" element={<PublicAppointmentPage />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<HomeRedirect />} />
       </Route>

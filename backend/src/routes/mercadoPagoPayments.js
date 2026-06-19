@@ -12,6 +12,11 @@ const createPreferenceSchema = z.object({
   amountType: z.enum(["deposit", "full"]).default("deposit")
 });
 
+const appointmentRequestSchema = z.object({
+  type: z.enum(["cancellation", "reschedule"]),
+  notes: z.string().max(1000).optional().nullable()
+});
+
 mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async (req, res, next) => {
   try {
     const missingConfiguration = getCreatePreferenceConfigError();
@@ -95,7 +100,7 @@ mercadoPagoPaymentsRouter.get("/payments/mercadopago/status", async (req, res, n
       await sendPaymentApprovedNotifications(finalPayment);
     }
 
-    res.status(200).json(toPaymentStatusResponse(finalPayment));
+    res.status(200).json(await toPaymentStatusResponse(finalPayment));
   } catch (error) {
     next(error);
   }
@@ -128,7 +133,7 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/:id/sync", async (req, res
       await sendPaymentApprovedNotifications(updatedPayment);
     }
 
-    res.status(200).json(toPaymentStatusResponse(updatedPayment));
+    res.status(200).json(await toPaymentStatusResponse(updatedPayment));
   } catch (error) {
     next(error);
   }
@@ -145,6 +150,59 @@ mercadoPagoPaymentsRouter.get("/appointments/:id/calendar.ics", async (req, res,
     res.setHeader("Content-Disposition", `attachment; filename="turno-medin-${appointment.id}.ics"`);
     res.status(200).send(ics);
   } catch (error) {
+    next(error);
+  }
+});
+
+mercadoPagoPaymentsRouter.get("/appointments/public/:token/calendar.ics", async (req, res, next) => {
+  try {
+    const token = String(req.params.token ?? "");
+    if (!isPublicToken(token)) return res.status(400).json({ error: "INVALID_TOKEN" });
+    const appointment = await loadAppointmentByPublicToken(token);
+    if (!appointment) return res.status(404).json({ error: "APPOINTMENT_LINK_NOT_FOUND" });
+    const ics = buildIcsEvent(appointment);
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="turno-medin.ics"');
+    res.status(200).send(ics);
+  } catch (error) {
+    next(error);
+  }
+});
+
+mercadoPagoPaymentsRouter.get("/appointments/public/:token", async (req, res, next) => {
+  try {
+    const token = String(req.params.token ?? "");
+    if (!isPublicToken(token)) return res.status(400).json({ error: "INVALID_TOKEN" });
+    const appointment = await loadAppointmentByPublicToken(token);
+    if (!appointment) return res.status(404).json({ error: "APPOINTMENT_LINK_NOT_FOUND" });
+    res.status(200).json(await toPublicAppointmentResponse(appointment));
+  } catch (error) {
+    next(error);
+  }
+});
+
+mercadoPagoPaymentsRouter.post("/appointments/public/:token/requests", async (req, res, next) => {
+  try {
+    const token = String(req.params.token ?? "");
+    if (!isPublicToken(token)) return res.status(400).json({ error: "INVALID_TOKEN" });
+    const payload = appointmentRequestSchema.parse(req.body);
+    const appointment = await loadAppointmentByPublicToken(token);
+    if (!appointment) return res.status(404).json({ error: "APPOINTMENT_LINK_NOT_FOUND" });
+    const { data, error } = await supabase
+      .from("appointment_requests")
+      .insert({
+        appointment_id: appointment.id,
+        type: payload.type,
+        status: "pending",
+        requested_by: "patient",
+        notes: payload.notes ?? null
+      })
+      .select("id, type, status, created_at")
+      .single();
+    if (error) throw error;
+    res.status(201).json({ ok: true, request: data });
+  } catch (error) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: "INVALID_PAYLOAD" });
     next(error);
   }
 });
@@ -240,6 +298,18 @@ async function loadAppointmentDetails(appointmentId) {
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+async function loadAppointmentByPublicToken(token) {
+  const { data: link, error: linkError } = await supabase
+    .from("appointment_public_links")
+    .select("appointment_id, expires_at, revoked_at")
+    .eq("token", token)
+    .maybeSingle();
+  if (linkError) throw linkError;
+  if (!link || link.revoked_at) return null;
+  if (link.expires_at && new Date(link.expires_at).getTime() <= Date.now()) return null;
+  return loadAppointmentDetails(link.appointment_id);
 }
 
 function resolveAmount(appointment, amountType) {
@@ -557,7 +627,7 @@ async function sendPatientPaymentEmail(payment) {
   const subject = payment.appointments?.status === "confirmed" && detail.hasSchedule
     ? "Tu turno fue confirmado"
     : kind.type === "deposit" ? "Tu seña fue acreditada" : "Tu pago fue acreditado";
-  const body = buildPatientEmail(payment);
+  const body = await buildPatientEmail(payment);
   await sendLoggedEmail({
     clinicId: payment.clinic_id,
     patientId: payment.patient_id,
@@ -681,10 +751,12 @@ async function sendWithResend({ to, subject, text, html }) {
   return body;
 }
 
-function buildPatientEmail(payment) {
+async function buildPatientEmail(payment) {
   const detail = buildAppointmentDetail(payment);
   const isConfirmed = payment.appointments?.status === "confirmed" && detail.hasSchedule;
   const calendarUrl = `${(config.APP_PUBLIC_URL ?? "").replace(/\/$/, "")}/api/appointments/${payment.appointment_id}/calendar.ics`;
+  const publicLink = payment.appointment_id ? await ensureAppointmentPublicLink(payment.appointment_id) : null;
+  const appointmentUrl = publicLink ? buildPublicAppointmentUrl(publicLink.token) : null;
   const kind = resolvePaymentKind(payment);
   const pendingCopy = kind.type === "deposit"
     ? "Recibimos tu seña. La clínica confirmará el día y horario de tu turno."
@@ -705,18 +777,20 @@ function buildPatientEmail(payment) {
     `Monto pagado: ${formatMoney(payment.amount, payment.currency)}`,
     `Tipo de pago: ${kind.label}`,
     `Saldo pendiente: ${formatMoney(kind.remainingAmount, payment.currency)}`,
+    appointmentUrl ? `Ver mi turno: ${appointmentUrl}` : "",
     "",
     "Si necesitás modificar o cancelar tu turno, comunicate con la clínica."
-  ];
+  ].filter(Boolean);
   return {
     text: lines.join("\n"),
-    html: `<p>Hola ${escapeHtml(detail.patientName)},</p><p>${isConfirmed ? "Tu turno fue confirmado." : escapeHtml(pendingCopy)}</p><ul><li>Servicio: ${escapeHtml(detail.serviceName)}</li><li>Profesional: ${escapeHtml(detail.professionalName)}</li><li>Fecha: ${escapeHtml(detail.dateLabel)}</li><li>Hora: ${escapeHtml(detail.timeLabel)}</li><li>Clínica: ${escapeHtml(detail.clinicName)}</li><li>Dirección: ${escapeHtml(detail.locationAddress)}</li><li>Monto pagado: ${escapeHtml(formatMoney(payment.amount, payment.currency))}</li><li>Tipo de pago: ${escapeHtml(kind.label)}</li><li>Saldo pendiente: ${escapeHtml(formatMoney(kind.remainingAmount, payment.currency))}</li></ul>${isConfirmed ? `<p><a href="${escapeHtml(calendarUrl)}">Agregar al calendario</a></p>` : ""}<p>Si necesitás modificar o cancelar tu turno, comunicate con la clínica.</p>`
+    html: `<p>Hola ${escapeHtml(detail.patientName)},</p><p>${isConfirmed ? "Tu turno fue confirmado." : escapeHtml(pendingCopy)}</p><ul><li>Servicio: ${escapeHtml(detail.serviceName)}</li><li>Profesional: ${escapeHtml(detail.professionalName)}</li><li>Fecha: ${escapeHtml(detail.dateLabel)}</li><li>Hora: ${escapeHtml(detail.timeLabel)}</li><li>Clínica: ${escapeHtml(detail.clinicName)}</li><li>Dirección: ${escapeHtml(detail.locationAddress)}</li><li>Monto pagado: ${escapeHtml(formatMoney(payment.amount, payment.currency))}</li><li>Tipo de pago: ${escapeHtml(kind.label)}</li><li>Saldo pendiente: ${escapeHtml(formatMoney(kind.remainingAmount, payment.currency))}</li></ul>${appointmentUrl ? `<p><a href="${escapeHtml(appointmentUrl)}">Ver mi turno</a></p>` : ""}${isConfirmed ? `<p><a href="${escapeHtml(calendarUrl)}">Agregar al calendario</a></p>` : ""}<p>Si necesitás modificar o cancelar tu turno, comunicate con la clínica.</p>`
   };
 }
 
-function toPaymentStatusResponse(payment) {
+async function toPaymentStatusResponse(payment) {
   const detail = buildAppointmentDetail(payment);
   const kind = resolvePaymentKind(payment);
+  const publicLink = payment.appointment_id ? await ensureAppointmentPublicLink(payment.appointment_id) : null;
   return {
     id: payment.id,
     status: payment.status,
@@ -728,6 +802,7 @@ function toPaymentStatusResponse(payment) {
     payment_type: kind.type,
     payment_type_label: kind.label,
     remaining_amount: kind.remainingAmount,
+    private_url: publicLink ? buildPublicAppointmentUrl(publicLink.token) : null,
     appointment: {
       id: payment.appointment_id,
       status: payment.appointments?.status ?? null,
@@ -746,6 +821,87 @@ function toPaymentStatusResponse(payment) {
       has_schedule: detail.hasSchedule
     }
   };
+}
+
+async function toPublicAppointmentResponse(appointment) {
+  const { data: payments, error } = await supabase
+    .from("payments")
+    .select("*, services(*)")
+    .eq("appointment_id", appointment.id)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const payment = payments?.[0] ?? null;
+  const paymentKind = payment ? resolvePaymentKind({ ...payment, services: payment.services }) : null;
+  const safePayment = payment
+    ? {
+        status: payment.status,
+        amount: Number(payment.amount ?? 0),
+        currency: payment.currency ?? "ARS",
+        paid_at: payment.paid_at,
+        payment_type: paymentKind.type,
+        payment_type_label: paymentKind.label,
+        remaining_amount: paymentKind.remainingAmount
+      }
+    : null;
+  const pseudoPayment = {
+    amount: payment?.amount ?? 0,
+    currency: payment?.currency ?? "ARS",
+    services: appointment.services,
+    patients: appointment.patients,
+    appointments: appointment,
+    clinics: appointment.clinics
+  };
+  const detail = buildAppointmentDetail(pseudoPayment);
+  return {
+    appointment: {
+      status: appointment.status,
+      payment_status: appointment.payment_status ?? null,
+      starts_at: appointment.starts_at,
+      end_time: appointment.end_time,
+      patient_name: detail.patientName,
+      service_name: detail.serviceName,
+      professional_name: detail.professionalName,
+      clinic_name: detail.clinicName,
+      timezone: detail.timezone,
+      clinic_phone: appointment.clinics?.phone ?? appointment.clinics?.whatsapp ?? null,
+      location_address: detail.locationAddress,
+      duration_minutes: detail.durationMinutes,
+      has_schedule: detail.hasSchedule
+    },
+    payment: safePayment
+  };
+}
+
+async function ensureAppointmentPublicLink(appointmentId) {
+  const { data: existing, error: existingError } = await supabase
+    .from("appointment_public_links")
+    .select("token, expires_at, revoked_at")
+    .eq("appointment_id", appointmentId)
+    .is("revoked_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing && (!existing.expires_at || new Date(existing.expires_at).getTime() > Date.now())) return existing;
+
+  const token = crypto.randomBytes(32).toString("base64url");
+  const { data, error } = await supabase
+    .from("appointment_public_links")
+    .insert({
+      appointment_id: appointmentId,
+      token,
+      expires_at: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
+    })
+    .select("token, expires_at")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+function buildPublicAppointmentUrl(token) {
+  const publicUrl = (config.APP_PUBLIC_URL ?? "https://app.medin.com.ar").replace(/\/$/, "");
+  return `${publicUrl}/mi-turno/${token}`;
 }
 
 function buildAppointmentDetail(payment) {
@@ -857,6 +1013,10 @@ function verifyWebhook(req) {
 
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isPublicToken(value) {
+  return /^[A-Za-z0-9_-]{32,128}$/.test(value);
 }
 
 function isLikelyProviderPaymentId(value) {
