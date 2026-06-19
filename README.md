@@ -408,6 +408,11 @@ Medin no maneja datos de tarjeta ni guarda access tokens de Mercado Pago en fron
 confirmacion confiable del pago ocurre por webhook y consulta backend a Mercado Pago, no por
 la URL de retorno del usuario.
 
+El webhook de Mercado Pago valida el manifiesto oficial HMAC SHA-256 formado por `data.id`,
+`x-request-id` y `ts` de `x-signature`. En `sandbox`, si Mercado Pago no envia una firma valida,
+Medin solo acepta el evento tras consultar el pago con la API de Mercado Pago y comprobar que
+esta vinculado a un pago interno; en produccion una firma invalida siempre devuelve `401`.
+
 La migracion `011_payment_expiration_admin_tools.sql` agrega `payments.expires_at`. En
 `/admin/pagos`, un pago `pending` o `in_process` con `expires_at` pasado se muestra como
 `Vencido`; no cuenta como pendiente ni cobrado. El boton `Actualizar estado` consulta el backend

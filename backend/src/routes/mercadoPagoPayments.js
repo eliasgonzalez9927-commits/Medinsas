@@ -311,10 +311,60 @@ mercadoPagoPaymentsRouter.post("/appointments/public/:token/requests", async (re
 
 mercadoPagoPaymentsRouter.post("/payments/mercadopago/webhook", async (req, res, next) => {
   try {
-    if (!verifyWebhook(req)) return res.status(401).json({ error: "INVALID_SIGNATURE" });
-    const providerEventId = String(req.body?.id ?? req.query?.id ?? req.body?.data?.id ?? crypto.randomUUID());
+    const signature = verifyWebhook(req);
     const eventType = String(req.body?.type ?? req.body?.action ?? "payment.updated");
-    const providerPaymentId = String(req.body?.data?.id ?? req.query?.["data.id"] ?? req.body?.id ?? "");
+    const providerPaymentId = resolveWebhookPaymentId(req);
+    logger.info(
+      {
+        event: "mercado_pago_webhook_received",
+        eventType,
+        providerPaymentId: providerPaymentId || null,
+        hasXSignature: signature.hasXSignature,
+        hasXRequestId: signature.hasXRequestId,
+        hasDataIdQuery: signature.hasDataIdQuery,
+        signatureValid: signature.valid,
+        signatureReason: signature.reason,
+        mercadoPagoEnv: config.MERCADO_PAGO_ENV
+      },
+      "Mercado Pago webhook received"
+    );
+
+    let providerPayment = null;
+    let payment = null;
+    let verificationMethod = "signature";
+    if (!signature.valid) {
+      const sandboxVerification = await verifySandboxWebhookFallback(providerPaymentId);
+      if (!sandboxVerification.valid) {
+        logger.warn(
+          {
+            event: "mercado_pago_webhook_rejected",
+            eventType,
+            providerPaymentId: providerPaymentId || null,
+            hasXSignature: signature.hasXSignature,
+            hasXRequestId: signature.hasXRequestId,
+            hasDataIdQuery: signature.hasDataIdQuery,
+            reason: config.MERCADO_PAGO_ENV === "sandbox" ? sandboxVerification.reason : signature.reason
+          },
+          "Mercado Pago webhook rejected"
+        );
+        return res.status(401).json({ error: "INVALID_SIGNATURE" });
+      }
+      providerPayment = sandboxVerification.providerPayment;
+      payment = sandboxVerification.payment;
+      verificationMethod = "sandbox_provider_lookup";
+      logger.warn(
+        {
+          event: "mercado_pago_webhook_sandbox_fallback",
+          eventType,
+          providerPaymentId,
+          paymentId: payment.id,
+          signatureReason: signature.reason
+        },
+        "Accepted sandbox webhook after verified Mercado Pago payment lookup"
+      );
+    }
+
+    const providerEventId = resolveWebhookEventId(req, providerPaymentId);
 
     const existingEvent = await supabase
       .from("payment_events")
@@ -325,14 +375,19 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/webhook", async (req, res,
     if (existingEvent.error) throw existingEvent.error;
     if (existingEvent.data) return res.status(200).json({ ok: true, duplicated: true });
 
-    let providerPayment = null;
-    if (providerPaymentId && config.MERCADO_PAGO_ACCESS_TOKEN) {
+    if (!providerPayment && providerPaymentId && config.MERCADO_PAGO_ACCESS_TOKEN) {
       providerPayment = await fetchMercadoPagoPayment(providerPaymentId);
     }
 
-    const payment = await findPayment(providerPayment, providerPaymentId);
+    if (!payment) payment = await findPayment(providerPayment, providerPaymentId);
     const clinicId = payment?.clinic_id ?? providerPayment?.metadata?.clinic_id ?? req.body?.metadata?.clinic_id;
-    if (!clinicId) return res.status(200).json({ ok: true, ignored: true });
+    if (!clinicId) {
+      logger.info(
+        { event: "mercado_pago_webhook_ignored", eventType, providerPaymentId: providerPaymentId || null },
+        "Mercado Pago webhook does not match a Medin clinic"
+      );
+      return res.status(200).json({ ok: true, ignored: true });
+    }
 
     await supabase.from("payment_events").insert({
       payment_id: payment?.id ?? null,
@@ -352,7 +407,18 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/webhook", async (req, res,
       }
     }
 
-    res.status(200).json({ ok: true });
+    logger.info(
+      {
+        event: "mercado_pago_webhook_processed",
+        eventType,
+        providerEventId,
+        providerPaymentId: providerPaymentId || null,
+        paymentId: payment?.id ?? null,
+        verificationMethod
+      },
+      "Mercado Pago webhook processed"
+    );
+    res.status(200).json({ ok: true, verificationMethod });
   } catch (error) {
     next(error);
   }
@@ -1214,15 +1280,84 @@ function stripHtml(value) {
 }
 
 function verifyWebhook(req) {
-  if (!config.MERCADO_PAGO_WEBHOOK_SECRET) return true;
-  const signature = req.get("x-signature") ?? "";
-  const [, v1] = signature.match(/v1=([^,]+)/) ?? [];
-  if (!v1 || !req.rawBody) return false;
+  const xSignature = req.get("x-signature") ?? "";
+  const xRequestId = req.get("x-request-id") ?? "";
+  const queryDataId = readQueryValue(req.query?.["data.id"]);
+  const signatureParts = parseWebhookSignature(xSignature);
+  const context = {
+    valid: false,
+    reason: "invalid_signature",
+    hasXSignature: Boolean(xSignature),
+    hasXRequestId: Boolean(xRequestId),
+    hasDataIdQuery: Boolean(queryDataId)
+  };
+
+  if (!config.MERCADO_PAGO_WEBHOOK_SECRET) return { ...context, reason: "webhook_secret_not_configured" };
+  if (!signatureParts.ts || !signatureParts.v1) return { ...context, reason: "malformed_x_signature" };
+  if (!xRequestId) return { ...context, reason: "missing_x_request_id" };
+  if (!queryDataId) return { ...context, reason: "missing_data_id_query" };
+
+  // Mercado Pago signs this exact manifest; it does not sign the JSON request body.
+  const manifest = `id:${normalizeWebhookDataId(queryDataId)};request-id:${xRequestId};ts:${signatureParts.ts};`;
   const expected = crypto
     .createHmac("sha256", config.MERCADO_PAGO_WEBHOOK_SECRET)
-    .update(req.rawBody)
+    .update(manifest)
     .digest("hex");
-  return expected.length === v1.length && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1));
+  const isMatch = expected.length === signatureParts.v1.length
+    && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signatureParts.v1));
+  return { ...context, valid: isMatch, reason: isMatch ? "valid" : "signature_mismatch" };
+}
+
+function parseWebhookSignature(value) {
+  return String(value)
+    .split(",")
+    .reduce((parts, entry) => {
+      const [key, ...rest] = entry.trim().split("=");
+      const parsedValue = rest.join("=").trim();
+      if (key === "ts") parts.ts = parsedValue;
+      if (key === "v1") parts.v1 = parsedValue;
+      return parts;
+    }, { ts: "", v1: "" });
+}
+
+function normalizeWebhookDataId(value) {
+  const normalized = String(value).trim();
+  return /^[a-z0-9]+$/i.test(normalized) ? normalized.toLowerCase() : normalized;
+}
+
+function readQueryValue(value) {
+  return Array.isArray(value) ? String(value[0] ?? "") : String(value ?? "");
+}
+
+function resolveWebhookPaymentId(req) {
+  return String(req.query?.["data.id"] ?? req.body?.data?.id ?? req.query?.data_id ?? req.body?.id ?? "");
+}
+
+function resolveWebhookEventId(req, providerPaymentId) {
+  return String(req.get("x-request-id") ?? req.body?.id ?? req.query?.id ?? `${providerPaymentId || "unknown"}:${req.body?.action ?? req.body?.type ?? "payment.updated"}`);
+}
+
+async function verifySandboxWebhookFallback(providerPaymentId) {
+  if (config.MERCADO_PAGO_ENV !== "sandbox") return { valid: false, reason: "signature_invalid" };
+  if (!isLikelyProviderPaymentId(providerPaymentId)) return { valid: false, reason: "missing_or_invalid_payment_id" };
+  if (!config.MERCADO_PAGO_ACCESS_TOKEN) return { valid: false, reason: "mercado_pago_not_configured" };
+  try {
+    const providerPayment = await fetchMercadoPagoPayment(providerPaymentId);
+    const payment = await findPayment(providerPayment, providerPaymentId);
+    if (!payment) return { valid: false, reason: "payment_not_linked_to_medin" };
+    return { valid: true, providerPayment, payment };
+  } catch (error) {
+    logger.warn(
+      {
+        event: "mercado_pago_webhook_sandbox_lookup_failed",
+        providerPaymentId,
+        statusCode: error?.statusCode ?? null,
+        code: error?.code ?? "UNKNOWN_ERROR"
+      },
+      "Could not verify sandbox webhook through Mercado Pago"
+    );
+    return { valid: false, reason: "provider_lookup_failed" };
+  }
 }
 
 function isUuid(value) {
