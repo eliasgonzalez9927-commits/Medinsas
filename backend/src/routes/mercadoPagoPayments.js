@@ -33,7 +33,21 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async 
   try {
     const missingConfiguration = getCreatePreferenceConfigError();
     if (missingConfiguration) {
-      return res.status(503).json(createPreferenceFailure({ stage, code: missingConfiguration }));
+      const failure = createPreferenceFailure({ stage, code: missingConfiguration });
+      logger.error(
+        {
+          event: "mercado_pago_preference_environment_incomplete",
+          code: missingConfiguration,
+          hasSupabaseUrl: Boolean(config.SUPABASE_URL),
+          hasSupabaseServiceRoleKey: Boolean(config.SUPABASE_SERVICE_ROLE_KEY),
+          hasMercadoPagoAccessToken: Boolean(config.MERCADO_PAGO_ACCESS_TOKEN),
+          hasMercadoPagoPublicKey: Boolean(config.MERCADO_PAGO_PUBLIC_KEY),
+          mercadoPagoEnv: config.MERCADO_PAGO_ENV,
+          hasAppPublicUrl: Boolean(config.APP_PUBLIC_URL)
+        },
+        "Mercado Pago preference blocked by server configuration"
+      );
+      return res.status(503).json(failure);
     }
     stage = "payload";
     const payload = createPreferenceSchema.parse(req.body);
@@ -553,7 +567,11 @@ function createPreferenceFailure({ stage, code, error }) {
         ? error.statusCode
         : 500;
   const message = safeStage === "environment"
-    ? "El servicio de pagos no esta disponible por configuracion incompleta."
+    ? code === "SUPABASE_SERVER_NOT_CONFIGURED"
+      ? "Falta configuracion server-side de Supabase para procesar pagos."
+      : code === "MERCADO_PAGO_NOT_CONFIGURED"
+        ? "Falta configurar el access token server-side de Mercado Pago."
+        : "El servicio de pagos no esta disponible por configuracion incompleta."
     : safeStage === "payload"
       ? "Los datos del pago no son validos."
       : safeStage === "supabase"
