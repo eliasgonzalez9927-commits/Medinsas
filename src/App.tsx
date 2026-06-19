@@ -6,6 +6,7 @@ import { Login } from "./pages/auth/Login";
 import { Register } from "./pages/auth/Register";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { AgendaPage } from "./pages/admin/modules/AgendaPage";
+import { AppointmentRequestsPage } from "./pages/admin/modules/AppointmentRequestsPage";
 import { AvailabilityPage } from "./pages/admin/modules/AvailabilityPage";
 import { BillingDocumentsPage, BillingPage, BillingSettingsPage } from "./pages/admin/modules/BillingPage";
 import { FinancingPage, ReportsPage } from "./pages/admin/modules/SecondaryModulePage";
@@ -56,6 +57,7 @@ export function App() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/onboarding" element={<OnboardingPage />} />
         <Route path="/admin/agenda" element={<AgendaPage />} />
+        <Route path="/admin/solicitudes" element={<AppointmentRequestsPage />} />
         <Route path="/admin/profesionales" element={<ProfessionalsPage />} />
         <Route path="/admin/profesionales/:id" element={<ProfessionalProfilePage />} />
         <Route path="/admin/medicos" element={<ProfessionalsPage />} />

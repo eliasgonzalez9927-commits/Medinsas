@@ -27,6 +27,11 @@ type PublicAppointmentResponse = {
     payment_type_label: string;
     remaining_amount: number;
   } | null;
+  pending_requests: Array<{
+    type: RequestType;
+    status: string;
+    created_at: string;
+  }>;
 };
 
 type RequestType = "cancellation" | "reschedule";
@@ -58,6 +63,7 @@ export function PublicAppointmentPage() {
   }, [token]);
 
   useEffect(() => {
+    document.title = "Medin | Mi turno";
     load();
   }, [load]);
 
@@ -65,6 +71,7 @@ export function PublicAppointmentPage() {
   const googleCalendarUrl = data ? buildGoogleCalendarUrl(data) : "";
   const icsUrl = canUseCalendar ? `/api/appointments/public/${encodeURIComponent(token)}/calendar.ics` : "";
   const whatsappUrl = data?.appointment.clinic_phone ? buildWhatsAppUrl(data) : "";
+  const pendingRequestTypes = new Set((data?.pending_requests ?? []).map((request) => request.type));
 
   async function copyAppointment() {
     if (!data) return;
@@ -83,10 +90,13 @@ export function PublicAppointmentPage() {
         body: JSON.stringify({ type: requestType, notes: notes.trim() || null })
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error ?? "No pudimos enviar la solicitud.");
-      setRequestSent(requestType === "cancellation" ? "Recibimos tu solicitud de cancelación." : "Recibimos tu solicitud de reprogramación.");
+      if (!response.ok) {
+        throw new Error(body.error === "DUPLICATE_PENDING_REQUEST" ? "Ya existe una solicitud pendiente de ese tipo." : body.error ?? "No pudimos enviar la solicitud.");
+      }
+      setRequestSent("Solicitud enviada. La clínica debe aprobar el cambio antes de modificar el turno.");
       setRequestType(null);
       setNotes("");
+      await load();
     } catch (err) {
       setRequestSent(err instanceof Error ? err.message : "No pudimos enviar la solicitud.");
     } finally {
@@ -164,18 +174,24 @@ export function PublicAppointmentPage() {
               <p className="mt-1 text-sm text-clinic-muted">Podés pedir cancelación o reprogramación. La clínica debe aprobar el cambio antes de modificar el turno.</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button className={`rounded-lg border px-4 py-2 text-sm font-semibold ${requestType === "reschedule" ? "border-clinic-brand bg-white text-clinic-brand" : "border-clinic-line bg-white text-clinic-ink"}`} type="button" onClick={() => setRequestType("reschedule")}>
-                  Solicitar reprogramación
+                  {pendingRequestTypes.has("reschedule") ? "Reprogramación solicitada" : "Solicitar reprogramación"}
                 </button>
                 <button className={`rounded-lg border px-4 py-2 text-sm font-semibold ${requestType === "cancellation" ? "border-red-300 bg-white text-red-700" : "border-clinic-line bg-white text-clinic-ink"}`} type="button" onClick={() => setRequestType("cancellation")}>
-                  Solicitar cancelación
+                  {pendingRequestTypes.has("cancellation") ? "Cancelación solicitada" : "Solicitar cancelación"}
                 </button>
               </div>
               {requestType && (
                 <div className="mt-4">
                   <textarea className="min-h-28 w-full rounded-lg border border-clinic-line px-3 py-2 text-sm outline-none focus:border-clinic-brand" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Agregá un comentario opcional para la clínica." />
-                  <button className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg bg-clinic-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60" type="button" onClick={submitRequest} disabled={submitting}>
-                    <Send size={16} /> {submitting ? "Enviando..." : "Enviar solicitud"}
-                  </button>
+                  {pendingRequestTypes.has(requestType) ? (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+                      Ya existe una solicitud pendiente de este tipo.
+                    </div>
+                  ) : (
+                    <button className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg bg-clinic-brand px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60" type="button" onClick={submitRequest} disabled={submitting}>
+                      <Send size={16} /> {submitting ? "Enviando..." : "Enviar solicitud"}
+                    </button>
+                  )}
                 </div>
               )}
               {requestSent && <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{requestSent}</div>}
@@ -237,6 +253,7 @@ function translatePaymentStatus(status?: string | null) {
     deposit_paid: "Seña pagada",
     paid: "Pagado",
     pending: "Pendiente",
+    deposit_pending: "Seña pendiente",
     in_process: "En proceso",
     rejected: "Rechazado",
     cancelled: "Cancelado",
@@ -250,10 +267,14 @@ function translatePaymentStatus(status?: string | null) {
 function translateAppointmentStatus(status?: string | null) {
   const labels: Record<string, string> = {
     pending: "Pendiente",
+    pending_confirmation: "Pendiente de confirmación",
     confirmed: "Confirmado",
     attended: "Atendido",
+    completed: "Atendido",
+    no_show: "No asistió",
     cancelled: "Cancelado"
   };
+  if (status === "pending") return "Pendiente de confirmación";
   return labels[status ?? ""] ?? status ?? "Sin estado";
 }
 

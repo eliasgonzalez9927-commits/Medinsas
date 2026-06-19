@@ -17,6 +17,10 @@ const appointmentRequestSchema = z.object({
   notes: z.string().max(1000).optional().nullable()
 });
 
+const appointmentRequestUpdateSchema = z.object({
+  action: z.enum(["approve_cancellation", "reject", "mark_managed"])
+});
+
 mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async (req, res, next) => {
   try {
     const missingConfiguration = getCreatePreferenceConfigError();
@@ -139,6 +143,76 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/:id/sync", async (req, res
   }
 });
 
+mercadoPagoPaymentsRouter.get("/appointment-requests", async (req, res, next) => {
+  try {
+    const auth = await authenticateOptional(req);
+    if (!auth?.role) return res.status(401).json({ error: "UNAUTHORIZED" });
+    assertPermission(auth.role, "canManageAppointments");
+
+    let query = supabase
+      .from("appointment_requests")
+      .select("*, appointments!inner(*, clinics(*), patients(*), services(*), professionals(*), locations(*))")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (auth.clinicId && auth.role !== "platform_admin") {
+      query = query.eq("appointments.clinic_id", auth.clinicId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.status(200).json({ requests: (data ?? []).map(toAdminAppointmentRequestResponse) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+mercadoPagoPaymentsRouter.patch("/appointment-requests/:id", async (req, res, next) => {
+  try {
+    const requestId = String(req.params.id ?? "");
+    if (!isUuid(requestId)) return res.status(400).json({ error: "INVALID_REQUEST_ID" });
+    const payload = appointmentRequestUpdateSchema.parse(req.body);
+    const auth = await authenticateOptional(req);
+    if (!auth?.role) return res.status(401).json({ error: "UNAUTHORIZED" });
+    assertPermission(auth.role, "canManageAppointments");
+
+    const request = await loadAppointmentRequest(requestId);
+    if (!request) return res.status(404).json({ error: "REQUEST_NOT_FOUND" });
+    if (auth.clinicId && auth.role !== "platform_admin" && auth.clinicId !== request.appointments?.clinic_id) {
+      return res.status(403).json({ error: "FORBIDDEN_CLINIC" });
+    }
+
+    let nextStatus = request.status;
+    if (payload.action === "approve_cancellation") {
+      if (request.type !== "cancellation") return res.status(400).json({ error: "INVALID_ACTION_FOR_REQUEST_TYPE" });
+      nextStatus = "approved";
+      await supabase
+        .from("appointments")
+        .update({
+          status: "cancelled",
+          cancellation_reason: "Cancelación solicitada por paciente y aprobada por la clínica",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", request.appointment_id);
+    }
+    if (payload.action === "reject") nextStatus = "rejected";
+    if (payload.action === "mark_managed") nextStatus = "managed";
+
+    const { data, error } = await supabase
+      .from("appointment_requests")
+      .update({ status: nextStatus })
+      .eq("id", requestId)
+      .select("*, appointments(*, clinics(*), patients(*), services(*), professionals(*), locations(*))")
+      .single();
+    if (error) throw error;
+
+    res.status(200).json({ request: toAdminAppointmentRequestResponse(data) });
+  } catch (error) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: "INVALID_PAYLOAD" });
+    next(error);
+  }
+});
+
 mercadoPagoPaymentsRouter.get("/appointments/:id/calendar.ics", async (req, res, next) => {
   try {
     const appointmentId = String(req.params.id ?? "");
@@ -188,6 +262,15 @@ mercadoPagoPaymentsRouter.post("/appointments/public/:token/requests", async (re
     const payload = appointmentRequestSchema.parse(req.body);
     const appointment = await loadAppointmentByPublicToken(token);
     if (!appointment) return res.status(404).json({ error: "APPOINTMENT_LINK_NOT_FOUND" });
+    const { data: existing, error: existingError } = await supabase
+      .from("appointment_requests")
+      .select("id")
+      .eq("appointment_id", appointment.id)
+      .eq("type", payload.type)
+      .eq("status", "pending")
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existing) return res.status(409).json({ error: "DUPLICATE_PENDING_REQUEST" });
     const { data, error } = await supabase
       .from("appointment_requests")
       .insert({
@@ -310,6 +393,16 @@ async function loadAppointmentByPublicToken(token) {
   if (!link || link.revoked_at) return null;
   if (link.expires_at && new Date(link.expires_at).getTime() <= Date.now()) return null;
   return loadAppointmentDetails(link.appointment_id);
+}
+
+async function loadAppointmentRequest(requestId) {
+  const { data, error } = await supabase
+    .from("appointment_requests")
+    .select("*, appointments(*, clinics(*), patients(*), services(*), professionals(*), locations(*))")
+    .eq("id", requestId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
 function resolveAmount(appointment, amountType) {
@@ -832,6 +925,13 @@ async function toPublicAppointmentResponse(appointment) {
     .limit(1);
   if (error) throw error;
   const payment = payments?.[0] ?? null;
+  const { data: requests, error: requestsError } = await supabase
+    .from("appointment_requests")
+    .select("type, status, created_at")
+    .eq("appointment_id", appointment.id)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+  if (requestsError) throw requestsError;
   const paymentKind = payment ? resolvePaymentKind({ ...payment, services: payment.services }) : null;
   const safePayment = payment
     ? {
@@ -869,7 +969,42 @@ async function toPublicAppointmentResponse(appointment) {
       duration_minutes: detail.durationMinutes,
       has_schedule: detail.hasSchedule
     },
-    payment: safePayment
+    payment: safePayment,
+    pending_requests: requests ?? []
+  };
+}
+
+function toAdminAppointmentRequestResponse(request) {
+  const appointment = request.appointments ?? {};
+  const pseudoPayment = {
+    amount: 0,
+    currency: "ARS",
+    services: appointment.services,
+    patients: appointment.patients,
+    appointments: appointment,
+    clinics: appointment.clinics
+  };
+  const detail = buildAppointmentDetail(pseudoPayment);
+  return {
+    id: request.id,
+    type: request.type,
+    status: request.status,
+    notes: request.notes,
+    requested_by: request.requested_by,
+    created_at: request.created_at,
+    appointment: {
+      id: request.appointment_id,
+      status: appointment.status ?? null,
+      starts_at: appointment.starts_at ?? null,
+      end_time: appointment.end_time ?? null,
+      patient_name: detail.patientName,
+      service_name: detail.serviceName,
+      professional_name: detail.professionalName,
+      clinic_name: detail.clinicName,
+      timezone: detail.timezone,
+      location_address: detail.locationAddress,
+      has_schedule: detail.hasSchedule
+    }
   };
 }
 

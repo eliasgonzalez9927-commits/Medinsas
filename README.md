@@ -1,4 +1,4 @@
-# ClinicOS MVP
+# Medin
 
 Base de aplicacion SaaS para gestion de clinicas con reservas, triaje digital inicial y panel administrativo.
 
@@ -67,7 +67,7 @@ clinic-saas-mvp/
 
 1. Crea un proyecto en Supabase.
 2. Ejecuta `supabase/schema.sql` en el SQL Editor.
-3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql`, `supabase/migrations/006_auth_admin_access.sql`, `supabase/migrations/007_billing_prescriptions_foundation.sql`, `supabase/migrations/008_settings_users_messaging.sql`, `supabase/migrations/009_mercado_pago_payments.sql`, `supabase/migrations/010_clinic_timezone_fix.sql`, `supabase/migrations/011_payment_expiration_admin_tools.sql`, `supabase/migrations/012_superadmin_onboarding.sql` y `supabase/migrations/013_patient_access_foundation.sql`.
+3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql`, `supabase/migrations/006_auth_admin_access.sql`, `supabase/migrations/007_billing_prescriptions_foundation.sql`, `supabase/migrations/008_settings_users_messaging.sql`, `supabase/migrations/009_mercado_pago_payments.sql`, `supabase/migrations/010_clinic_timezone_fix.sql`, `supabase/migrations/011_payment_expiration_admin_tools.sql`, `supabase/migrations/012_superadmin_onboarding.sql`, `supabase/migrations/013_patient_access_foundation.sql` y `supabase/migrations/014_patient_requests_admin_tools.sql`.
 4. Copia `.env.example` a `.env` y completa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 5. Instala dependencias con `npm install`.
 6. Ejecuta `npm run dev`.

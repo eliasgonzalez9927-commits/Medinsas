@@ -41,7 +41,7 @@ do $$
 begin
   alter table public.appointment_requests
     add constraint appointment_requests_status_check
-    check (status in ('pending', 'approved', 'rejected', 'cancelled'));
+    check (status in ('pending', 'approved', 'rejected', 'cancelled', 'managed'));
 exception when duplicate_object then null;
 end $$;
 

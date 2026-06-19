@@ -1,6 +1,7 @@
 import {
   Banknote,
   CalendarDays,
+  ClipboardCheck,
   ClipboardList,
   FilePenLine,
   MessageCircle,
@@ -28,6 +29,7 @@ import { Button } from "../ui/Button";
 const navItems = [
   { label: "Dashboard", icon: ClipboardList, to: "/admin", base: true },
   { label: "Agenda", icon: CalendarDays, to: "/admin/agenda", moduleKey: "agenda", base: true },
+  { label: "Solicitudes", icon: ClipboardCheck, to: "/admin/solicitudes", moduleKey: "agenda", base: true },
   { label: "Pacientes", icon: UsersRound, to: "/admin/pacientes", moduleKey: "pacientes", base: true },
   { label: "Profesionales", icon: Stethoscope, to: "/admin/profesionales", moduleKey: "profesionales", base: true },
   { label: "Servicios", icon: WalletCards, to: "/admin/servicios", moduleKey: "servicios", base: true },
