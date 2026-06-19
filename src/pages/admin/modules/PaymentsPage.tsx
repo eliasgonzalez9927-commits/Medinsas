@@ -11,11 +11,10 @@ import {
   getPaymentSettings,
   updatePaymentSettings
 } from "../../../lib/clinic-data";
+import { getPublicAppUrl } from "../../../lib/public-url";
 import { supabase } from "../../../lib/supabase";
 import { Clinic, PaymentEvent, PaymentSettings, PaymentWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
-
-const appUrl = "https://clinic-saas-mvp.vercel.app";
 
 type EnvHealth = {
   mercadoPagoAccessToken: boolean;
@@ -492,9 +491,4 @@ async function syncPaymentStatus(paymentId: string) {
 
 function formatDate(value: string, timezone = "America/Argentina/Mendoza") {
   return new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short", timeZone: timezone }).format(new Date(value));
-}
-
-function getPublicAppUrl() {
-  if (typeof window !== "undefined" && window.location.origin) return window.location.origin;
-  return appUrl;
 }

@@ -4,6 +4,7 @@ import { CalendarDays, Copy, Stethoscope } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
 import { getProfessionalById } from "../../../lib/clinic-data";
+import { buildPublicUrl } from "../../../lib/public-url";
 import { ProfessionalWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
 
@@ -57,7 +58,7 @@ export function ProfessionalProfilePage() {
     );
   }
 
-  const bookingLink = `https://clinic-saas-mvp.vercel.app/reservar/clinica-central/${professional.slug ?? professional.id}`;
+  const bookingLink = buildPublicUrl(`/reservar/clinica-central/${professional.slug ?? professional.id}`);
 
   return (
     <AdminPageShell

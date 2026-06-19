@@ -325,7 +325,7 @@ MERCADO_PAGO_ACCESS_TOKEN=
 MERCADO_PAGO_PUBLIC_KEY=
 MERCADO_PAGO_WEBHOOK_SECRET=
 MERCADO_PAGO_ENV=sandbox
-APP_PUBLIC_URL=https://clinic-saas-mvp.vercel.app
+APP_PUBLIC_URL=https://app.medin.com.ar
 ```
 
 Para probar en modo test:
@@ -349,6 +349,20 @@ La migracion `011_payment_expiration_admin_tools.sql` agrega `payments.expires_a
 `/admin/pagos`, un pago `pending` o `in_process` con `expires_at` pasado se muestra como
 `Vencido`; no cuenta como pendiente ni cobrado. El boton `Actualizar estado` consulta el backend
 para sincronizar con Mercado Pago o marcar el pago como vencido si corresponde.
+
+### Dominio publico
+
+Para usar `https://app.medin.com.ar` como dominio final:
+
+1. Agregar `app.medin.com.ar` en Vercel, seccion Domains del proyecto.
+2. Crear en DNS un `CNAME` para `app` apuntando a `cname.vercel-dns.com`, o al valor exacto que indique Vercel.
+3. Cambiar `APP_PUBLIC_URL` en Vercel a `https://app.medin.com.ar`.
+4. Hacer redeploy para que backend use el nuevo dominio en Mercado Pago, emails y calendario.
+5. Cambiar el webhook de Mercado Pago a `https://app.medin.com.ar/api/payments/mercadopago/webhook`.
+6. Probar una reserva con seña desde `https://app.medin.com.ar/reservar/clinica-central`.
+
+`APP_PUBLIC_URL` es server-side y no debe llevar prefijo `VITE_`. El frontend genera links publicos
+desde `window.location.origin`, con fallback a `https://app.medin.com.ar`.
 
 ## Integracion WhatsApp
 

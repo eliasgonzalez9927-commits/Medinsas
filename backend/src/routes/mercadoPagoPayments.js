@@ -304,7 +304,7 @@ async function createInternalPayment({ appointment, amount, amountType, expiresA
 }
 
 async function createMercadoPagoPreference({ appointment, payment, amount }) {
-  const publicUrl = (config.APP_PUBLIC_URL ?? "https://clinic-saas-mvp.vercel.app").replace(/\/$/, "");
+  const publicUrl = (config.APP_PUBLIC_URL ?? "https://app.medin.com.ar").replace(/\/$/, "");
   const service = appointment.services;
   const patient = appointment.patients;
   const response = await fetch("https://api.mercadopago.com/checkout/preferences", {

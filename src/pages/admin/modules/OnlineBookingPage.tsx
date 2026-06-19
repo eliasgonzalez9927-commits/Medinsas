@@ -1,15 +1,16 @@
 import { Copy, ExternalLink, ToggleRight } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { buildPublicUrl } from "../../../lib/public-url";
 import { AdminPageShell } from "./AdminPageShell";
 
-const bookingLinks = [
-  "https://clinic-saas-mvp.vercel.app/reservar/clinica-central",
-  "https://clinic-saas-mvp.vercel.app/reservar/clinica-central/odontologia",
-  "https://clinic-saas-mvp.vercel.app/reservar/clinica-central/dr-laura-perez"
-];
-
 export function OnlineBookingPage() {
+  const bookingLinks = [
+    buildPublicUrl("/reservar/clinica-central"),
+    buildPublicUrl("/reservar/clinica-central/odontologia"),
+    buildPublicUrl("/reservar/clinica-central/dr-laura-perez")
+  ];
+
   return (
     <AdminPageShell
       description="Controla que puede elegir el paciente, con cuanta anticipacion reserva y que datos son obligatorios."
