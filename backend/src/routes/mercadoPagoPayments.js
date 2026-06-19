@@ -26,15 +26,22 @@ const appointmentRequestUpdateSchema = z.object({
 });
 
 mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async (req, res, next) => {
+  let stage = "environment";
+  let appointmentId = null;
+  let paymentId = null;
+  let externalReference = null;
   try {
     const missingConfiguration = getCreatePreferenceConfigError();
     if (missingConfiguration) {
-      return res.status(503).json({ error: missingConfiguration });
+      return res.status(503).json(createPreferenceFailure({ stage, code: missingConfiguration }));
     }
+    stage = "payload";
     const payload = createPreferenceSchema.parse(req.body);
+    appointmentId = payload.appointmentId;
     const auth = await authenticateOptional(req);
     if (auth?.role) assertPermission(auth.role, "canManageBilling");
 
+    stage = "supabase";
     const appointment = await loadAppointment(payload.appointmentId);
     if (!appointment) return res.status(404).json({ error: "APPOINTMENT_NOT_FOUND" });
     if (auth?.clinicId && auth.role !== "platform_admin" && auth.clinicId !== appointment.clinic_id) {
@@ -50,6 +57,8 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async 
 
     const expiresAt = await resolvePaymentExpiration(appointment.clinic_id);
     const payment = await createInternalPayment({ appointment, amount, amountType: initialKind, expiresAt });
+    paymentId = payment.id;
+    externalReference = payment.external_reference;
     logger.info(
       {
         event: "mercado_pago_preference_requested",
@@ -65,8 +74,10 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async 
       },
       "Creating Mercado Pago checkout preference"
     );
+    stage = "mercadopago";
     const preference = await createMercadoPagoPreference({ appointment, payment, amount });
 
+    stage = "supabase";
     await supabase
       .from("payments")
       .update({
@@ -92,8 +103,22 @@ mercadoPagoPaymentsRouter.post("/payments/mercadopago/create-preference", async 
       external_reference: payment.external_reference
     });
   } catch (error) {
-    if (error instanceof z.ZodError) return res.status(400).json({ error: "INVALID_PAYLOAD" });
-    next(error);
+    const failure = createPreferenceFailure({ stage, error });
+    logger.error(
+      {
+        event: "mercado_pago_preference_request_failed",
+        stage: failure.stage,
+        appointmentId,
+        paymentId,
+        externalReference,
+        statusCode: failure.statusCode,
+        code: error?.code ?? "UNKNOWN_ERROR",
+        mpStatus: failure.mpStatus,
+        mpError: failure.mpError
+      },
+      "Could not create Mercado Pago checkout preference"
+    );
+    return res.status(failure.statusCode).json(failure);
   }
 });
 
@@ -513,6 +538,36 @@ function getCreatePreferenceConfigError() {
   if (!config.SUPABASE_URL || !config.SUPABASE_SERVICE_ROLE_KEY) return "SUPABASE_SERVER_NOT_CONFIGURED";
   if (!config.MERCADO_PAGO_ACCESS_TOKEN) return "MERCADO_PAGO_NOT_CONFIGURED";
   return null;
+}
+
+function createPreferenceFailure({ stage, code, error }) {
+  const isPayloadError = error instanceof z.ZodError || stage === "payload";
+  const isMercadoPagoError = error?.code === "MERCADO_PAGO_ERROR" || stage === "mercadopago";
+  const safeStage = isPayloadError ? "payload" : isMercadoPagoError ? "mercadopago" : stage === "supabase" ? "supabase" : "environment";
+  const mpDetails = isMercadoPagoError ? summarizeMercadoPagoError(error?.details) : null;
+  const statusCode = code
+    ? 503
+    : isPayloadError
+      ? 400
+      : Number.isInteger(error?.statusCode)
+        ? error.statusCode
+        : 500;
+  const message = safeStage === "environment"
+    ? "El servicio de pagos no esta disponible por configuracion incompleta."
+    : safeStage === "payload"
+      ? "Los datos del pago no son validos."
+      : safeStage === "supabase"
+        ? "No pudimos preparar el pago en este momento."
+        : "Mercado Pago no pudo generar el link de pago."
+  return {
+    error: "CREATE_PREFERENCE_FAILED",
+    code: code ?? error?.code ?? "UNKNOWN_ERROR",
+    stage: safeStage,
+    message,
+    mpStatus: mpDetails?.status ?? (isMercadoPagoError ? error?.statusCode ?? null : null),
+    mpError: mpDetails?.message ?? mpDetails?.error ?? null,
+    statusCode
+  };
 }
 
 function resolvePublicUrl() {

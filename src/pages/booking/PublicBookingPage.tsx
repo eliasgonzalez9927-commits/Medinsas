@@ -192,10 +192,20 @@ export function PublicBookingPage() {
         });
         const paymentData = await paymentResponse.json().catch(() => ({}));
         if (!paymentResponse.ok || !paymentData.checkout_url) {
+          console.error("Mercado Pago preference request failed", {
+            status: paymentResponse.status,
+            error: paymentData.error ?? null,
+            code: paymentData.code ?? null,
+            stage: paymentData.stage ?? null,
+            message: paymentData.message ?? null,
+            mpStatus: paymentData.mpStatus ?? null,
+            mpError: paymentData.mpError ?? null,
+            appointmentId: booking.appointment_id
+          });
           throw new Error(
             paymentData.error === "MERCADO_PAGO_NOT_CONFIGURED"
               ? "El pago online todavia no esta configurado para esta clinica."
-              : "No pudimos generar el link de pago."
+              : paymentData.message || "No pudimos generar el link de pago."
           );
         }
         setCheckoutUrl(paymentData.checkout_url);
