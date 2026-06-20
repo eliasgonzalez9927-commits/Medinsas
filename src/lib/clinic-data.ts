@@ -928,6 +928,8 @@ export async function createPublicBooking(payload: PublicBookingPayload): Promis
       p_email: payload.email ?? null,
       p_document_number: payload.documentNumber ?? null,
       p_insurance: payload.insurance ?? null,
+      p_coverage_id: payload.coverageId ?? null,
+      p_custom_coverage_name: payload.customCoverageName ?? null,
       p_reason: payload.reason ?? null
     });
     if (error) throw error;

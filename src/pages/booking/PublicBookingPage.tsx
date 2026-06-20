@@ -15,6 +15,7 @@ import {
   PublicBookingResult,
   ServiceWithRelations
 } from "../../types/clinic";
+import { supabase } from "../../lib/supabase";
 
 type BookingForm = {
   firstName: string;
@@ -24,6 +25,9 @@ type BookingForm = {
   documentNumber: string;
   insurance: string;
   reason: string;
+  coverageId: string;
+  coverageKind: "catalog" | "particular" | "other" | "";
+  customCoverageName: string;
 };
 
 const emptyForm: BookingForm = {
@@ -33,7 +37,10 @@ const emptyForm: BookingForm = {
   email: "",
   documentNumber: "",
   insurance: "",
-  reason: ""
+  reason: "",
+  coverageId: "",
+  coverageKind: "",
+  customCoverageName: ""
 };
 
 export function PublicBookingPage() {
@@ -53,6 +60,7 @@ export function PublicBookingPage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<PublicBookingResult | null>(null);
   const [checkoutUrl, setCheckoutUrl] = useState("");
+  const [coverages, setCoverages] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     async function load() {
@@ -93,6 +101,14 @@ export function PublicBookingPage() {
             activeProfessionals[0]?.id ??
             ""
         );
+        const { data: coverageRows } = await supabase
+          .from("health_coverages")
+          .select("id, name")
+          .eq("active", true)
+          .eq("enabled_for_choice", true)
+          .order("name")
+          .limit(100);
+        setCoverages(coverageRows ?? []);
       } catch (err) {
         console.error("Public booking load failed", {
           clinicSlug,
@@ -160,6 +176,11 @@ export function PublicBookingPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const validationError = validatePatientForm(form);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     const selectedSlot = slots.find((slot) => slot.startsAt === slotStartsAt);
     if (!selectedSlot) {
       setError("Selecciona un horario disponible para continuar.");
@@ -178,8 +199,10 @@ export function PublicBookingPage() {
         phone: form.phone,
         email: form.email || null,
         documentNumber: form.documentNumber || null,
-        insurance: form.insurance || null,
-        reason: form.reason || selectedService?.name || "Consulta"
+        insurance: form.coverageKind === "particular" ? "Particular / Sin cobertura" : form.coverageKind === "other" ? "Otra" : form.insurance,
+        coverageId: form.coverageKind === "catalog" ? form.coverageId : null,
+        customCoverageName: form.coverageKind === "other" ? form.customCoverageName : null,
+        reason: form.reason
       });
       if (requiresOnlinePayment(selectedService)) {
         const paymentResponse = await fetch("/api/payments/mercadopago/create-preference", {
@@ -358,9 +381,9 @@ export function PublicBookingPage() {
                   <Input required placeholder="Nombre" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} />
                   <Input required placeholder="Apellido" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
                   <Input required placeholder="Telefono / WhatsApp" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
-                  <Input placeholder="Email opcional" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
-                  <Input placeholder="DNI opcional" value={form.documentNumber} onChange={(event) => setForm({ ...form, documentNumber: event.target.value })} />
-                  <Input placeholder="Obra social / prepaga" value={form.insurance} onChange={(event) => setForm({ ...form, insurance: event.target.value })} />
+                  <Input required placeholder="Email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+                  <Input required placeholder="DNI" value={form.documentNumber} onChange={(event) => setForm({ ...form, documentNumber: event.target.value })} />
+                  <CoveragePicker form={form} coverages={coverages} onChange={setForm} />
                 </div>
                 <textarea
                   required
@@ -463,4 +486,36 @@ function requiresOnlinePayment(service?: ServiceWithRelations | null) {
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(Number(value || 0));
+}
+
+function validatePatientForm(form: BookingForm) {
+  if (!form.firstName.trim()) return "Ingresá tu nombre.";
+  if (!form.lastName.trim()) return "Ingresá tu apellido.";
+  if (!form.phone.trim()) return "Ingresá un teléfono o WhatsApp.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "Ingresá un email válido.";
+  if (!form.documentNumber.trim()) return "Ingresá tu DNI.";
+  if (!form.coverageKind) return "Seleccioná tu obra social, prepaga o indicá particular.";
+  if (form.coverageKind === "other" && !form.customCoverageName.trim()) return "Indicanos cuál es tu obra social o prepaga.";
+  if (!form.reason.trim()) return "Contanos brevemente el motivo de la consulta.";
+  return "";
+}
+
+function CoveragePicker({ form, coverages, onChange }: { form: BookingForm; coverages: Array<{ id: string; name: string }>; onChange: (next: BookingForm) => void }) {
+  const matches = coverages.filter((coverage) => coverage.name.toLowerCase().includes(form.insurance.toLowerCase())).slice(0, 6);
+  return (
+    <div className="sm:col-span-2">
+      <label className="block text-sm font-medium text-clinic-ink">Obra social, prepaga o cobertura</label>
+      <input required value={form.insurance} onChange={(event) => onChange({ ...form, insurance: event.target.value, coverageId: "", coverageKind: "" })} placeholder="Buscá OSDE, OSEP, Swiss Medical..." className="mt-2 h-11 w-full rounded-lg border border-clinic-line bg-white px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100" />
+      {form.insurance && !form.coverageKind && (
+        <div className="mt-2 grid gap-1 rounded-lg border border-clinic-line bg-white p-2">
+          {matches.map((coverage) => <button key={coverage.id} type="button" onClick={() => onChange({ ...form, insurance: coverage.name, coverageId: coverage.id, coverageKind: "catalog" })} className="rounded-md px-3 py-2 text-left text-sm hover:bg-clinic-surface">{coverage.name}</button>)}
+          <button type="button" onClick={() => onChange({ ...form, insurance: "Particular / Sin cobertura", coverageId: "", coverageKind: "particular" })} className="rounded-md px-3 py-2 text-left text-sm hover:bg-clinic-surface">Particular / Sin cobertura</button>
+          <button type="button" onClick={() => onChange({ ...form, insurance: "Otra", coverageId: "", coverageKind: "other" })} className="rounded-md px-3 py-2 text-left text-sm hover:bg-clinic-surface">Otra</button>
+        </div>
+      )}
+      {form.coverageKind === "particular" && <p className="mt-2 text-xs text-clinic-muted">Seleccioná esta opción si no tenés obra social/prepaga o preferís atenderte de forma particular.</p>}
+      {form.coverageKind === "other" && <Input required placeholder="Indicanos cuál es tu obra social o prepaga" value={form.customCoverageName} onChange={(event) => onChange({ ...form, customCoverageName: event.target.value })} />}
+      <p className="mt-2 text-xs text-clinic-muted">Usamos este dato para que la clínica pueda preparar tu atención. La cobertura queda sujeta a validación de la clínica.</p>
+    </div>
+  );
 }

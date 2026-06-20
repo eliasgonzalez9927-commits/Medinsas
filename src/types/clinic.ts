@@ -331,6 +331,8 @@ export type PublicBookingPayload = {
   email?: string | null;
   documentNumber?: string | null;
   insurance?: string | null;
+  coverageId?: string | null;
+  customCoverageName?: string | null;
   reason?: string | null;
 };
 

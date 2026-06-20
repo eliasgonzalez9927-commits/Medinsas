@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Edit3, Search, UserPlus } from "lucide-react";
+import { Download, Edit3, FileUp, Search, UserPlus } from "lucide-react";
+import { Link } from "react-router-dom";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
 import {
@@ -84,6 +85,16 @@ export function PatientsPage() {
     return { total: patients.length, withAppointments };
   }, [patients]);
 
+  function downloadTemplate() {
+    downloadCsv("pacientes_template.csv", ["nombre,apellido,telefono,email,dni,fecha_nacimiento,obra_social,plan,numero_afiliado,notas,email_opt_in,whatsapp_opt_in"]);
+  }
+
+  function exportPatients() {
+    if (!clinic) return;
+    const lines = ["nombre,apellido,telefono,email,dni,fecha_nacimiento,obra_social,notas", ...patients.map((patient) => csvLine([patient.first_name, patient.last_name, patient.phone, patient.email ?? "", patient.document_number ?? "", patient.birth_date ?? "", patient.insurance ?? "", patient.notes ?? ""]))];
+    downloadCsv(`pacientes_${clinic.slug}.csv`, lines);
+  }
+
   function openCreate() {
     setForm(emptyForm);
     setFormOpen(true);
@@ -149,6 +160,12 @@ export function PatientsPage() {
     >
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
+
+      <div className="flex flex-wrap gap-2">
+        <Link to="/admin/importaciones" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink hover:bg-clinic-surface"><FileUp size={16} /> Importar pacientes</Link>
+        <Button icon={<Download size={16} />} onClick={exportPatients}>Exportar pacientes</Button>
+        <Button icon={<Download size={16} />} onClick={downloadTemplate}>Descargar plantilla CSV</Button>
+      </div>
 
       <section className="grid gap-4 md:grid-cols-3">
         <Metric label="Pacientes cargados" value={String(totals.total)} />
@@ -299,4 +316,16 @@ function Message({ tone, children }: { tone: "success" | "error"; children: stri
       ? "border-emerald-200 bg-emerald-50 text-emerald-800"
       : "border-red-200 bg-red-50 text-red-700";
   return <div className={`rounded-lg border px-4 py-3 text-sm ${className}`}>{children}</div>;
+}
+
+function csvLine(values: string[]) {
+  return values.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",");
+}
+
+function downloadCsv(filename: string, lines: string[]) {
+  const anchor = document.createElement("a");
+  anchor.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" }));
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(anchor.href);
 }
