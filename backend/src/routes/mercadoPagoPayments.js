@@ -968,6 +968,7 @@ async function sendClinicPaymentEmail(payment) {
     "",
     `Paciente: ${detail.patientName}`,
     `Servicio: ${detail.serviceName}`,
+    payment.appointments?.public_code ? `Código de turno: ${payment.appointments.public_code}` : "",
     `Profesional: ${detail.professionalName}`,
     `Fecha: ${detail.dateLabel}`,
     `Hora: ${detail.timeLabel}`,
@@ -1094,7 +1095,7 @@ async function buildPatientEmail(payment) {
   ].filter(Boolean);
   return {
     text: lines.join("\n"),
-    html: `<p>Hola ${escapeHtml(detail.patientName)},</p><p>${isConfirmed ? "Tu turno fue confirmado." : escapeHtml(pendingCopy)}</p><ul><li>Servicio: ${escapeHtml(detail.serviceName)}</li><li>Profesional: ${escapeHtml(detail.professionalName)}</li><li>Fecha: ${escapeHtml(detail.dateLabel)}</li><li>Hora: ${escapeHtml(detail.timeLabel)}</li><li>Clínica: ${escapeHtml(detail.clinicName)}</li><li>Dirección: ${escapeHtml(detail.locationAddress)}</li><li>Monto pagado: ${escapeHtml(formatMoney(payment.amount, payment.currency))}</li><li>Tipo de pago: ${escapeHtml(kind.label)}</li><li>Saldo pendiente: ${escapeHtml(formatMoney(kind.remainingAmount, payment.currency))}</li></ul>${appointmentUrl ? `<p><a href="${escapeHtml(appointmentUrl)}">Ver mi turno</a></p>` : ""}${isConfirmed ? `<p><a href="${escapeHtml(calendarUrl)}">Agregar al calendario</a></p>` : ""}<p>Si necesitás modificar o cancelar tu turno, comunicate con la clínica.</p>`
+    html: `<p>Hola ${escapeHtml(detail.patientName)},</p><p>${isConfirmed ? "Tu turno fue confirmado." : escapeHtml(pendingCopy)}</p><ul>${payment.appointments?.public_code ? `<li>Código de turno: ${escapeHtml(payment.appointments.public_code)}</li>` : ""}<li>Servicio: ${escapeHtml(detail.serviceName)}</li><li>Profesional: ${escapeHtml(detail.professionalName)}</li><li>Fecha: ${escapeHtml(detail.dateLabel)}</li><li>Hora: ${escapeHtml(detail.timeLabel)}</li><li>Clínica: ${escapeHtml(detail.clinicName)}</li><li>Dirección: ${escapeHtml(detail.locationAddress)}</li><li>Monto pagado: ${escapeHtml(formatMoney(payment.amount, payment.currency))}</li><li>Tipo de pago: ${escapeHtml(kind.label)}</li><li>Saldo pendiente: ${escapeHtml(formatMoney(kind.remainingAmount, payment.currency))}</li></ul>${appointmentUrl ? `<p><a href="${escapeHtml(appointmentUrl)}">Ver mi turno</a></p>` : ""}${isConfirmed ? `<p><a href="${escapeHtml(calendarUrl)}">Agregar al calendario</a></p>` : ""}<p>Si necesitás modificar o cancelar tu turno, comunicate con la clínica.</p>`
   };
 }
 
@@ -1116,6 +1117,7 @@ async function toPaymentStatusResponse(payment) {
     private_url: publicLink ? buildPublicAppointmentUrl(publicLink.token) : null,
     appointment: {
       id: payment.appointment_id,
+      public_code: payment.appointments?.public_code ?? null,
       status: payment.appointments?.status ?? null,
       payment_status: payment.appointments?.payment_status ?? null,
       starts_at: payment.appointments?.starts_at ?? null,
@@ -1173,6 +1175,7 @@ async function toPublicAppointmentResponse(appointment) {
   const detail = buildAppointmentDetail(pseudoPayment);
   return {
     appointment: {
+      public_code: appointment.public_code ?? null,
       status: appointment.status,
       payment_status: appointment.payment_status ?? null,
       starts_at: appointment.starts_at,
@@ -1212,6 +1215,7 @@ function toAdminAppointmentRequestResponse(request) {
     created_at: request.created_at,
     appointment: {
       id: request.appointment_id,
+      public_code: appointment.public_code ?? null,
       status: appointment.status ?? null,
       starts_at: appointment.starts_at ?? null,
       end_time: appointment.end_time ?? null,

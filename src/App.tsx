@@ -19,6 +19,8 @@ import { NewPrescriptionPage, PrescriptionSettingsPage, PrescriptionsPage } from
 import { ProfessionalsPage } from "./pages/admin/modules/ProfessionalsPage";
 import { ProfessionalProfilePage } from "./pages/admin/modules/ProfessionalProfilePage";
 import { SettingsLocationsPage, SettingsNotificationsPage, SettingsPage, SettingsUsersPage } from "./pages/admin/modules/SettingsPage";
+import { CoverageSettingsPage } from "./pages/admin/modules/CoverageSettingsPage";
+import { ImportsPage } from "./pages/admin/modules/ImportsPage";
 import { ServicesPage } from "./pages/admin/modules/ServicesPage";
 import { WhatsAppPage } from "./pages/admin/modules/WhatsAppPage";
 import { PaymentFailurePage, PaymentPendingPage, PaymentSuccessPage } from "./pages/payments/PaymentReturnPage";
@@ -64,6 +66,7 @@ export function App() {
         <Route path="/admin/disponibilidad" element={<AvailabilityPage />} />
         <Route path="/admin/horarios" element={<AvailabilityPage />} />
         <Route path="/admin/pacientes" element={<PatientsPage />} />
+        <Route path="/admin/importaciones" element={<ImportsPage />} />
         <Route path="/admin/servicios" element={<ServicesPage />} />
         <Route path="/admin/tratamientos" element={<ServicesPage />} />
         <Route path="/admin/booking" element={<OnlineBookingPage />} />
@@ -85,6 +88,7 @@ export function App() {
         <Route path="/admin/configuracion/sedes" element={<SettingsLocationsPage />} />
         <Route path="/admin/configuracion/usuarios" element={<SettingsUsersPage />} />
         <Route path="/admin/configuracion/notificaciones" element={<SettingsNotificationsPage />} />
+        <Route path="/admin/configuracion/coberturas" element={<CoverageSettingsPage />} />
       </Route>
       <Route element={<ProtectedRoute roles={["platform_admin"]} />}>
         <Route path="/superadmin" element={<SuperadminDashboard />} />

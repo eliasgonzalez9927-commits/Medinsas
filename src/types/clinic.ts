@@ -110,6 +110,7 @@ export type AppointmentSource = "manual" | "online" | "whatsapp" | "imported";
 
 export type Appointment = {
   id: string;
+  public_code?: string | null;
   clinic_id: string | null;
   patient_id: string;
   professional_id: string | null;
@@ -608,4 +609,24 @@ export type MessageLog = {
   related_entity_id: string | null;
   sent_at: string | null;
   created_at: string;
+};
+
+export type HealthCoverage = {
+  id: string;
+  rnas_code: string | null;
+  rnos_code: string | null;
+  name: string;
+  normalized_name: string;
+  type: string;
+  active: boolean;
+  enabled_for_choice: boolean;
+  source: string;
+};
+
+export type HealthPlan = {
+  id: string;
+  coverage_id: string;
+  name: string;
+  code: string | null;
+  active: boolean;
 };

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { BadgeDollarSign, Clock3, Edit3, Plus } from "lucide-react";
+import { BadgeDollarSign, Clock3, Download, Edit3, Plus, SlidersHorizontal } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
 import {
@@ -12,6 +12,7 @@ import {
 } from "../../../lib/clinic-data";
 import { Clinic, ServiceInput, ServiceWithRelations, Specialty } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
+import { supabase } from "../../../lib/supabase";
 
 const currency = new Intl.NumberFormat("es-AR", {
   style: "currency",
@@ -59,6 +60,10 @@ export function ServicesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkMode, setBulkMode] = useState<"percent" | "fixed" | "deposit" | "duration">("percent");
+  const [bulkValue, setBulkValue] = useState("");
 
   async function load() {
     setLoading(true);
@@ -165,6 +170,29 @@ export function ServicesPage() {
     }
   }
 
+  function exportServices() {
+    const lines = ["nombre,especialidad,duracion_minutos,precio,seña,requiero_pago_online,activo,descripcion", ...services.map((service) => [service.name, service.specialty?.name ?? "", service.duration_minutes, service.price ?? "", service.deposit_amount ?? "", service.allow_online_payment !== false, service.active, service.description ?? ""].map((value) => `\"${String(value).replace(/\"/g, '\"\"')}\"`).join(","))];
+    const anchor = document.createElement("a"); anchor.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" })); anchor.download = "servicios.csv"; anchor.click(); URL.revokeObjectURL(anchor.href);
+  }
+
+  async function applyBulk() {
+    if (!clinic || !selected.size || !bulkValue) return;
+    const chosen = services.filter((service) => selected.has(service.id));
+    const preview = chosen.slice(0, 3).map((service) => service.name).join(", ");
+    if (!window.confirm(`Esta acción modificará ${chosen.length} servicios. Vista previa: ${preview}${chosen.length > 3 ? "..." : ""}`)) return;
+    setSaving(true); setError("");
+    try {
+      for (const service of chosen) {
+        const value = Number(bulkValue);
+        const update = bulkMode === "percent" ? { price: Math.round(Number(service.price ?? 0) * (1 + value / 100)) } : bulkMode === "fixed" ? { price: Math.max(0, Number(service.price ?? 0) + value) } : bulkMode === "deposit" ? { deposit_amount: Math.max(0, value), deposit_required: value > 0, allow_online_payment: value > 0 } : { duration_minutes: Math.max(5, value) };
+        const { error: updateError } = await supabase.from("services").update({ ...update, updated_at: new Date().toISOString() }).eq("id", service.id).eq("clinic_id", clinic.id);
+        if (updateError) throw updateError;
+      }
+      await supabase.from("audit_logs").insert({ clinic_id: clinic.id, action: bulkMode === "percent" || bulkMode === "fixed" ? "services_bulk_price_update" : "services_bulk_update", entity_type: "services", metadata: { ids: [...selected], mode: bulkMode, value: Number(bulkValue) } });
+      setNotice(`Actualizamos ${selected.size} servicios.`); setSelected(new Set()); setBulkOpen(false); setBulkValue(""); await load();
+    } catch (err) { setError(err instanceof Error ? err.message : "No pudimos aplicar los cambios masivos."); } finally { setSaving(false); }
+  }
+
   return (
     <AdminPageShell
       actionLabel="Crear servicio"
@@ -173,6 +201,7 @@ export function ServicesPage() {
       onAction={openCreate}
       title="Servicios y tratamientos"
     >
+      <div className="flex flex-wrap gap-2"><Button icon={<Download size={16} />} onClick={exportServices}>Exportar CSV</Button><Button icon={<SlidersHorizontal size={16} />} onClick={() => setBulkOpen((open) => !open)}>{bulkOpen ? "Cerrar edición masiva" : "Actualizar precios"}</Button></div>
       {notice && <Message tone="success">{notice}</Message>}
       {fromFallback && (
         <Message tone="warning">
@@ -180,6 +209,8 @@ export function ServicesPage() {
         </Message>
       )}
       {error && <Message tone="error">{error}</Message>}
+
+      {bulkOpen && <SectionCard className="p-5"><h2 className="font-semibold">Vista previa de cambios</h2><p className="mt-1 text-sm text-clinic-muted">Seleccioná servicios y confirmá el cambio antes de aplicarlo.</p><div className="mt-4 grid gap-3 md:grid-cols-[1fr_180px_auto]"><select value={bulkMode} onChange={(event) => setBulkMode(event.target.value as typeof bulkMode)} className="h-10 rounded-lg border border-clinic-line px-3 text-sm"><option value="percent">Aumentar precio por porcentaje</option><option value="fixed">Aumentar precio por monto fijo</option><option value="deposit">Reemplazar seña</option><option value="duration">Reemplazar duración</option></select><input value={bulkValue} onChange={(event) => setBulkValue(event.target.value)} type="number" placeholder={bulkMode === "percent" ? "Ej. 20" : "Monto / minutos"} className="h-10 rounded-lg border border-clinic-line px-3 text-sm"/><Button disabled={!selected.size || !bulkValue || saving} onClick={applyBulk} variant="primary">Aplicar a {selected.size} servicios</Button></div></SectionCard>}
 
       {formOpen && (
         <SectionCard className="p-5">
@@ -255,7 +286,7 @@ export function ServicesPage() {
                     {service.specialty?.name ?? "Sin especialidad"}
                   </p>
                 </div>
-                <span
+                <label className="flex items-center gap-2 text-xs font-semibold text-clinic-muted"><input type="checkbox" checked={selected.has(service.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); event.target.checked ? next.add(service.id) : next.delete(service.id); return next; })} /> Seleccionar</label><span
                   className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
                     service.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"
                   }`}

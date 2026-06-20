@@ -18,6 +18,7 @@ type PaymentStatusResponse = {
   private_url: string | null;
   appointment: {
     id: string | null;
+    public_code?: string | null;
     status: string | null;
     payment_status: string | null;
     starts_at: string | null;
@@ -134,6 +135,7 @@ function PaymentReturnPage({ kind }: { kind: PaymentReturnKind }) {
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <Detail label="Paciente" value={payment.appointment.patient_name} />
               <Detail label="Servicio" value={payment.appointment.service_name} />
+              {payment.appointment.public_code && <Detail label="Código de turno" value={payment.appointment.public_code} />}
               <Detail label="Profesional" value={payment.appointment.professional_name} />
               <Detail label="Fecha y hora" value={formatDateTime(payment.appointment.starts_at, payment.appointment.timezone)} />
               <Detail label="Clínica" value={payment.appointment.clinic_name} />

@@ -4,6 +4,7 @@ import { CalendarPlus, Clipboard, Download, Home, MessageCircle, RefreshCw, Send
 
 type PublicAppointmentResponse = {
   appointment: {
+    public_code?: string | null;
     status: string | null;
     payment_status: string | null;
     starts_at: string | null;
@@ -127,6 +128,7 @@ export function PublicAppointmentPage() {
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <Detail label="Paciente" value={data.appointment.patient_name} />
               <Detail label="Servicio" value={data.appointment.service_name} />
+              {data.appointment.public_code && <Detail label="Código de turno" value={data.appointment.public_code} />}
               <Detail label="Profesional" value={data.appointment.professional_name} />
               <Detail label="Fecha y hora" value={formatDateTime(data.appointment.starts_at, data.appointment.timezone)} />
               <Detail label="Clínica" value={data.appointment.clinic_name} />
