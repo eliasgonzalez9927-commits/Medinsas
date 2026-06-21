@@ -36,7 +36,7 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 0
 });
 
-export function GrowthDashboard() {
+export function GrowthDashboard({ periodLabel = "Mes actual" }: { periodLabel?: string }) {
   return (
     <section className="rounded-lg border border-clinic-line bg-white p-5 shadow-sm">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -48,7 +48,7 @@ export function GrowthDashboard() {
         </div>
         <div className="inline-flex items-center gap-2 rounded-lg bg-clinic-surface px-3 py-2 text-sm font-medium text-clinic-muted">
           <BarChart3 size={18} />
-          Mes actual
+          {periodLabel}
         </div>
       </div>
 

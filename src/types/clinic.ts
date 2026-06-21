@@ -314,10 +314,18 @@ export type AppointmentInput = {
 
 export type AppointmentFilters = {
   date?: string;
+  dateFrom?: string;
+  dateTo?: string;
   timezone?: string;
   professionalId?: string;
   status?: AppointmentStatus | "all";
   serviceId?: string;
+};
+
+export type PaymentFilters = {
+  dateFrom?: string;
+  dateTo?: string;
+  timezone?: string;
 };
 
 export type PublicBookingPayload = {

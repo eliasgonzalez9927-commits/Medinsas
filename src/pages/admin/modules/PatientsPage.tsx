@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Download, Edit3, FileUp, Search, UserPlus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SectionCard } from "../../../components/admin/SectionCard";
+import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { Button } from "../../../components/ui/Button";
 import {
   createPatient,
@@ -11,6 +12,7 @@ import {
   updatePatient
 } from "../../../lib/clinic-data";
 import { Clinic, PatientInput, PatientWithAppointments } from "../../../types/clinic";
+import { DateRangeValue, isDateInRange, resolveDateRange } from "../../../lib/date-range";
 import { AdminPageShell } from "./AdminPageShell";
 
 type PatientForm = {
@@ -46,6 +48,8 @@ export function PatientsPage() {
   const [form, setForm] = useState<PatientForm>(emptyForm);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [range, setRange] = useState<DateRangeValue>(() => resolveDateRange("this_month"));
+  const [temporalFilter, setTemporalFilter] = useState<"all" | "created" | "last_appointment" | "next_appointment" | "inactive">("all");
 
   async function load(search = query) {
     setLoading(true);
@@ -80,10 +84,24 @@ export function PatientsPage() {
     return () => window.clearTimeout(timeout);
   }, [query]);
 
+  const visiblePatients = useMemo(() => patients.filter((patient) => {
+    const appointments = patient.appointments ?? [];
+    if (temporalFilter === "all") return true;
+    if (temporalFilter === "created") return isDateInRange(patient.created_at, range, clinic?.timezone ?? undefined);
+    if (temporalFilter === "inactive") return appointments.length === 0;
+    const sorted = [...appointments].sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
+    const appointment = temporalFilter === "next_appointment"
+      ? sorted.find((item) => new Date(item.starts_at).getTime() >= Date.now())
+      : sorted.filter((item) => new Date(item.starts_at).getTime() < Date.now()).slice(-1)[0];
+    return isDateInRange(appointment?.starts_at, range, clinic?.timezone ?? undefined);
+  }), [clinic?.timezone, patients, range, temporalFilter]);
+
   const totals = useMemo(() => {
     const withAppointments = patients.filter((patient) => (patient.appointments?.length ?? 0) > 0).length;
-    return { total: patients.length, withAppointments };
-  }, [patients]);
+    const newPatients = patients.filter((patient) => isDateInRange(patient.created_at, range, clinic?.timezone ?? undefined)).length;
+    const withAppointmentsInPeriod = patients.filter((patient) => (patient.appointments ?? []).some((appointment) => isDateInRange(appointment.starts_at, range, clinic?.timezone ?? undefined))).length;
+    return { total: patients.length, withAppointments, newPatients, withAppointmentsInPeriod };
+  }, [clinic?.timezone, patients, range]);
 
   function downloadTemplate() {
     downloadCsv("pacientes_template.csv", ["nombre,apellido,telefono,email,dni,fecha_nacimiento,obra_social,plan,numero_afiliado,notas,email_opt_in,whatsapp_opt_in"]);
@@ -91,7 +109,7 @@ export function PatientsPage() {
 
   function exportPatients() {
     if (!clinic) return;
-    const lines = ["nombre,apellido,telefono,email,dni,fecha_nacimiento,obra_social,notas", ...patients.map((patient) => csvLine([patient.first_name, patient.last_name, patient.phone, patient.email ?? "", patient.document_number ?? "", patient.birth_date ?? "", patient.insurance ?? "", patient.notes ?? ""]))];
+    const lines = ["nombre,apellido,telefono,email,dni,fecha_nacimiento,obra_social,notas", ...visiblePatients.map((patient) => csvLine([patient.first_name, patient.last_name, patient.phone, patient.email ?? "", patient.document_number ?? "", patient.birth_date ?? "", patient.insurance ?? "", patient.notes ?? ""]))];
     downloadCsv(`pacientes_${clinic.slug}.csv`, lines);
   }
 
@@ -167,9 +185,15 @@ export function PatientsPage() {
         <Button icon={<Download size={16} />} onClick={downloadTemplate}>Descargar plantilla CSV</Button>
       </div>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-[1fr_240px]">
+        <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="this_month" onChange={setRange} />
+        <label className="rounded-lg border border-clinic-line bg-white p-4 text-sm font-medium text-clinic-ink shadow-sm">Filtro temporal<select value={temporalFilter} onChange={(event) => setTemporalFilter(event.target.value as typeof temporalFilter)} className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm"><option value="all">Sin filtro temporal</option><option value="created">Fecha de alta</option><option value="last_appointment">Último turno</option><option value="next_appointment">Próximo turno</option><option value="inactive">Sin actividad</option></select></label>
+      </div>
+
+      <section className="grid gap-4 md:grid-cols-4">
         <Metric label="Pacientes cargados" value={String(totals.total)} />
-        <Metric label="Con turnos registrados" value={String(totals.withAppointments)} />
+        <Metric label="Pacientes nuevos del período" value={String(totals.newPatients)} />
+        <Metric label="Con turnos en el período" value={String(totals.withAppointmentsInPeriod)} />
         <Metric label="Sin actividad" value={String(Math.max(totals.total - totals.withAppointments, 0))} />
       </section>
 
@@ -216,7 +240,7 @@ export function PatientsPage() {
 
       {loading ? (
         <div className="rounded-lg border border-clinic-line bg-white p-8 text-center text-clinic-muted">Cargando pacientes...</div>
-      ) : patients.length === 0 ? (
+      ) : visiblePatients.length === 0 ? (
         <SectionCard className="p-8 text-center">
           <h2 className="font-semibold text-clinic-ink">No hay pacientes para mostrar.</h2>
           <p className="mt-2 text-sm text-clinic-muted">Crea el primer paciente o espera reservas online entrantes.</p>
@@ -227,7 +251,7 @@ export function PatientsPage() {
       ) : (
         <SectionCard className="overflow-hidden">
           <div className="divide-y divide-clinic-line">
-            {patients.map((patient) => {
+            {visiblePatients.map((patient) => {
               const nextAppointment = getNextAppointment(patient);
               return (
                 <article key={patient.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1fr_170px_170px_1fr_130px] lg:items-center">

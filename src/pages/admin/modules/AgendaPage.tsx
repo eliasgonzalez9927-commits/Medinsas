@@ -19,6 +19,8 @@ import {
   markAppointmentNoShow
 } from "../../../lib/clinic-data";
 import { supabase } from "../../../lib/supabase";
+import { DateRangeValue, resolveDateRange } from "../../../lib/date-range";
+import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import {
   AppointmentInput,
   AppointmentStatus,
@@ -47,7 +49,7 @@ type AppointmentForm = {
 const today = new Date().toISOString().slice(0, 10);
 
 export function AgendaPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
   const [professionals, setProfessionals] = useState<ProfessionalWithRelations[]>([]);
@@ -59,6 +61,7 @@ export function AgendaPage() {
   const [serviceId, setServiceId] = useState("all");
   const [status, setStatus] = useState<"all" | AppointmentStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [range, setRange] = useState<DateRangeValue>(() => resolveDateRange("today"));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -118,7 +121,8 @@ export function AgendaPage() {
   async function loadAppointments(clinicId = clinic?.id, timezone = clinic?.timezone ?? "America/Argentina/Mendoza") {
     if (!clinicId) return;
     const loadedAppointments = await getAppointments(clinicId, {
-      date: selectedDate,
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
       timezone,
       professionalId,
       serviceId,
@@ -141,7 +145,7 @@ export function AgendaPage() {
     loadAppointments(clinic.id)
       .catch((err) => setError(err instanceof Error ? err.message : "No pudimos cargar la agenda."))
       .finally(() => setLoading(false));
-  }, [selectedDate, professionalId, serviceId, status]);
+  }, [range.dateFrom, range.dateTo, professionalId, serviceId, status]);
 
   useEffect(() => {
     if (!clinic || !form.professional_id || !form.service_id || !form.date) {
@@ -207,6 +211,16 @@ export function AgendaPage() {
       location_id: current.location_id || locations[0]?.id || "",
       reason: current.reason || services[0]?.name || ""
     }));
+  }
+
+  function setAgendaPreset(preset: "today" | "this_week" | "this_month" | "custom") {
+    const next = new URLSearchParams(searchParams);
+    next.set("preset", preset);
+    if (preset !== "custom") {
+      next.delete("from");
+      next.delete("to");
+    }
+    setSearchParams(next, { replace: true });
   }
 
   async function refreshAgenda() {
@@ -380,17 +394,20 @@ export function AgendaPage() {
       <SectionCard className="p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-semibold text-clinic-ink">Vista del dia</h2>
-            <p className="text-sm text-clinic-muted">Filtra, actualiza y crea turnos desde la misma agenda.</p>
+            <h2 className="font-semibold text-clinic-ink">Vista de agenda</h2>
+            <p className="text-sm text-clinic-muted">{range.label}. Filtrá, actualizá y creá turnos desde la misma agenda.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setSelectedDate(today)}>Hoy</Button>
+            <Button onClick={() => setAgendaPreset("today")}>Día</Button>
+            <Button onClick={() => setAgendaPreset("this_week")}>Semana</Button>
+            <Button onClick={() => setAgendaPreset("this_month")}>Mes</Button>
+            <Button onClick={() => setAgendaPreset("custom")}>Rango</Button>
             <Button icon={<RefreshCw size={16} />} onClick={refreshAgenda}>Actualizar</Button>
             <Button icon={<Plus size={16} />} onClick={openCreate} variant="primary">Nuevo turno</Button>
           </div>
         </div>
-        <div className="grid gap-4 lg:grid-cols-[180px_1fr_1fr_180px]">
-          <Input label="Fecha" value={selectedDate} onChange={setSelectedDate} type="date" />
+        <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="today" onChange={(nextRange) => { setRange(nextRange); setSelectedDate(nextRange.dateFrom); }} />
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_180px]">
           <Select label="Profesional" value={professionalId} onChange={setProfessionalId}>
             <option value="all">Todos</option>
             {professionals.map((professional) => (
@@ -433,7 +450,7 @@ export function AgendaPage() {
 
       <SectionCard className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
-          <h2 className="font-semibold text-clinic-ink">Turnos del dia</h2>
+          <h2 className="font-semibold text-clinic-ink">{range.preset === "today" ? "Turnos del día" : "Turnos del período"}</h2>
           <Button icon={<Plus size={16} />} onClick={openCreate}>
             Nuevo
           </Button>

@@ -28,6 +28,7 @@ import {
   Patient,
   PatientInput,
   PatientWithAppointments,
+  PaymentFilters,
   PaymentEvent,
   PaymentSettings,
   PaymentWithRelations,
@@ -292,13 +293,20 @@ export async function getMessageLogs(clinicId: string): Promise<MessageLog[]> {
   }
 }
 
-export async function getPayments(clinicId: string): Promise<PaymentWithRelations[]> {
+export async function getPayments(clinicId: string, filters: PaymentFilters = {}): Promise<PaymentWithRelations[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("payments")
       .select("*, clinics(*), patients(*), appointments(*), services(*)")
       .eq("clinic_id", clinicId)
       .order("created_at", { ascending: false });
+    if (filters.dateFrom) {
+      query = query.gte("created_at", zonedDateTimeToUtcIso(filters.dateFrom, "00:00", filters.timezone ?? "America/Argentina/Mendoza"));
+    }
+    if (filters.dateTo) {
+      query = query.lt("created_at", zonedDateTimeToUtcIso(addDaysToDateString(filters.dateTo, 1), "00:00", filters.timezone ?? "America/Argentina/Mendoza"));
+    }
+    const { data, error } = await query;
     if (error) throw error;
     return (data ?? []) as PaymentWithRelations[];
   } catch (error) {
@@ -722,11 +730,12 @@ export async function getAppointments(
       .select("*, patients(*), professionals(*), services(*), locations(*)")
       .eq("clinic_id", clinicId)
       .order("starts_at");
-    if (filters.date) {
+    if (filters.date || filters.dateFrom || filters.dateTo) {
       const timezone = filters.timezone ?? "America/Argentina/Mendoza";
-      const start = zonedDateTimeToUtcIso(filters.date, "00:00", timezone);
-      const endDate = addDaysToDateString(filters.date, 1);
-      const end = zonedDateTimeToUtcIso(endDate, "00:00", timezone);
+      const dateFrom = filters.dateFrom ?? filters.date as string;
+      const dateTo = filters.dateTo ?? filters.date as string;
+      const start = zonedDateTimeToUtcIso(dateFrom, "00:00", timezone);
+      const end = zonedDateTimeToUtcIso(addDaysToDateString(dateTo, 1), "00:00", timezone);
       query = query.gte("starts_at", start).lt("starts_at", end);
     }
     if (filters.professionalId && filters.professionalId !== "all") {

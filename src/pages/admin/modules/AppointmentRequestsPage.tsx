@@ -1,8 +1,10 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ClipboardCheck, RefreshCw, XCircle } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
+import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { Button } from "../../../components/ui/Button";
 import { supabase } from "../../../lib/supabase";
+import { DateRangeValue, isDateInRange, resolveDateRange } from "../../../lib/date-range";
 import { AdminPageShell } from "./AdminPageShell";
 
 type AppointmentRequest = {
@@ -31,6 +33,8 @@ export function AppointmentRequestsPage() {
   const [savingId, setSavingId] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [range, setRange] = useState<DateRangeValue>(() => resolveDateRange("last_30_days"));
+  const [dateField, setDateField] = useState<"created" | "appointment">("created");
 
   async function loadRequests() {
     setLoading(true);
@@ -55,11 +59,17 @@ export function AppointmentRequestsPage() {
     loadRequests();
   }, []);
 
+  const visibleRequests = useMemo(() => requests.filter((request) => {
+    if (request.status === "pending") return true;
+    const reference = dateField === "appointment" ? request.appointment.starts_at : request.created_at;
+    return isDateInRange(reference, range, request.appointment.timezone);
+  }), [dateField, range, requests]);
+
   const metrics = useMemo(() => ({
-    pending: requests.filter((item) => item.status === "pending").length,
-    cancellations: requests.filter((item) => item.type === "cancellation" && item.status === "pending").length,
-    reschedules: requests.filter((item) => item.type === "reschedule" && item.status === "pending").length
-  }), [requests]);
+    pending: visibleRequests.filter((item) => item.status === "pending").length,
+    cancellations: visibleRequests.filter((item) => item.type === "cancellation" && item.status === "pending").length,
+    reschedules: visibleRequests.filter((item) => item.type === "reschedule" && item.status === "pending").length
+  }), [visibleRequests]);
 
   async function updateRequest(id: string, action: "approve_cancellation" | "reject" | "mark_managed") {
     setSavingId(id);
@@ -96,6 +106,11 @@ export function AppointmentRequestsPage() {
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
 
+      <div className="grid gap-4 xl:grid-cols-[1fr_220px]">
+        <DateRangeFilter defaultPreset="last_30_days" onChange={setRange} />
+        <label className="rounded-lg border border-clinic-line bg-white p-4 text-sm font-medium text-clinic-ink shadow-sm">Filtrar por<select value={dateField} onChange={(event) => setDateField(event.target.value as "created" | "appointment")} className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm"><option value="created">Fecha de solicitud</option><option value="appointment">Fecha del turno</option></select></label>
+      </div>
+
       <section className="grid gap-4 md:grid-cols-3">
         <Metric icon={<ClipboardCheck size={18} />} label="Pendientes" value={metrics.pending} />
         <Metric icon={<XCircle size={18} />} label="Cancelaciones" value={metrics.cancellations} />
@@ -112,11 +127,11 @@ export function AppointmentRequestsPage() {
         </div>
         {loading ? (
           <div className="px-5 py-10 text-center text-sm text-clinic-muted">Cargando solicitudes...</div>
-        ) : requests.length === 0 ? (
-          <div className="px-5 py-10 text-center text-sm text-clinic-muted">No hay solicitudes de pacientes.</div>
+        ) : visibleRequests.length === 0 ? (
+          <div className="px-5 py-10 text-center text-sm text-clinic-muted">No hay solicitudes para el período seleccionado.</div>
         ) : (
           <div className="divide-y divide-clinic-line">
-            {requests.map((request) => (
+            {visibleRequests.map((request) => (
               <article key={request.id} className="grid gap-4 px-5 py-4 xl:grid-cols-[1.2fr_1.2fr_170px_260px] xl:items-center">
                 <div>
                   <p className="font-semibold text-clinic-ink">{request.appointment.patient_name}</p>

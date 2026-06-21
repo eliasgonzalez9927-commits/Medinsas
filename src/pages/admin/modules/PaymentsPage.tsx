@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CreditCard, ExternalLink, RefreshCw, Settings, WalletCards } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
+import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { Button } from "../../../components/ui/Button";
 import {
   getDefaultClinic,
@@ -12,6 +13,7 @@ import {
   updatePaymentSettings
 } from "../../../lib/clinic-data";
 import { getPublicAppUrl } from "../../../lib/public-url";
+import { DateRangeValue, resolveDateRange } from "../../../lib/date-range";
 import { supabase } from "../../../lib/supabase";
 import { Clinic, PaymentEvent, PaymentSettings, PaymentWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
@@ -32,6 +34,7 @@ export function PaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [syncingId, setSyncingId] = useState("");
+  const [range, setRange] = useState<DateRangeValue>(() => resolveDateRange("this_month"));
 
   async function load() {
     setLoading(true);
@@ -40,7 +43,7 @@ export function PaymentsPage() {
       const loadedClinic = await getDefaultClinic();
       setClinic(loadedClinic);
       if (!loadedClinic) return;
-      setPayments(await getPayments(loadedClinic.id));
+      setPayments(await getPayments(loadedClinic.id, { dateFrom: range.dateFrom, dateTo: range.dateTo, timezone: loadedClinic.timezone ?? undefined }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar los pagos.");
     } finally {
@@ -50,7 +53,7 @@ export function PaymentsPage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [range.dateFrom, range.dateTo]);
 
   const summary = useMemo(() => {
     const approved = payments.filter((payment) => getEffectivePaymentStatus(payment) === "approved");
@@ -61,7 +64,9 @@ export function PaymentsPage() {
       approved: approved.length,
       pending: pending.length,
       expired: expired.length,
-      amount: approved.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0)
+      amount: approved.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0),
+      deposits: approved.filter((payment) => getPaymentKind(payment).type === "deposit").length,
+      fullPayments: approved.filter((payment) => getPaymentKind(payment).type === "full").length
     };
   }, [payments]);
 
@@ -86,17 +91,20 @@ export function PaymentsPage() {
       title="Pagos"
     >
       {error && <Message tone="error">{error}</Message>}
-      <section className="grid gap-4 md:grid-cols-5">
+      <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="this_month" onChange={setRange} />
+      <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
         <Metric label="Pagos" value={String(summary.total)} />
         <Metric label="Aprobados" value={String(summary.approved)} />
         <Metric label="Pendientes" value={String(summary.pending)} />
         <Metric label="Vencidos" value={String(summary.expired)} />
+        <Metric label="Señas" value={String(summary.deposits)} />
+        <Metric label="Pagos totales" value={String(summary.fullPayments)} />
         <Metric label="Cobrado" value={formatMoney(summary.amount)} />
       </section>
 
       <SectionCard className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
-          <h2 className="font-semibold text-clinic-ink">Listado de pagos</h2>
+          <div><h2 className="font-semibold text-clinic-ink">Listado de pagos</h2><p className="mt-1 text-sm text-clinic-muted">Creación de pago · {range.label}</p></div>
           <Link to="/admin/pagos/configuracion" className="text-sm font-semibold text-clinic-brand">Configurar Mercado Pago</Link>
         </div>
         {loading ? (
@@ -464,15 +472,15 @@ function formatRemaining(value: number) {
   return Number(value ?? 0) <= 0 ? "Sin saldo pendiente" : formatMoney(value);
 }
 
-function getPaymentKind(payment: PaymentWithRelations) {
+function getPaymentKind(payment: PaymentWithRelations): { type: "deposit" | "full"; label: string; remainingAmount: number } {
   const amount = Number(payment.amount ?? 0);
   const price = Number(payment.services?.price ?? 0);
   const remainingAmount = Math.max(price - amount, 0);
-  if (price > 0 && amount >= price) return { label: "Pago total", remainingAmount };
-  if (payment.services?.payment_required && !payment.services?.deposit_required) return { label: "Pago total", remainingAmount };
+  if (price > 0 && amount >= price) return { type: "full", label: "Pago total", remainingAmount };
+  if (payment.services?.payment_required && !payment.services?.deposit_required) return { type: "full", label: "Pago total", remainingAmount };
   const notesLookLikeDeposit = String(payment.notes ?? "").toLowerCase().includes("sena") || String(payment.notes ?? "").toLowerCase().includes("seña");
-  if (payment.services?.deposit_required || notesLookLikeDeposit) return { label: "Seña", remainingAmount };
-  return { label: "Pago total", remainingAmount };
+  if (payment.services?.deposit_required || notesLookLikeDeposit) return { type: "deposit", label: "Seña", remainingAmount };
+  return { type: "full", label: "Pago total", remainingAmount };
 }
 
 async function syncPaymentStatus(paymentId: string) {
