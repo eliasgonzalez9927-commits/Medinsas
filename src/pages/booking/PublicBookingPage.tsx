@@ -1,6 +1,6 @@
 import { FormEvent, InputHTMLAttributes, ReactNode, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { CalendarCheck, CheckCircle2, CreditCard, ExternalLink, MessageCircle, Stethoscope } from "lucide-react";
+import { CalendarCheck, CalendarPlus, CheckCircle2, CreditCard, Download, ExternalLink, MessageCircle, Stethoscope } from "lucide-react";
 import {
   createPublicBooking,
   getClinicBySlug,
@@ -61,6 +61,8 @@ export function PublicBookingPage() {
   const [result, setResult] = useState<PublicBookingResult | null>(null);
   const [checkoutUrl, setCheckoutUrl] = useState("");
   const [privateUrl, setPrivateUrl] = useState("");
+  const [publicCode, setPublicCode] = useState("");
+  const [publicToken, setPublicToken] = useState("");
   const [coverages, setCoverages] = useState<Array<{ id: string; name: string }>>([]);
   const [serviceQuery, setServiceQuery] = useState("");
   const [availableDates, setAvailableDates] = useState<string[]>([]);
@@ -263,7 +265,11 @@ export function PublicBookingPage() {
       } else {
         const linkResponse = await fetch(`/api/appointments/${booking.appointment_id}/public-link`, { method: "POST" });
         const linkData = await linkResponse.json().catch(() => ({}));
-        if (linkResponse.ok && linkData.url) setPrivateUrl(linkData.url);
+        if (linkResponse.ok && linkData.url) {
+          setPrivateUrl(linkData.url);
+          setPublicCode(linkData.public_code ?? "");
+          setPublicToken(linkData.token ?? "");
+        }
       }
       setResult(booking);
     } catch (err) {
@@ -293,6 +299,11 @@ export function PublicBookingPage() {
           <p className="mt-3 text-clinic-muted">
             {result.service} con Dr/a. {result.professional}, {formatDateTime(result.starts_at, result.timezone ?? clinic?.timezone ?? undefined)}.
           </p>
+          {!checkoutUrl && publicCode && (
+            <div className="mt-5 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-clinic-brand">
+              Código de turno: {publicCode}
+            </div>
+          )}
           <div className="mt-5 rounded-lg bg-teal-50 px-4 py-3 text-sm font-medium text-clinic-brand">
             Estado: {checkoutUrl ? "Pendiente de pago" : result.status === "pending" ? "Pendiente de confirmación" : "Confirmado"}
           </div>
@@ -305,10 +316,27 @@ export function PublicBookingPage() {
               Pagar con Mercado Pago
             </a>
           )}
-          {!checkoutUrl && privateUrl && (
-            <a href={privateUrl} className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-clinic-line px-5 py-3 font-semibold text-clinic-ink hover:bg-clinic-surface">
-              <ExternalLink size={18} /> Ver mi turno
-            </a>
+          {!checkoutUrl && (
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
+              {privateUrl && (
+                <a href={privateUrl} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-clinic-line px-5 py-3 font-semibold text-clinic-ink hover:bg-clinic-surface">
+                  <ExternalLink size={18} /> Ver mi turno
+                </a>
+              )}
+              <a
+                href={buildConfirmationGoogleCalendarUrl(result, clinic)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-clinic-brand px-5 py-3 font-semibold text-white hover:bg-teal-800"
+              >
+                <CalendarPlus size={18} /> Agregar a Google Calendar
+              </a>
+              {publicToken && (
+                <a href={`/api/appointments/public/${encodeURIComponent(publicToken)}/calendar.ics`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-clinic-line px-5 py-3 font-semibold text-clinic-ink hover:bg-clinic-surface">
+                  <Download size={18} /> Descargar .ics
+                </a>
+              )}
+            </div>
           )}
         </section>
       </main>
@@ -512,6 +540,25 @@ function formatDateTime(value: string, timezone = "America/Argentina/Mendoza") {
     timeStyle: "short",
     timeZone: timezone
   }).format(new Date(value));
+}
+
+function buildConfirmationGoogleCalendarUrl(result: PublicBookingResult, clinic: Clinic | null) {
+  const start = new Date(result.starts_at);
+  const end = new Date(result.end_time);
+  const timezone = result.timezone ?? clinic?.timezone ?? "America/Argentina/Mendoza";
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `Turno en ${clinic?.name ?? "Medin"} - ${result.service}`,
+    dates: `${toGoogleDate(start)}/${toGoogleDate(end)}`,
+    ctz: timezone,
+    location: clinic?.address ?? "",
+    details: `Servicio: ${result.service}\nProfesional: ${result.professional}`
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function toGoogleDate(date: Date) {
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
 
 function getDateInTimeZone(date: Date, timezone: string) {

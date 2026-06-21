@@ -7,6 +7,7 @@ type PublicAppointmentResponse = {
     public_code?: string | null;
     status: string | null;
     payment_status: string | null;
+    requires_online_payment: boolean;
     starts_at: string | null;
     end_time: string | null;
     patient_name: string;
@@ -73,6 +74,7 @@ export function PublicAppointmentPage() {
   const icsUrl = canUseCalendar ? `/api/appointments/public/${encodeURIComponent(token)}/calendar.ics` : "";
   const whatsappUrl = data?.appointment.clinic_phone ? buildWhatsAppUrl(data) : "";
   const pendingRequestTypes = new Set((data?.pending_requests ?? []).map((request) => request.type));
+  const requiresOnlinePayment = data?.appointment.requires_online_payment ?? false;
 
   async function copyAppointment() {
     if (!data) return;
@@ -134,12 +136,22 @@ export function PublicAppointmentPage() {
               <Detail label="Clínica" value={data.appointment.clinic_name} />
               <Detail label="Dirección" value={data.appointment.location_address ?? "A confirmar"} />
               <Detail label="Estado del turno" value={translateAppointmentStatus(data.appointment.status)} />
-              <Detail label="Estado del pago" value={translatePaymentStatus(data.payment?.status ?? data.appointment.payment_status)} />
-              <Detail label="Monto pagado" value={data.payment ? formatMoney(data.payment.amount, data.payment.currency) : "Sin pago registrado"} />
-              <Detail label="Tipo de pago" value={data.payment?.payment_type_label ?? "A confirmar"} />
-              <Detail label="Saldo pendiente" value={data.payment ? formatRemaining(data.payment.remaining_amount, data.payment.currency) : "A confirmar"} />
-              <Detail label="Acreditado" value={data.payment?.paid_at ? formatDateTime(data.payment.paid_at, data.appointment.timezone) : "A confirmar"} />
             </div>
+
+            {requiresOnlinePayment ? (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Detail label="Estado del pago" value={translatePaymentStatus(data.appointment.payment_status ?? data.payment?.status)} />
+                <Detail label="Monto pagado" value={data.payment ? formatMoney(data.payment.amount, data.payment.currency) : "Sin pago registrado"} />
+                <Detail label="Tipo de pago" value={data.payment?.payment_type_label ?? "A confirmar"} />
+                <Detail label="Saldo pendiente" value={data.payment ? formatRemaining(data.payment.remaining_amount, data.payment.currency) : "A confirmar"} />
+                <Detail label="Acreditado" value={data.payment?.paid_at ? formatDateTime(data.payment.paid_at, data.appointment.timezone) : "A confirmar"} />
+              </div>
+            ) : (
+              <div className="mt-5 rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900">
+                <p className="font-semibold">Este turno no requiere pago online.</p>
+                <p className="mt-1 text-teal-800">La clínica confirmará las condiciones de atención.</p>
+              </div>
+            )}
 
             {!canUseCalendar && (
               <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
@@ -245,23 +257,26 @@ function buildCopyText(data: PublicAppointmentResponse) {
     `Clínica: ${data.appointment.clinic_name}`,
     `Dirección: ${data.appointment.location_address ?? "A confirmar"}`,
     `Estado del turno: ${translateAppointmentStatus(data.appointment.status)}`,
-    `Estado del pago: ${translatePaymentStatus(data.payment?.status ?? data.appointment.payment_status)}`
+    `Estado del pago: ${data.appointment.requires_online_payment ? translatePaymentStatus(data.appointment.payment_status ?? data.payment?.status) : "No requiere pago online"}`
   ].join("\n");
 }
 
 function translatePaymentStatus(status?: string | null) {
   const labels: Record<string, string> = {
-    approved: "Aprobado",
-    deposit_paid: "Seña pagada",
-    paid: "Pagado",
-    pending: "Pendiente",
+    approved: "Pago acreditado",
+    unpaid: "No requiere pago online",
+    not_required: "No requiere pago online",
+    deposit_paid: "Reservado con seña",
+    paid: "Pago acreditado",
+    pending: "Pendiente de pago",
     deposit_pending: "Seña pendiente",
     in_process: "En proceso",
+    failed: "Pago fallido",
     rejected: "Rechazado",
     cancelled: "Cancelado",
     refunded: "Reintegrado",
     charged_back: "Contracargo",
-    expired: "Expirado"
+    expired: "Pago vencido"
   };
   return labels[status ?? ""] ?? status ?? "Sin estado";
 }

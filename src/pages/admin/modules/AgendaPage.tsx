@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, UserCheck, UserX } from "lucide-react";
+import { Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
@@ -56,6 +56,7 @@ export function AgendaPage() {
   const [professionalId, setProfessionalId] = useState("all");
   const [serviceId, setServiceId] = useState("all");
   const [status, setStatus] = useState<"all" | AppointmentStatus>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -168,6 +169,25 @@ export function AgendaPage() {
       freeSlots: slots.length
     };
   }, [appointments, slots]);
+
+  const visibleAppointments = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return appointments;
+
+    return appointments.filter((appointment) => {
+      const values = [
+        appointment.public_code,
+        appointment.patient?.first_name,
+        appointment.patient?.last_name,
+        appointment.patient?.document_number,
+        appointment.patient?.phone,
+        appointment.professional?.name,
+        appointment.professional?.last_name,
+        appointment.service?.name
+      ];
+      return values.filter(Boolean).join(" ").toLowerCase().includes(query);
+    });
+  }, [appointments, searchQuery]);
 
   function openCreate() {
     setFormOpen(true);
@@ -391,6 +411,18 @@ export function AgendaPage() {
             <option value="no_show">No asistio</option>
           </Select>
         </div>
+        <label className="mt-4 block">
+          <span className="text-sm font-medium text-clinic-ink">Buscar turno</span>
+          <div className="relative mt-2">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-clinic-muted" size={16} />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Código MED, paciente, DNI, teléfono, profesional o servicio"
+              className="h-10 w-full rounded-lg border border-clinic-line py-2 pl-9 pr-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+            />
+          </div>
+        </label>
       </SectionCard>
 
       <SectionCard className="overflow-hidden">
@@ -402,13 +434,13 @@ export function AgendaPage() {
         </div>
         {loading ? (
           <div className="px-5 py-10 text-center text-sm text-clinic-muted">Cargando turnos...</div>
-        ) : appointments.length === 0 ? (
+        ) : visibleAppointments.length === 0 ? (
           <div className="px-5 py-10 text-center text-sm text-clinic-muted">
-            No hay turnos para los filtros seleccionados.
+            No hay turnos que coincidan con los filtros o la búsqueda.
           </div>
         ) : (
           <div className="divide-y divide-clinic-line">
-            {appointments.map((appointment) => (
+            {visibleAppointments.map((appointment) => (
               <article
                 key={appointment.id}
                 className="grid gap-4 px-5 py-4 lg:grid-cols-[90px_1fr_1fr_170px_360px] lg:items-center"
@@ -423,6 +455,7 @@ export function AgendaPage() {
                   <p className="text-sm text-clinic-muted">
                     Origen: {sourceLabel(appointment.source)} · {appointment.appointment_type === "telemedicine" ? "Telemedicina" : "Presencial"}
                   </p>
+                  {appointment.public_code && <p className="mt-1 text-xs font-semibold text-clinic-brand">Código: {appointment.public_code}</p>}
                 </div>
                 <div>
                   <p className="font-medium text-clinic-ink">

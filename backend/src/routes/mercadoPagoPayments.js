@@ -1191,6 +1191,7 @@ async function toPublicAppointmentResponse(appointment) {
       public_code: appointment.public_code ?? null,
       status: appointment.status,
       payment_status: appointment.payment_status ?? null,
+      requires_online_payment: isPublicPaymentAllowed(appointment),
       starts_at: appointment.starts_at,
       end_time: appointment.end_time,
       patient_name: detail.patientName,
