@@ -1,6 +1,6 @@
 import { FormEvent, InputHTMLAttributes, ReactNode, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { CalendarCheck, CheckCircle2, CreditCard, MessageCircle, Stethoscope } from "lucide-react";
+import { CalendarCheck, CheckCircle2, CreditCard, ExternalLink, MessageCircle, Stethoscope } from "lucide-react";
 import {
   createPublicBooking,
   getClinicBySlug,
@@ -60,7 +60,11 @@ export function PublicBookingPage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<PublicBookingResult | null>(null);
   const [checkoutUrl, setCheckoutUrl] = useState("");
+  const [privateUrl, setPrivateUrl] = useState("");
   const [coverages, setCoverages] = useState<Array<{ id: string; name: string }>>([]);
+  const [serviceQuery, setServiceQuery] = useState("");
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [datesLoading, setDatesLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -134,6 +138,12 @@ export function PublicBookingPage() {
     return professionals.filter((professional) => ids.has(professional.id));
   }, [professionals, selectedService]);
 
+  const filteredServices = useMemo(() => {
+    const query = serviceQuery.trim().toLowerCase();
+    if (!query) return services;
+    return services.filter((service) => [service.name, service.specialty?.name ?? "", ...service.professionals.map((professional) => `${professional.name} ${professional.last_name}`)].join(" ").toLowerCase().includes(query));
+  }, [services, serviceQuery]);
+
   useEffect(() => {
     if (!selectedService) return;
     if (!compatibleProfessionals.some((professional) => professional.id === professionalId)) {
@@ -173,6 +183,24 @@ export function PublicBookingPage() {
       })
       .finally(() => setSlotsLoading(false));
   }, [clinic?.slug, professionalId, serviceId, date]);
+
+  useEffect(() => {
+    if (!clinic || !professionalId || !serviceId) return;
+    let cancelled = false;
+    setDatesLoading(true);
+    const timezone = clinic.timezone ?? "America/Argentina/Mendoza";
+    const candidates = Array.from({ length: 21 }, (_, index) => addDays(getDateInTimeZone(new Date(), timezone), index));
+    Promise.all(candidates.map(async (candidate) => {
+      const available = await getPublicAvailableSlots({ clinicSlug: clinic.slug, professionalId, serviceId, date: candidate }).catch(() => []);
+      return available.length ? candidate : null;
+    })).then((results) => {
+      if (cancelled) return;
+      const available = results.filter(Boolean) as string[];
+      setAvailableDates(available);
+      if (available.length && !available.includes(date)) setDate(available[0]);
+    }).finally(() => { if (!cancelled) setDatesLoading(false); });
+    return () => { cancelled = true; };
+  }, [clinic?.slug, clinic?.timezone, professionalId, serviceId]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -232,6 +260,10 @@ export function PublicBookingPage() {
           );
         }
         setCheckoutUrl(paymentData.checkout_url);
+      } else {
+        const linkResponse = await fetch(`/api/appointments/${booking.appointment_id}/public-link`, { method: "POST" });
+        const linkData = await linkResponse.json().catch(() => ({}));
+        if (linkResponse.ok && linkData.url) setPrivateUrl(linkData.url);
       }
       setResult(booking);
     } catch (err) {
@@ -256,13 +288,13 @@ export function PublicBookingPage() {
             <CheckCircle2 size={28} />
           </div>
           <h1 className="mt-5 text-2xl font-semibold text-clinic-ink">
-            {checkoutUrl ? "Para confirmar tu turno, completa el pago." : "Tu turno fue solicitado correctamente."}
+            {checkoutUrl ? "Para confirmar tu turno, completa el pago." : result.status === "confirmed" ? "Tu turno fue confirmado" : "Tu solicitud de turno fue recibida"}
           </h1>
           <p className="mt-3 text-clinic-muted">
             {result.service} con Dr/a. {result.professional}, {formatDateTime(result.starts_at, result.timezone ?? clinic?.timezone ?? undefined)}.
           </p>
           <div className="mt-5 rounded-lg bg-teal-50 px-4 py-3 text-sm font-medium text-clinic-brand">
-            Estado: {checkoutUrl ? "pago pendiente" : result.status === "pending" ? "pendiente de confirmacion" : "confirmado"}
+            Estado: {checkoutUrl ? "Pendiente de pago" : result.status === "pending" ? "Pendiente de confirmación" : "Confirmado"}
           </div>
           {checkoutUrl && (
             <a
@@ -271,6 +303,11 @@ export function PublicBookingPage() {
             >
               <CreditCard size={18} />
               Pagar con Mercado Pago
+            </a>
+          )}
+          {!checkoutUrl && privateUrl && (
+            <a href={privateUrl} className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-clinic-line px-5 py-3 font-semibold text-clinic-ink hover:bg-clinic-surface">
+              <ExternalLink size={18} /> Ver mi turno
             </a>
           )}
         </section>
@@ -302,12 +339,14 @@ export function PublicBookingPage() {
             </section>
           ) : (
             <>
-              <StepCard number="1" title="Elegi especialidad o servicio">
+              <StepCard number="1" title="¿Qué necesitás?">
+                <input value={serviceQuery} onChange={(event) => setServiceQuery(event.target.value)} placeholder="Buscá por especialidad, servicio o profesional" className="mb-3 h-11 w-full rounded-lg border border-clinic-line bg-white px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100" />
+                <div className="mb-4 flex flex-wrap gap-2">{["Consulta", "Odontología", "Dermatología", "Kinesiología", "Traumatología", "Estudios", "Control"].map((label) => <button key={label} type="button" onClick={() => setServiceQuery(label)} className="rounded-lg border border-clinic-line bg-clinic-surface px-3 py-1.5 text-xs font-semibold text-clinic-muted hover:bg-white">{label}</button>)}</div>
                 <div className="grid gap-3">
-                  {services.length === 0 ? (
+                  {filteredServices.length === 0 ? (
                     <p className="text-sm text-clinic-muted">No hay servicios reservables online.</p>
                   ) : (
-                    services.map((service) => (
+                    filteredServices.map((service) => (
                       <label
                         key={service.id}
                         className={`cursor-pointer rounded-lg border p-4 ${
@@ -330,21 +369,23 @@ export function PublicBookingPage() {
                         </span>
                         {requiresOnlinePayment(service) && (
                           <span className="mt-2 inline-flex rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
-                            Requiere pago online {service.deposit_required ? `· Sena ${formatMoney(service.deposit_amount ?? service.price ?? 0)}` : ""}
+                            {service.deposit_required ? "Requiere seña para reservar" : "Requiere pago online"}
                           </span>
                         )}
+                        {!requiresOnlinePayment(service) && <span className="mt-2 block text-xs text-clinic-muted">Sin pago online</span>}
                       </label>
                     ))
                   )}
                 </div>
               </StepCard>
 
-              <StepCard number="2" title="Elegi profesional">
+              <StepCard number="2" title="Profesional">
                 <select
                   value={professionalId}
                   onChange={(event) => setProfessionalId(event.target.value)}
                   className="h-11 w-full rounded-lg border border-clinic-line bg-white px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
                 >
+                  <option value={compatibleProfessionals[0]?.id ?? ""}>Cualquier profesional disponible</option>
                   {compatibleProfessionals.map((professional) => (
                     <option key={professional.id} value={professional.id}>
                       Dr/a. {professional.name} {professional.last_name}
@@ -354,11 +395,15 @@ export function PublicBookingPage() {
               </StepCard>
 
               <StepCard number="3" title="Fecha y horario">
+                <p className="mb-3 text-sm text-clinic-muted">{datesLoading ? "Buscando el próximo turno disponible..." : availableDates.length ? `Próximo turno disponible: ${formatDate(availableDates[0])}` : "No encontramos turnos disponibles para este servicio. Contactá a la clínica."}</p>
+                <div className="mb-3 flex flex-wrap gap-2"><button type="button" onClick={() => availableDates[0] && setDate(availableDates[0])} className="rounded-lg border border-clinic-line px-3 py-2 text-xs font-semibold">Primer turno disponible</button><button type="button" onClick={() => { const next = availableDates.find((value) => value <= addDays(getDateInTimeZone(new Date(), clinic?.timezone ?? "America/Argentina/Mendoza"), 6)); if (next) setDate(next); }} className="rounded-lg border border-clinic-line px-3 py-2 text-xs font-semibold">Esta semana</button><button type="button" onClick={() => { const next = availableDates.find((value) => value >= addDays(getDateInTimeZone(new Date(), clinic?.timezone ?? "America/Argentina/Mendoza"), 7)); if (next) setDate(next); }} className="rounded-lg border border-clinic-line px-3 py-2 text-xs font-semibold">Próxima semana</button></div>
+                <div className="mb-3 flex flex-wrap gap-2">{availableDates.map((value) => <button key={value} type="button" onClick={() => setDate(value)} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${date === value ? "border-clinic-brand bg-teal-50 text-clinic-brand" : "border-clinic-line bg-white text-clinic-ink"}`}>{formatDate(value)}</button>)}</div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <input
                     type="date"
                     value={date}
                     onChange={(event) => setDate(event.target.value)}
+                    min={availableDates[0]}
                     className="h-11 rounded-lg border border-clinic-line bg-white px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
                   />
                   <select
@@ -478,6 +523,16 @@ function getDateInTimeZone(date: Date, timezone: string) {
   }).formatToParts(date);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
+}
+
+function addDays(value: string, days: number) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("es-AR", { weekday: "short", day: "numeric", month: "short" }).format(new Date(`${value}T12:00:00`));
 }
 
 function requiresOnlinePayment(service?: ServiceWithRelations | null) {

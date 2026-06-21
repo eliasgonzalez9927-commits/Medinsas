@@ -313,6 +313,19 @@ mercadoPagoPaymentsRouter.get("/appointments/public/:token", async (req, res, ne
   }
 });
 
+mercadoPagoPaymentsRouter.post("/appointments/:id/public-link", async (req, res, next) => {
+  try {
+    const appointmentId = String(req.params.id ?? "");
+    if (!isUuid(appointmentId)) return res.status(400).json({ error: "INVALID_APPOINTMENT_ID" });
+    const appointment = await loadAppointmentDetails(appointmentId);
+    if (!appointment || appointment.source !== "online") return res.status(404).json({ error: "APPOINTMENT_NOT_FOUND" });
+    const publicLink = await ensureAppointmentPublicLink(appointmentId);
+    res.status(200).json({ url: buildPublicAppointmentUrl(publicLink.token), token: publicLink.token, public_code: appointment.public_code ?? null });
+  } catch (error) {
+    next(error);
+  }
+});
+
 mercadoPagoPaymentsRouter.post("/appointments/public/:token/requests", async (req, res, next) => {
   try {
     const token = String(req.params.token ?? "");

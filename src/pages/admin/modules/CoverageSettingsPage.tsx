@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Check, Plus, Search, X } from "lucide-react";
+import { Check, Plus, Search } from "lucide-react";
 import { AdminPageShell } from "./AdminPageShell";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
@@ -71,6 +71,7 @@ export function CoverageSettingsPage() {
   return <AdminPageShell title="Coberturas aceptadas" eyebrow="Configuración" description="Catálogo operativo de obras sociales, prepagas y agentes del seguro. La reserva no se bloquea si el paciente no tiene cobertura." onRefresh={load}>
     {notice && <Alert tone="success">{notice}</Alert>}
     {error && <Alert tone="error">{error}</Alert>}
+    {!coverages.length && !error && <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Todavía no cargaste el catálogo de coberturas. Importá el CSV oficial RNAS desde Importaciones o agregá una cobertura manual.</div>}
     <section className="grid gap-6 xl:grid-cols-[1.25fr_.75fr]">
       <SectionCard className="overflow-hidden">
         <div className="border-b border-clinic-line p-5">
