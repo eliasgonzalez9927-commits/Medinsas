@@ -70,6 +70,7 @@ export const ADMIN_MODULES: AdminModuleDefinition[] = [
 
   { key: "reports", label: "Reportes", path: "/admin/reportes", icon: PieChart, group: "management", status: "beta", moduleFlag: "reportes" },
   { key: "onboarding", label: "Onboarding", path: "/admin/onboarding", icon: ClipboardCheck, group: "management", status: "beta" },
+  { key: "my_plan", label: "Mi plan", path: "/admin/mi-plan", icon: ReceiptText, group: "management", status: "active" },
   { key: "settings", label: "Configuración", path: "/admin/configuracion", icon: Settings, group: "management", status: "active" },
 
   { key: "superadmin", label: "Superadmin", path: "/superadmin", icon: ShieldCheck, group: "platform", status: "active", allowedRoles: ["platform_admin"] },

@@ -40,6 +40,7 @@ export function SuperadminDashboard() {
   return (
     <SuperadminShell title="Superadmin" description="Vista global SaaS de clínicas, actividad y módulos.">
       {error && <Message>{error}</Message>}
+      <div className="mb-5 flex flex-wrap gap-2"><Link to="/superadmin/planes" className="rounded-lg border border-clinic-line bg-white px-4 py-2 text-sm font-semibold text-clinic-ink">Planes</Link><Link to="/superadmin/suscripciones" className="rounded-lg border border-clinic-line bg-white px-4 py-2 text-sm font-semibold text-clinic-ink">Suscripciones</Link></div>
       <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         <Metric label="Clínicas activas" value={String(data?.cards.active ?? 0)} />
         <Metric label="Clínicas en trial" value={String(data?.cards.trial ?? 0)} />

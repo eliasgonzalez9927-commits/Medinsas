@@ -19,6 +19,7 @@ import { ProfessionalProfilePage } from "./pages/admin/modules/ProfessionalProfi
 import { SettingsLocationsPage, SettingsNotificationsPage, SettingsPage, SettingsUsersPage } from "./pages/admin/modules/SettingsPage";
 import { CoverageSettingsPage } from "./pages/admin/modules/CoverageSettingsPage";
 import { ComingSoonPage } from "./pages/admin/modules/ComingSoonPage";
+import { MyPlanPage } from "./pages/admin/modules/MyPlanPage";
 import { ImportsPage } from "./pages/admin/modules/ImportsPage";
 import { ServicesPage } from "./pages/admin/modules/ServicesPage";
 import { PaymentFailurePage, PaymentPendingPage, PaymentSuccessPage } from "./pages/payments/PaymentReturnPage";
@@ -27,6 +28,7 @@ import { ClinicLanding } from "./pages/landing/ClinicLanding";
 import { PatientBooking } from "./pages/patient/PatientBooking";
 import { PublicAppointmentPage } from "./pages/patient/PublicAppointmentPage";
 import { SuperadminClinicDetailPage, SuperadminClinicsPage, SuperadminDashboard } from "./pages/superadmin/SuperadminPages";
+import { SuperadminPlansPage, SuperadminSubscriptionsPage } from "./pages/superadmin/SaasBillingPages";
 
 function HomeRedirect() {
   const { role, loading } = useAuth();
@@ -56,6 +58,7 @@ export function App() {
       <Route element={<ProtectedRoute roles={ADMIN_ROLES} />}>
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/onboarding" element={<OnboardingPage />} />
+        <Route path="/admin/mi-plan" element={<MyPlanPage />} />
         <Route path="/admin/agenda" element={<AgendaPage />} />
         <Route path="/admin/solicitudes" element={<AppointmentRequestsPage />} />
         <Route path="/admin/profesionales" element={<ProfessionalsPage />} />
@@ -90,6 +93,8 @@ export function App() {
       </Route>
       <Route element={<ProtectedRoute roles={["platform_admin"]} />}>
         <Route path="/superadmin" element={<SuperadminDashboard />} />
+        <Route path="/superadmin/planes" element={<SuperadminPlansPage />} />
+        <Route path="/superadmin/suscripciones" element={<SuperadminSubscriptionsPage />} />
         <Route path="/superadmin/clinicas" element={<SuperadminClinicsPage />} />
         <Route path="/superadmin/clinicas/:id" element={<SuperadminClinicDetailPage />} />
       </Route>

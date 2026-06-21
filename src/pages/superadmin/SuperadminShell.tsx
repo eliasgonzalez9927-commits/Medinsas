@@ -1,0 +1,3 @@
+import { Navigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
+export function SuperadminShell({title,description,children}:{title:string;description:string;children:React.ReactNode}) { const {role}=useAuth(); if(role!=="platform_admin") return <Navigate to="/admin" replace/>; return <main className="min-h-screen bg-clinic-surface px-4 py-8"><section className="mx-auto max-w-7xl"><p className="text-sm font-semibold text-clinic-brand">Plataforma</p><h1 className="mt-2 text-3xl font-semibold text-clinic-ink">{title}</h1><p className="mt-2 text-clinic-muted">{description}</p><div className="mt-6">{children}</div></section></main>; }
