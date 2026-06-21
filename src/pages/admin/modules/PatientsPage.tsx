@@ -162,7 +162,7 @@ export function PatientsPage() {
       {error && <Message tone="error">{error}</Message>}
 
       <div className="flex flex-wrap gap-2">
-        <Link to="/admin/importaciones" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink hover:bg-clinic-surface"><FileUp size={16} /> Importar pacientes</Link>
+        <Link to="/admin/importaciones?type=patients" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink hover:bg-clinic-surface"><FileUp size={16} /> Importar pacientes</Link>
         <Button icon={<Download size={16} />} onClick={exportPatients}>Exportar pacientes</Button>
         <Button icon={<Download size={16} />} onClick={downloadTemplate}>Descargar plantilla CSV</Button>
       </div>
