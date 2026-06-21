@@ -19,6 +19,7 @@ create policy "public can read accepted clinic coverages"
   using (accepted = true);
 
 drop function if exists public.create_public_booking(text, uuid, uuid, timestamptz, text, text, text, text, text, text, text);
+drop function if exists public.create_public_booking(text, uuid, uuid, timestamptz, text, text, text, text, text, text, text, uuid, text);
 
 create function public.create_public_booking(
   p_clinic_slug text,
