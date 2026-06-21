@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { CalendarDays, Copy, Edit3, Plus } from "lucide-react";
+import { CalendarDays, Copy, Download, Edit3, FileUp, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
@@ -149,6 +149,23 @@ export function ProfessionalsPage() {
     }
   }
 
+  function downloadTemplate() {
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(new Blob(["nombre,apellido,email,telefono,especialidad,matricula,activo,bio"], { type: "text/csv;charset=utf-8" }));
+    anchor.download = "profesionales_template.csv";
+    anchor.click();
+    URL.revokeObjectURL(anchor.href);
+  }
+
+  function exportProfessionals() {
+    const lines = ["nombre,apellido,email,telefono,matricula,activo,bio", ...professionals.map((item) => [item.name, item.last_name, item.email ?? "", item.phone ?? "", item.license_number ?? "", item.active, item.bio ?? ""].map((value) => `\"${String(value).replace(/\"/g, '\"\"')}\"`).join(","))];
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" }));
+    anchor.download = "profesionales.csv";
+    anchor.click();
+    URL.revokeObjectURL(anchor.href);
+  }
+
   return (
     <AdminPageShell
       actionLabel="Crear profesional"
@@ -164,6 +181,7 @@ export function ProfessionalsPage() {
         </Message>
       )}
       {error && <Message tone="error">{error}</Message>}
+      <div className="flex flex-wrap gap-2"><Link to="/admin/importaciones" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink"><FileUp size={16} /> Importar profesionales</Link><Button icon={<Download size={16} />} onClick={exportProfessionals}>Exportar profesionales</Button><Button icon={<Download size={16} />} onClick={downloadTemplate}>Descargar plantilla CSV</Button></div>
 
       {formOpen && (
         <SectionCard className="p-5">
