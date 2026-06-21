@@ -1,4 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { SectionCard } from "../../../components/admin/SectionCard";
@@ -46,6 +47,7 @@ type AppointmentForm = {
 const today = new Date().toISOString().slice(0, 10);
 
 export function AgendaPage() {
+  const [searchParams] = useSearchParams();
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
   const [professionals, setProfessionals] = useState<ProfessionalWithRelations[]>([]);
@@ -128,6 +130,10 @@ export function AgendaPage() {
   useEffect(() => {
     loadBase();
   }, []);
+
+  useEffect(() => {
+    setSearchQuery(searchParams.get("search") ?? "");
+  }, [searchParams]);
 
   useEffect(() => {
     if (!clinic) return;

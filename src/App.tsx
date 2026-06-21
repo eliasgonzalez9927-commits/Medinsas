@@ -8,21 +8,19 @@ import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { AgendaPage } from "./pages/admin/modules/AgendaPage";
 import { AppointmentRequestsPage } from "./pages/admin/modules/AppointmentRequestsPage";
 import { AvailabilityPage } from "./pages/admin/modules/AvailabilityPage";
-import { BillingDocumentsPage, BillingPage, BillingSettingsPage } from "./pages/admin/modules/BillingPage";
-import { FinancingPage, ReportsPage } from "./pages/admin/modules/SecondaryModulePage";
+import { ReportsPage } from "./pages/admin/modules/SecondaryModulePage";
 import { MessagesPage } from "./pages/admin/modules/MessagesPage";
 import { OnlineBookingPage } from "./pages/admin/modules/OnlineBookingPage";
 import { OnboardingPage } from "./pages/admin/modules/OnboardingPage";
 import { PatientsPage } from "./pages/admin/modules/PatientsPage";
 import { PaymentDetailPage, PaymentSettingsPage, PaymentsPage } from "./pages/admin/modules/PaymentsPage";
-import { NewPrescriptionPage, PrescriptionSettingsPage, PrescriptionsPage } from "./pages/admin/modules/PrescriptionsPage";
 import { ProfessionalsPage } from "./pages/admin/modules/ProfessionalsPage";
 import { ProfessionalProfilePage } from "./pages/admin/modules/ProfessionalProfilePage";
 import { SettingsLocationsPage, SettingsNotificationsPage, SettingsPage, SettingsUsersPage } from "./pages/admin/modules/SettingsPage";
 import { CoverageSettingsPage } from "./pages/admin/modules/CoverageSettingsPage";
+import { ComingSoonPage } from "./pages/admin/modules/ComingSoonPage";
 import { ImportsPage } from "./pages/admin/modules/ImportsPage";
 import { ServicesPage } from "./pages/admin/modules/ServicesPage";
-import { WhatsAppPage } from "./pages/admin/modules/WhatsAppPage";
 import { PaymentFailurePage, PaymentPendingPage, PaymentSuccessPage } from "./pages/payments/PaymentReturnPage";
 import { PublicBookingPage } from "./pages/booking/PublicBookingPage";
 import { ClinicLanding } from "./pages/landing/ClinicLanding";
@@ -71,18 +69,18 @@ export function App() {
         <Route path="/admin/tratamientos" element={<ServicesPage />} />
         <Route path="/admin/booking" element={<OnlineBookingPage />} />
         <Route path="/admin/reservas-online" element={<OnlineBookingPage />} />
-        <Route path="/admin/whatsapp" element={<WhatsAppPage />} />
+        <Route path="/admin/whatsapp" element={<ComingSoonPage title="WhatsApp" description="Próximamente vas a poder usar automatizaciones, confirmaciones y recordatorios mediante una integración oficial de WhatsApp." />} />
         <Route path="/admin/mensajes" element={<MessagesPage />} />
         <Route path="/admin/pagos" element={<PaymentsPage />} />
         <Route path="/admin/pagos/configuracion" element={<PaymentSettingsPage />} />
         <Route path="/admin/pagos/:id" element={<PaymentDetailPage />} />
-        <Route path="/admin/financiacion" element={<FinancingPage />} />
-        <Route path="/admin/facturacion" element={<BillingPage />} />
-        <Route path="/admin/facturacion/comprobantes" element={<BillingDocumentsPage />} />
-        <Route path="/admin/facturacion/configuracion" element={<BillingSettingsPage />} />
-        <Route path="/admin/recetarios" element={<PrescriptionsPage />} />
-        <Route path="/admin/recetarios/nuevo" element={<NewPrescriptionPage />} />
-        <Route path="/admin/recetarios/configuracion" element={<PrescriptionSettingsPage />} />
+        <Route path="/admin/financiacion" element={<ComingSoonPage title="Financiación" description="Próximamente vas a poder preparar opciones de financiación de tratamientos y conectar proveedores de scoring cuando estén validados." />} />
+        <Route path="/admin/facturacion" element={<ComingSoonPage title="Facturación" description="Próximamente vas a poder gestionar comprobantes internos e integraciones fiscales. No se emitirán facturas reales hasta contar con la integración correspondiente." />} />
+        <Route path="/admin/facturacion/comprobantes" element={<ComingSoonPage title="Comprobantes" description="La emisión y gestión de comprobantes estará disponible cuando el módulo de facturación esté operativo." />} />
+        <Route path="/admin/facturacion/configuracion" element={<ComingSoonPage title="Configuración fiscal" description="Los datos fiscales e integración ARCA se habilitarán junto con el módulo de facturación operativo." />} />
+        <Route path="/admin/recetarios" element={<ComingSoonPage title="Recetarios" description="Próximamente vas a poder trabajar con recetarios internos, órdenes e indicaciones bajo el circuito clínico y regulatorio correspondiente." />} />
+        <Route path="/admin/recetarios/nuevo" element={<ComingSoonPage title="Nuevo documento" description="La creación de documentos médicos se habilitará junto con las validaciones profesionales y de trazabilidad necesarias." />} />
+        <Route path="/admin/recetarios/configuracion" element={<ComingSoonPage title="Configuración de recetarios" description="La configuración de matrícula, firma e integraciones aprobadas estará disponible cuando el módulo esté operativo." />} />
         <Route path="/admin/reportes" element={<ReportsPage />} />
         <Route path="/admin/configuracion" element={<SettingsPage />} />
         <Route path="/admin/configuracion/sedes" element={<SettingsLocationsPage />} />
