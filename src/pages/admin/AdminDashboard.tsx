@@ -101,6 +101,7 @@ export function AdminDashboard() {
   }, [appointments]);
 
   const periodNoShow = appointments.filter((item) => item.status === "no_show").length;
+  const overbookings = appointments.filter((item) => item.is_overbooking).length;
   const newPatients = patients.filter((patient) => isDateInRange(patient.created_at, range, clinic?.timezone ?? undefined)).length;
   const onlineRequests = appointments.filter((item) => item.source === "online" && item.status === "pending").length;
   const professionalsWithoutSchedule = professionals.filter((professional) => professional.active && !professional.availability_rules?.length).length;
@@ -136,7 +137,7 @@ export function AdminDashboard() {
         <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="today" onChange={setRange} />
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-          <Metric title={isToday ? "Turnos hoy" : "Turnos del período"} value={String(summary.total)} helper="Actividad programada" icon={<Clock3 size={19} />} />
+          <Metric title={isToday ? "Turnos hoy" : "Turnos del período"} value={String(summary.total)} helper={overbookings ? `Incluye ${overbookings} sobreturno${overbookings === 1 ? "" : "s"}` : "Actividad programada"} icon={<Clock3 size={19} />} />
           <Metric title="Pendientes" value={String(summary.pending)} helper="Para confirmar" icon={<CalendarDays size={19} />} tone="warning" />
           <Metric title="Proximo turno" value={summary.nextAppointment ? formatTime(summary.nextAppointment.starts_at, clinic?.timezone ?? undefined) : "--"} helper={summary.nextAppointment?.patient ? `${summary.nextAppointment.patient.first_name} ${summary.nextAppointment.patient.last_name}` : "Sin proximos turnos"} icon={<CalendarCheck2 size={19} />} />
           <Metric title="Confirmados" value={String(summary.confirmed)} helper="Pacientes listos" icon={<CheckCircle2 size={19} />} tone="success" />

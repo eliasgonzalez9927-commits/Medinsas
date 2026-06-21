@@ -65,6 +65,10 @@ export function canManageAppointments(role?: UserRole | null) {
   return getPermissions(role).canManageAppointments;
 }
 
+export function canCreateOverbooking(role?: UserRole | null) {
+  return Boolean(role && ["platform_admin", "clinic_admin", "receptionist", "admin"].includes(role));
+}
+
 export function canManagePatients(role?: UserRole | null) {
   return getPermissions(role).canManagePatients;
 }

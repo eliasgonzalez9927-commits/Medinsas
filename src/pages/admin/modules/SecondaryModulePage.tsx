@@ -48,6 +48,7 @@ export function ReportsPage() {
       collected: approved.reduce((total, payment) => total + Number(payment.amount ?? 0), 0),
       cancellations: data.appointments.filter((appointment) => appointment.status === "cancelled").length,
       reschedules: data.appointments.filter((appointment) => appointment.status === "rescheduled").length,
+      overbookings: data.appointments.filter((appointment) => appointment.is_overbooking).length,
       occupancy: data.professionals.filter((professional) => professional.active).length ? Math.round((data.appointments.length / data.professionals.filter((professional) => professional.active).length) * 100) : 0,
       topServices: [...serviceCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
     };
@@ -60,12 +61,13 @@ export function ReportsPage() {
       title="Reportes"
     >
       <DateRangeFilter defaultPreset="this_month" onChange={setRange} />
-      <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
         <ReportMetric label="Turnos" value={String(metrics.appointments)} />
         <ReportMetric label="Pacientes nuevos" value={String(metrics.newPatients)} />
         <ReportMetric label="Cobrado" value={new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(metrics.collected)} />
         <ReportMetric label="Cancelaciones" value={String(metrics.cancellations)} />
         <ReportMetric label="Reprogramaciones" value={String(metrics.reschedules)} />
+        <ReportMetric label="Sobreturnos" value={String(metrics.overbookings)} />
         <ReportMetric label="Ocupación estimada" value={`${metrics.occupancy}%`} />
       </section>
       <SectionCard className="p-5">

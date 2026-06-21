@@ -13,6 +13,7 @@ import {
   Appointment,
   AppointmentFilters,
   AppointmentInput,
+  OverbookingInput,
   AppointmentStatus,
   AppointmentWithRelations,
   AvailableSlot,
@@ -776,6 +777,67 @@ export async function createAppointment(data: AppointmentInput): Promise<Appoint
   }
 }
 
+export async function createOverbooking(data: OverbookingInput): Promise<Appointment> {
+  try {
+    if (!data.overbooking_reason.trim()) throw new FriendlyDataError("Indica el motivo del sobreturno.");
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user) throw new FriendlyDataError("Tu sesión expiró. Volvé a ingresar.");
+    const { data: created, error } = await supabase
+      .from("appointments")
+      .insert({
+        ...data,
+        appointment_type: data.appointment_type ?? "in_person",
+        status: data.status ?? "confirmed",
+        source: "manual",
+        whatsapp_status: data.whatsapp_status ?? "pending",
+        is_overbooking: true,
+        overbooking_created_by: auth.user.id,
+        overbooking_created_at: new Date().toISOString()
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    await logAppointmentEvent(created.id, "overbooking_created", null, created.status, {
+      reason: data.overbooking_reason,
+      authorized_by: data.overbooking_authorized_by ?? null,
+      conflict_appointment_id: data.overbooking_conflict_appointment_id ?? null
+    });
+    const { error: auditError } = await supabase.from("audit_logs").insert({
+      clinic_id: data.clinic_id,
+      user_id: auth.user.id,
+      action: "overbooking_created",
+      entity_type: "appointment",
+      entity_id: created.id,
+      metadata: {
+        appointment_id: created.id,
+        clinic_id: data.clinic_id,
+        professional_id: data.professional_id,
+        patient_id: data.patient_id,
+        starts_at: data.starts_at,
+        reason: data.overbooking_reason,
+        authorized_by: data.overbooking_authorized_by ?? null
+      }
+    });
+    if (auditError) console.error("Failed to audit overbooking", auditError);
+    if (created.status === "confirmed") {
+      await logAppointmentEvent(created.id, "overbooking_confirmed", null, created.status, { reason: data.overbooking_reason });
+      await supabase.from("audit_logs").insert({
+        clinic_id: data.clinic_id,
+        user_id: auth.user.id,
+        action: "overbooking_confirmed",
+        entity_type: "appointment",
+        entity_id: created.id,
+        metadata: { appointment_id: created.id, professional_id: data.professional_id, patient_id: data.patient_id, starts_at: data.starts_at, reason: data.overbooking_reason, authorized_by: data.overbooking_authorized_by ?? null }
+      });
+    }
+    return created as Appointment;
+  } catch (error) {
+    if (error instanceof FriendlyDataError) throw error;
+    console.error("Failed to create overbooking", error);
+    throw new FriendlyDataError("No pudimos crear el sobreturno.");
+  }
+}
+
 export async function updateAppointment(id: string, data: Partial<AppointmentInput>): Promise<Appointment> {
   try {
     const { data: updated, error } = await supabase
@@ -814,7 +876,14 @@ export async function updateAppointmentStatus(
       rescheduled: "appointment_rescheduled",
       urgent: "appointment_marked_urgent"
     };
-    await logAppointmentEvent(id, eventByStatus[status] ?? "appointment_status_changed", current.status, status, metadata);
+    const eventType = eventByStatus[status] ?? "appointment_status_changed";
+    await logAppointmentEvent(id, eventType, current.status, status, metadata);
+    const { data: overbooking } = await supabase.from("appointments").select("is_overbooking, clinic_id, professional_id, patient_id, starts_at, overbooking_reason, overbooking_authorized_by").eq("id", id).maybeSingle();
+    if (overbooking?.is_overbooking) {
+      const action = status === "cancelled" ? "overbooking_cancelled" : status === "confirmed" ? "overbooking_confirmed" : "overbooking_updated";
+      const { data: auth } = await supabase.auth.getUser();
+      await supabase.from("audit_logs").insert({ clinic_id: overbooking.clinic_id, user_id: auth.user?.id ?? null, action, entity_type: "appointment", entity_id: id, metadata: { appointment_id: id, professional_id: overbooking.professional_id, patient_id: overbooking.patient_id, starts_at: overbooking.starts_at, reason: overbooking.overbooking_reason, authorized_by: overbooking.overbooking_authorized_by } });
+    }
   } catch (error) {
     console.error("Failed to update appointment status", error);
     throw new FriendlyDataError("No pudimos actualizar el estado del turno.");
@@ -1172,7 +1241,7 @@ function rangesOverlap(startA: string, endA: string, startB: string, endB: strin
   return new Date(startA) < new Date(endB) && new Date(endA) > new Date(startB);
 }
 
-function zonedDateTimeToUtcIso(date: string, time: string, timezone: string) {
+export function zonedDateTimeToUtcIso(date: string, time: string, timezone: string) {
   const [year, month, day] = date.split("-").map(Number);
   const [hour, minute] = time.split(":").map(Number);
   const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));

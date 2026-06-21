@@ -111,6 +111,13 @@ export type AppointmentSource = "manual" | "online" | "whatsapp" | "imported";
 export type Appointment = {
   id: string;
   public_code?: string | null;
+  is_overbooking?: boolean;
+  overbooking_reason?: string | null;
+  overbooking_authorized_by?: string | null;
+  overbooking_created_by?: string | null;
+  overbooking_notes?: string | null;
+  overbooking_conflict_appointment_id?: string | null;
+  overbooking_created_at?: string | null;
   clinic_id: string | null;
   patient_id: string;
   professional_id: string | null;
@@ -310,6 +317,13 @@ export type AppointmentInput = {
   cancellation_reason?: string | null;
   rescheduled_from_id?: string | null;
   whatsapp_status?: string | null;
+};
+
+export type OverbookingInput = AppointmentInput & {
+  overbooking_reason: string;
+  overbooking_authorized_by?: string | null;
+  overbooking_notes?: string | null;
+  overbooking_conflict_appointment_id?: string | null;
 };
 
 export type AppointmentFilters = {
