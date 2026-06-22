@@ -7,15 +7,15 @@ const statusConfig: Record<AppointmentStatus, { label: string; className: string
   },
   confirmed: {
     label: "Confirmado",
-    className: "bg-emerald-50 text-emerald-700 ring-emerald-200"
+    className: "bg-[#e6f4f1] text-clinic-brand ring-[#b9e3dc]"
   },
   attended: {
     label: "Atendido",
-    className: "bg-slate-100 text-slate-700 ring-slate-200"
+    className: "bg-[#eef7f5] text-clinic-brand ring-[#cfe9e4]"
   },
   completed: {
     label: "Atendido",
-    className: "bg-slate-100 text-slate-700 ring-slate-200"
+    className: "bg-[#eef7f5] text-clinic-brand ring-[#cfe9e4]"
   },
   cancelled: {
     label: "Cancelado",
@@ -26,7 +26,7 @@ const statusConfig: Record<AppointmentStatus, { label: string; className: string
     className: "bg-blue-50 text-blue-700 ring-blue-200"
   },
   no_show: {
-    label: "No asistio",
+    label: "No asistió",
     className: "bg-red-50 text-red-700 ring-red-200"
   },
   urgent: {
@@ -39,7 +39,7 @@ export function AppointmentStatusBadge({ status }: { status: AppointmentStatus }
   const config = statusConfig[status] ?? statusConfig.pending;
 
   return (
-    <span className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ${config.className}`}>
+    <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${config.className}`}>
       {config.label}
     </span>
   );

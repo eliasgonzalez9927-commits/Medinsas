@@ -100,11 +100,11 @@ export function AdminLayout({
                 onClick={() => setMobileNavOpen(false)}
                 className={({ isActive }) => {
                   if (item.group === "platform") {
-                    return `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                    return `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                       isActive ? "bg-slate-950 text-white" : "bg-slate-900 text-slate-100 hover:bg-slate-800"
                     }`;
                   }
-                  return `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                  return `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                     isActive
                       ? "bg-[#e6f4f1] text-clinic-brand shadow-[inset_3px_0_0_#8fd2c6]"
                       : "text-clinic-muted hover:bg-clinic-surface hover:text-clinic-ink"
@@ -113,7 +113,7 @@ export function AdminLayout({
               >
                 <Icon size={18} />
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                {badge && <span className="rounded-md bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-clinic-brand">{badge}</span>}
+                {badge && <span className="rounded-full bg-[#e6f4f1] px-2 py-0.5 text-[10px] font-semibold text-clinic-brand">{badge}</span>}
               </NavLink>
             );
           })}
@@ -160,13 +160,13 @@ export function AdminLayout({
       {platformNavigation && <div className="border-t border-clinic-line px-3 py-4">{platformNavigation}</div>}
 
       <div className="border-t border-clinic-line p-4">
-        <div className="flex items-center gap-3 rounded-lg border border-clinic-line bg-clinic-surface p-3">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-white text-clinic-muted"><UserRound size={18} /></div>
+        <div className="flex items-center gap-3 rounded-xl border border-clinic-line bg-clinic-surface p-3">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-white text-clinic-muted"><UserRound size={18} /></div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-clinic-ink">{displayName}</p>
             <p className="truncate text-xs text-clinic-muted">{displayRole}</p>
           </div>
-          <button type="button" onClick={signOut} className="grid h-9 w-9 place-items-center rounded-lg text-clinic-muted hover:bg-white hover:text-clinic-ink" aria-label="Cerrar sesión">
+          <button type="button" onClick={signOut} className="grid h-9 w-9 place-items-center rounded-xl text-clinic-muted transition hover:bg-white hover:text-clinic-ink" aria-label="Cerrar sesión">
             <LogOut size={17} />
           </button>
         </div>
@@ -188,25 +188,25 @@ export function AdminLayout({
       )}
 
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 border-b border-clinic-line bg-white/95 backdrop-blur">
+        <header className="sticky top-0 z-20 border-b border-clinic-line bg-white/95 shadow-[0_1px_0_rgba(13,54,66,0.02)] backdrop-blur">
           <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
             <button type="button" className="grid h-10 w-10 place-items-center rounded-lg border border-clinic-line text-clinic-muted lg:hidden" aria-label="Abrir navegación" onClick={() => setMobileNavOpen(true)}><Menu size={20} /></button>
             <Link to="/admin" className="flex items-center gap-2 font-semibold text-clinic-ink lg:hidden"><span className="grid h-9 w-9 place-items-center rounded-full border border-[#8fd2c6] bg-[#e6f4f1] text-clinic-brand"><CirclePlus size={19} /></span>Medin</Link>
 
             <form className="relative ml-auto hidden w-full max-w-xl md:block lg:ml-0" onSubmit={(event) => { event.preventDefault(); runGlobalSearch(); }}>
               <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-clinic-muted" />
-              <input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} placeholder="Buscar paciente, turno o profesional..." className="h-10 w-full rounded-lg border border-clinic-line bg-clinic-surface pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-clinic-brand focus:bg-white focus:ring-4 focus:ring-teal-100" />
+              <input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} placeholder="Buscar paciente, turno o profesional..." className="h-10 w-full rounded-xl border border-clinic-line bg-clinic-surface pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-clinic-brand focus:bg-white focus:ring-4 focus:ring-teal-100" />
             </form>
 
             <div className="ml-auto flex items-center gap-2">
               <div className="hidden min-w-0 text-right xl:block"><p className="truncate text-sm font-semibold text-clinic-ink">{clinic?.name ?? "Medin"}</p><p className="text-xs text-clinic-muted">{displayRole}</p></div>
               <Button className="hidden sm:inline-flex" onClick={onRefresh} variant="secondary">Actualizar</Button>
               <Button onClick={onCreateAppointment} variant="primary">Nuevo turno</Button>
-              <Button icon={<LogOut size={16} />} onClick={signOut} variant="secondary">Cerrar sesión</Button>
+              <Button icon={<LogOut size={16} />} onClick={signOut} variant="ghost">Cerrar sesión</Button>
             </div>
           </div>
           <form className="border-t border-clinic-line px-4 py-3 md:hidden" onSubmit={(event) => { event.preventDefault(); runGlobalSearch(); }}>
-            <div className="relative"><Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-clinic-muted" /><input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} placeholder="Buscar en agenda..." className="h-10 w-full rounded-lg border border-clinic-line bg-clinic-surface pl-10 pr-4 text-sm outline-none focus:border-clinic-brand focus:bg-white focus:ring-4 focus:ring-teal-100" /></div>
+            <div className="relative"><Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-clinic-muted" /><input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} placeholder="Buscar en agenda..." className="h-10 w-full rounded-xl border border-clinic-line bg-clinic-surface pl-10 pr-4 text-sm outline-none focus:border-clinic-brand focus:bg-white focus:ring-4 focus:ring-teal-100" /></div>
           </form>
         </header>
         {children}

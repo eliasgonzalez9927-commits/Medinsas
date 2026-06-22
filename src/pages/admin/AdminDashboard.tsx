@@ -137,11 +137,11 @@ export function AdminDashboard() {
                   <div key={date} className="py-3 first:pt-0">
                     {!isToday && <p className="pb-2 text-xs font-semibold uppercase tracking-wide text-clinic-muted">{formatDayHeading(date, clinic?.timezone ?? undefined)}</p>}
                     {dailyAppointments.slice(0, 6).map((appointment) => (
-                      <article key={appointment.id} className="grid gap-3 border-t border-clinic-line py-3 first:border-t-0 md:grid-cols-[80px_1fr_1fr_130px] md:items-center">
-                        <p className="font-semibold text-clinic-brand">{formatTime(appointment.starts_at, clinic?.timezone ?? undefined)}</p>
-                        <div><p className="font-semibold text-clinic-ink">{appointment.patient ? `${appointment.patient.first_name} ${appointment.patient.last_name}` : "Paciente sin vincular"}</p><p className="text-sm text-clinic-muted">{sourceLabel(appointment.source)}</p></div>
-                        <div><p className="text-sm font-medium text-clinic-ink">Dr/a. {appointment.professional?.name ?? ""} {appointment.professional?.last_name ?? ""}</p><p className="text-sm text-clinic-muted">{appointment.service?.name ?? appointment.reason}</p></div>
-                        <AppointmentStatusBadge status={appointment.status} />
+                      <article key={appointment.id} className="grid gap-3 border-t border-clinic-line py-4 first:border-t-0 md:grid-cols-[96px_minmax(0,1fr)_minmax(0,1fr)_130px] md:items-center">
+                        <p className="whitespace-nowrap font-semibold tabular-nums text-clinic-brand">{formatTime(appointment.starts_at, clinic?.timezone ?? undefined)}</p>
+                        <div className="min-w-0"><p className="truncate font-semibold text-clinic-ink">{appointment.patient ? `${appointment.patient.first_name} ${appointment.patient.last_name}` : "Paciente sin vincular"}</p><p className="mt-0.5 text-sm text-clinic-muted">{sourceLabel(appointment.source)}</p></div>
+                        <div className="min-w-0"><p className="truncate text-sm font-medium text-clinic-ink">Dr/a. {appointment.professional?.name ?? ""} {appointment.professional?.last_name ?? ""}</p><p className="mt-0.5 truncate text-sm text-clinic-muted">{appointment.service?.name ?? appointment.reason}</p></div>
+                        <div className="justify-self-start md:justify-self-end"><AppointmentStatusBadge status={appointment.status} /></div>
                       </article>
                     ))}
                   </div>
@@ -187,7 +187,7 @@ export function AdminDashboard() {
 
 function Panel({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-clinic-line bg-white p-5 shadow-[0_8px_24px_rgba(13,54,66,0.035)]">
+    <section className="rounded-xl border border-clinic-line bg-white p-5 shadow-[0_8px_24px_rgba(13,54,66,0.035)]">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-clinic-ink">{title}</h2>
         {action}
@@ -205,7 +205,7 @@ function Metric({ title, value, helper, icon, tone = "default" }: { title: strin
     danger: "bg-red-50 text-red-700"
   };
   return (
-    <article className="rounded-lg border border-clinic-line bg-white p-5 shadow-[0_8px_24px_rgba(13,54,66,0.035)]">
+    <article className="rounded-xl border border-clinic-line bg-white p-5 shadow-[0_8px_24px_rgba(13,54,66,0.035)]">
       <div className={`grid h-10 w-10 place-items-center rounded-full ${colors[tone]}`}>{icon}</div>
       <p className="mt-3 text-sm text-clinic-muted">{title}</p>
       <p className="mt-1 text-2xl font-semibold text-clinic-ink">{value}</p>
@@ -216,7 +216,7 @@ function Metric({ title, value, helper, icon, tone = "default" }: { title: strin
 
 function SmallMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-clinic-line p-4">
+    <div className="rounded-xl border border-clinic-line bg-[#fbfdfc] p-4">
       <p className="text-sm text-clinic-muted">{label}</p>
       <p className="mt-2 text-lg font-semibold text-clinic-ink">{value}</p>
     </div>
@@ -225,16 +225,16 @@ function SmallMetric({ label, value }: { label: string; value: string }) {
 
 function ActionItem({ count, label, to }: { count: number; label: string; to: string }) {
   return (
-    <Link to={to} className="flex items-center justify-between gap-3 rounded-lg border border-clinic-line px-4 py-3 transition hover:bg-[#e6f4f1]">
-      <span className="text-sm font-medium text-clinic-ink">{label}</span>
-      <span className="rounded-lg bg-teal-50 px-2.5 py-1 text-xs font-semibold text-clinic-brand">{count}</span>
+    <Link to={to} className="flex items-center justify-between gap-3 rounded-xl border border-clinic-line bg-[#fbfdfc] px-4 py-3 transition hover:bg-[#e6f4f1]">
+      <span className="text-sm font-medium leading-5 text-clinic-ink">{label}</span>
+      <span className="rounded-full bg-[#e6f4f1] px-2.5 py-1 text-xs font-semibold text-clinic-brand">{count}</span>
     </Link>
   );
 }
 
 function QuickLink({ icon, label, to }: { icon: React.ReactNode; label: string; to: string }) {
   return (
-    <Link to={to} className="flex min-h-24 flex-col items-center justify-center gap-3 rounded-lg border border-clinic-line px-3 py-4 text-center text-sm font-semibold text-clinic-ink transition hover:bg-[#e6f4f1]">
+    <Link to={to} className="flex min-h-24 flex-col items-center justify-center gap-3 rounded-xl border border-clinic-line bg-[#fbfdfc] px-3 py-4 text-center text-sm font-semibold text-clinic-ink transition hover:bg-[#e6f4f1]">
       <span className="grid h-9 w-9 place-items-center rounded-full bg-[#e6f4f1] text-clinic-brand">{icon}</span>
       <span>{label}</span>
     </Link>
@@ -242,11 +242,11 @@ function QuickLink({ icon, label, to }: { icon: React.ReactNode; label: string; 
 }
 
 function LinkButton({ to, children, className = "" }: { to: string; children: React.ReactNode; className?: string }) {
-  return <Link to={to} className={`inline-flex min-h-10 items-center rounded-lg border border-clinic-line bg-white px-4 py-2 text-sm font-semibold text-clinic-ink hover:bg-clinic-surface ${className}`}>{children}</Link>;
+  return <Link to={to} className={`inline-flex min-h-10 items-center rounded-xl border border-clinic-line bg-white px-4 py-2 text-sm font-semibold text-clinic-ink transition hover:bg-[#e6f4f1] ${className}`}>{children}</Link>;
 }
 
 function EmptyLine({ children }: { children: string }) {
-  return <div className="rounded-lg bg-clinic-surface px-4 py-8 text-center text-sm text-clinic-muted">{children}</div>;
+  return <div className="rounded-xl border border-dashed border-clinic-line bg-[#fbfdfc] px-5 py-10 text-center text-sm leading-6 text-clinic-muted">{children}</div>;
 }
 
 function Message({ children }: { children: string }) {
