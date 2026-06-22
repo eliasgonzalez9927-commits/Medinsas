@@ -100,12 +100,10 @@ export function PublicBookingPage() {
             ? publicServices.find((service) =>
                 service.professionals.some((professional) => professional.id === professionalFromFilter.id)
               )
-            : publicServices[0]);
+            : undefined);
         setServiceId(selectedService?.id ?? "");
         setProfessionalId(
           professionalFromFilter?.id ??
-            selectedService?.professionals.find((professional) => professional.active)?.id ??
-            activeProfessionals[0]?.id ??
             ""
         );
         const { data: coverageRows } = await supabase
@@ -150,7 +148,9 @@ export function PublicBookingPage() {
   useEffect(() => {
     if (!selectedService) return;
     if (!compatibleProfessionals.some((professional) => professional.id === professionalId)) {
-      setProfessionalId(compatibleProfessionals[0]?.id ?? "");
+      setProfessionalId("");
+      setDate("");
+      setSlotStartsAt("");
     }
   }, [selectedService?.id, compatibleProfessionals.length]);
 
@@ -382,7 +382,12 @@ export function PublicBookingPage() {
                           type="radio"
                           value={service.id}
                           checked={serviceId === service.id}
-                          onChange={() => setServiceId(service.id)}
+                          onChange={() => {
+                            setServiceId(service.id);
+                            setProfessionalId("");
+                            setDate("");
+                            setSlotStartsAt("");
+                          }}
                         />
                         <span className="flex items-center justify-between font-semibold text-clinic-ink">{service.name}{serviceId === service.id && <CheckCircle2 size={18} className="text-[#0f8b7c]"/>}</span>
                         <span className="mt-1 block text-sm text-clinic-muted">
@@ -420,19 +425,20 @@ export function PublicBookingPage() {
 
               {step === 4 && <StepCard number="4" title="Completá tus datos" subtitle="Necesitamos esta información para confirmar tu turno y enviarte los recordatorios.">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Input required placeholder="Nombre" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} />
-                  <Input required placeholder="Apellido" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
-                  <Input required placeholder="Telefono / WhatsApp" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
-                  <Input required placeholder="Email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
-                  <Input required placeholder="DNI" value={form.documentNumber} onChange={(event) => setForm({ ...form, documentNumber: event.target.value })} />
+                  <Field label="Nombre"><Input required placeholder="Ej. María" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} /></Field>
+                  <Field label="Apellido"><Input required placeholder="Ej. González" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} /></Field>
+                  <Field label="Teléfono / WhatsApp"><Input required placeholder="Ej. 261 555 1234" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></Field>
+                  <Field label="Email"><Input required placeholder="Ej. maria@email.com" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></Field>
+                  <Field label="DNI"><Input required placeholder="Ej. 12345678" value={form.documentNumber} onChange={(event) => setForm({ ...form, documentNumber: event.target.value })} /></Field>
                   <CoveragePicker form={form} coverages={coverages} onChange={setForm} />
                 </div>
+                <label className="mt-3 block text-sm font-medium text-clinic-ink">Motivo de consulta
                 <textarea
                   placeholder="Motivo de consulta"
                   value={form.reason}
                   onChange={(event) => setForm({ ...form, reason: event.target.value })}
                   className="mt-3 min-h-24 w-full resize-none rounded-lg border border-clinic-line bg-white px-3 py-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
-                /><div className="mt-4 rounded-xl bg-[#e6f4f1] p-4 text-sm"><p className="font-semibold">Resumen de tu reserva</p><p className="mt-1 text-clinic-muted">{selectedService?.name} · Dr/a. {compatibleProfessionals.find((p) => p.id === professionalId)?.name ?? ""} · {formatDate(date)} · {slots.find((slot) => slot.startsAt === slotStartsAt)?.time}</p></div></StepCard>}
+                /></label><div className="mt-4 rounded-xl bg-[#e6f4f1] p-4 text-sm"><p className="font-semibold">Resumen de tu reserva</p><p className="mt-1 text-clinic-muted">{selectedService?.name} · Dr/a. {compatibleProfessionals.find((p) => p.id === professionalId)?.name ?? ""} · {formatDate(date)} · {slots.find((slot) => slot.startsAt === slotStartsAt)?.time}</p></div></StepCard>}
 
               {step === 4 && <section className="rounded-xl border border-clinic-line bg-white p-5 shadow-sm">
                 <div className="flex items-start gap-3">
@@ -512,6 +518,10 @@ function Input(props: InputHTMLAttributes<HTMLInputElement>) {
       {...props}
     />
   );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return <label className="grid gap-2 text-sm font-medium text-clinic-ink"><span>{label}</span>{children}</label>;
 }
 
 function Message({ children }: { children: string }) {
