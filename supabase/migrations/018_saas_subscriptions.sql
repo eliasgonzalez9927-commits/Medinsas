@@ -8,7 +8,8 @@ alter table public.subscription_plans
   add column if not exists metadata jsonb not null default '{}'::jsonb;
 
 update public.subscription_plans set slug = lower(regexp_replace(name, '[^a-z0-9]+', '-', 'g')) where slug is null;
-create unique index if not exists subscription_plans_slug_unique_idx on public.subscription_plans(slug) where slug is not null;
+drop index if exists public.subscription_plans_slug_unique_idx;
+create unique index if not exists subscription_plans_slug_unique_idx on public.subscription_plans(slug);
 
 alter table public.clinic_subscriptions
   add column if not exists current_period_start timestamptz,
