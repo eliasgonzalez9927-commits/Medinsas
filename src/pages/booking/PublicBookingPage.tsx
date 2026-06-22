@@ -1,6 +1,6 @@
 import { FormEvent, InputHTMLAttributes, ReactNode, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { CalendarCheck, CalendarPlus, CheckCircle2, CreditCard, Download, ExternalLink, MessageCircle, Stethoscope } from "lucide-react";
+import { Building2, CalendarCheck, CalendarDays, CalendarPlus, Check, CheckCircle2, ChevronLeft, ChevronRight, CreditCard, Download, ExternalLink, LockKeyhole, MessageCircle, Search, ShieldCheck, Stethoscope, UserRound } from "lucide-react";
 import {
   createPublicBooking,
   getClinicBySlug,
@@ -67,6 +67,7 @@ export function PublicBookingPage() {
   const [serviceQuery, setServiceQuery] = useState("");
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [datesLoading, setDatesLoading] = useState(false);
+  const [step, setStep] = useState(1);
 
   useEffect(() => {
     async function load() {
@@ -344,22 +345,14 @@ export function PublicBookingPage() {
   }
 
   return (
-    <main className="min-h-screen bg-clinic-surface">
-      <section className="mx-auto grid max-w-5xl gap-6 px-4 py-6 md:grid-cols-[0.8fr_1.2fr] md:py-10">
-        <aside className="rounded-lg border border-clinic-line bg-white p-5 shadow-sm md:sticky md:top-6 md:self-start">
-          <div className="grid h-11 w-11 place-items-center rounded-lg bg-clinic-brand text-white">
-            <Stethoscope size={22} />
-          </div>
-          <h1 className="mt-5 text-2xl font-semibold text-clinic-ink">Reservar turno</h1>
-          <p className="mt-2 text-clinic-muted">
-            {clinic?.name ?? "Medin"} · {clinic?.address ?? "Atencion presencial y telemedicina"}
-          </p>
-          <div className="mt-5 rounded-lg bg-teal-50 p-4 text-sm text-clinic-brand">
-            La confirmacion y los recordatorios quedan preparados para WhatsApp.
-          </div>
-        </aside>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <main className="min-h-screen bg-[#f6faf9] px-4 py-4 text-[#0d3642] sm:px-6 lg:py-8">
+      <header className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5 rounded-2xl border border-[#dcebea] bg-white px-5 py-4 shadow-sm sm:px-8">
+        <div className="flex items-center gap-4"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#e6f4f1] text-[#0f8b7c]"><Stethoscope size={24}/></span><div><p className="text-2xl font-semibold">Medin</p><p className="text-xs text-[#0f8b7c]">healthtech</p></div><span className="hidden h-10 w-px bg-[#dcebea] sm:block"/><div className="flex items-center gap-3"><Building2 className="text-[#0d3642]" size={20}/><div><p className="font-semibold">{clinic?.name ?? "Clínica"}</p><p className="text-sm text-clinic-muted">{clinic?.address ?? "Atención presencial y telemedicina"}</p></div></div></div>
+        <div className="flex gap-4 text-sm font-medium text-[#0d3642]"><span className="flex items-center gap-2"><ShieldCheck size={19}/>Tus datos están protegidos</span><span className="hidden items-center gap-2 sm:flex"><MessageCircle size={19}/>Recordatorios por WhatsApp</span></div>
+      </header>
+      <section className="mx-auto max-w-7xl py-7"><BookingStepper step={step}/></section>
+      <section className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <form onSubmit={handleSubmit} className="order-1 space-y-4">
           {error && <Message>{error}</Message>}
           {loading ? (
             <section className="rounded-lg border border-clinic-line bg-white p-8 text-center text-clinic-muted shadow-sm">
@@ -367,17 +360,17 @@ export function PublicBookingPage() {
             </section>
           ) : (
             <>
-              <StepCard number="1" title="¿Qué necesitás?">
-                <input value={serviceQuery} onChange={(event) => setServiceQuery(event.target.value)} placeholder="Buscá por especialidad, servicio o profesional" className="mb-3 h-11 w-full rounded-lg border border-clinic-line bg-white px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100" />
-                <div className="mb-4 flex flex-wrap gap-2">{["Consulta", "Odontología", "Dermatología", "Kinesiología", "Traumatología", "Estudios", "Control"].map((label) => <button key={label} type="button" onClick={() => setServiceQuery(label)} className="rounded-lg border border-clinic-line bg-clinic-surface px-3 py-1.5 text-xs font-semibold text-clinic-muted hover:bg-white">{label}</button>)}</div>
-                <div className="grid gap-3">
+              {step === 1 && <StepCard number="1" title="Reservá tu turno" subtitle="Elegí la prestación que necesitás. Luego seleccionaremos el profesional y el horario.">
+                <div className="relative mb-4"><Search className="absolute left-3 top-3 text-clinic-muted" size={18}/><input value={serviceQuery} onChange={(event) => setServiceQuery(event.target.value)} placeholder="Buscá por especialidad, servicio o profesional" className="h-11 w-full rounded-xl border border-clinic-line bg-white pl-10 pr-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100" /></div>
+                <div className="mb-5 flex flex-wrap gap-2">{["Todas", "Consulta", "Odontología", "Dermatología", "Kinesiología", "Traumatología", "Estudios", "Control"].map((label) => <button key={label} type="button" onClick={() => setServiceQuery(label === "Todas" ? "" : label)} className={`rounded-full border px-3 py-2 text-xs font-semibold ${(!serviceQuery && label === "Todas") || serviceQuery === label ? "border-[#0f8b7c] bg-[#e6f4f1] text-[#0f766e]" : "border-clinic-line bg-white text-clinic-muted"}`}>{label}</button>)}</div>
+                <div className="grid gap-3 md:grid-cols-2">
                   {filteredServices.length === 0 ? (
                     <p className="text-sm text-clinic-muted">No hay servicios reservables online.</p>
                   ) : (
                     filteredServices.map((service) => (
                       <label
                         key={service.id}
-                        className={`cursor-pointer rounded-lg border p-4 ${
+                          className={`cursor-pointer rounded-xl border p-4 transition ${
                           serviceId === service.id
                             ? "border-clinic-brand bg-teal-50"
                             : "border-clinic-line bg-white"
@@ -391,7 +384,7 @@ export function PublicBookingPage() {
                           checked={serviceId === service.id}
                           onChange={() => setServiceId(service.id)}
                         />
-                        <span className="font-semibold text-clinic-ink">{service.name}</span>
+                        <span className="flex items-center justify-between font-semibold text-clinic-ink">{service.name}{serviceId === service.id && <CheckCircle2 size={18} className="text-[#0f8b7c]"/>}</span>
                         <span className="mt-1 block text-sm text-clinic-muted">
                           {service.specialty?.name ?? "Servicio"} · {service.duration_minutes} min
                         </span>
@@ -400,32 +393,19 @@ export function PublicBookingPage() {
                             {service.deposit_required ? "Requiere seña para reservar" : "Requiere pago online"}
                           </span>
                         )}
-                        {!requiresOnlinePayment(service) && <span className="mt-2 block text-xs text-clinic-muted">Sin pago online</span>}
+                        {!requiresOnlinePayment(service) && <span className="mt-2 inline-flex rounded-lg bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">Sin pago online</span>}
                       </label>
                     ))
                   )}
-                </div>
-              </StepCard>
+                </div><p className="mt-5 rounded-xl bg-[#e6f4f1] px-4 py-3 text-sm text-[#0d7066]">Algunas prestaciones requieren seña para confirmar el turno. Podrás ver el monto antes de continuar.</p><StepActions onNext={() => setStep(2)} nextDisabled={!serviceId}/>
+              </StepCard>}
 
-              <StepCard number="2" title="Profesional">
-                <select
-                  value={professionalId}
-                  onChange={(event) => setProfessionalId(event.target.value)}
-                  className="h-11 w-full rounded-lg border border-clinic-line bg-white px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
-                >
-                  <option value={compatibleProfessionals[0]?.id ?? ""}>Cualquier profesional disponible</option>
-                  {compatibleProfessionals.map((professional) => (
-                    <option key={professional.id} value={professional.id}>
-                      Dr/a. {professional.name} {professional.last_name}
-                    </option>
-                  ))}
-                </select>
-              </StepCard>
+              {step === 2 && <StepCard number="2" title="Elegí profesional" subtitle="Seleccioná un profesional o dejá que Medin asigne el primer disponible."><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{compatibleProfessionals.map((professional) => <button key={professional.id} type="button" onClick={() => setProfessionalId(professional.id)} className={`rounded-xl border p-4 text-left ${professionalId === professional.id ? "border-[#0f8b7c] bg-[#e6f4f1]" : "border-clinic-line bg-white"}`}><UserRound className="mb-3 text-[#0f8b7c]" size={22}/><p className="font-semibold">Dr/a. {professional.name} {professional.last_name}</p><p className="mt-1 text-sm text-clinic-muted">{professional.specialties?.[0]?.name ?? "Profesional"}</p></button>)}</div><StepActions onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={!professionalId}/></StepCard>}
 
-              <StepCard number="3" title="Fecha y horario">
+              {step === 3 && <StepCard number="3" title="Elegí fecha y horario" subtitle="Elegí el día y el horario que más te convenga.">
                 <p className="mb-3 text-sm text-clinic-muted">{datesLoading ? "Buscando el próximo turno disponible..." : availableDates.length ? `Próximo turno disponible: ${formatDate(availableDates[0])}` : "No encontramos turnos disponibles para este servicio. Contactá a la clínica."}</p>
                 <div className="mb-3 flex flex-wrap gap-2"><button type="button" onClick={() => availableDates[0] && setDate(availableDates[0])} className="rounded-lg border border-clinic-line px-3 py-2 text-xs font-semibold">Primer turno disponible</button><button type="button" onClick={() => { const next = availableDates.find((value) => value <= addDays(getDateInTimeZone(new Date(), clinic?.timezone ?? "America/Argentina/Mendoza"), 6)); if (next) setDate(next); }} className="rounded-lg border border-clinic-line px-3 py-2 text-xs font-semibold">Esta semana</button><button type="button" onClick={() => { const next = availableDates.find((value) => value >= addDays(getDateInTimeZone(new Date(), clinic?.timezone ?? "America/Argentina/Mendoza"), 7)); if (next) setDate(next); }} className="rounded-lg border border-clinic-line px-3 py-2 text-xs font-semibold">Próxima semana</button></div>
-                <div className="mb-3 flex flex-wrap gap-2">{availableDates.map((value) => <button key={value} type="button" onClick={() => setDate(value)} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${date === value ? "border-clinic-brand bg-teal-50 text-clinic-brand" : "border-clinic-line bg-white text-clinic-ink"}`}>{formatDate(value)}</button>)}</div>
+                <div className="mb-4 flex gap-2 overflow-x-auto pb-1">{availableDates.map((value) => <button key={value} type="button" onClick={() => setDate(value)} className={`min-w-24 rounded-xl border px-3 py-3 text-sm font-semibold ${date === value ? "border-clinic-brand bg-teal-50 text-clinic-brand" : "border-clinic-line bg-white text-clinic-ink"}`}>{formatDate(value)}</button>)}</div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <input
                     type="date"
@@ -434,22 +414,11 @@ export function PublicBookingPage() {
                     min={availableDates[0]}
                     className="h-11 rounded-lg border border-clinic-line bg-white px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
                   />
-                  <select
-                    value={slotStartsAt}
-                    onChange={(event) => setSlotStartsAt(event.target.value)}
-                    className="h-11 rounded-lg border border-clinic-line bg-white px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
-                  >
-                    <option value="">{slotsLoading ? "Cargando..." : "Seleccionar horario"}</option>
-                    {slots.map((slot) => (
-                      <option key={slot.startsAt} value={slot.startsAt}>
-                        {slot.time}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{slots.map((slot) => <button key={slot.startsAt} type="button" onClick={() => setSlotStartsAt(slot.startsAt)} className={`h-11 rounded-xl border text-sm font-semibold ${slotStartsAt === slot.startsAt ? "border-[#0f8b7c] bg-[#e6f4f1] text-[#0f766e]" : "border-clinic-line bg-white"}`}>{slot.time}</button>)}{slotsLoading && <p className="text-sm text-clinic-muted">Cargando horarios...</p>}</div>
                 </div>
-              </StepCard>
+                <StepActions onBack={() => setStep(2)} onNext={() => setStep(4)} nextDisabled={!slotStartsAt}/></StepCard>}
 
-              <StepCard number="4" title="Tus datos">
+              {step === 4 && <StepCard number="4" title="Completá tus datos" subtitle="Necesitamos esta información para confirmar tu turno y enviarte los recordatorios.">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Input required placeholder="Nombre" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} />
                   <Input required placeholder="Apellido" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
@@ -459,15 +428,13 @@ export function PublicBookingPage() {
                   <CoveragePicker form={form} coverages={coverages} onChange={setForm} />
                 </div>
                 <textarea
-                  required
                   placeholder="Motivo de consulta"
                   value={form.reason}
                   onChange={(event) => setForm({ ...form, reason: event.target.value })}
                   className="mt-3 min-h-24 w-full resize-none rounded-lg border border-clinic-line bg-white px-3 py-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
-                />
-              </StepCard>
+                /><div className="mt-4 rounded-xl bg-[#e6f4f1] p-4 text-sm"><p className="font-semibold">Resumen de tu reserva</p><p className="mt-1 text-clinic-muted">{selectedService?.name} · Dr/a. {compatibleProfessionals.find((p) => p.id === professionalId)?.name ?? ""} · {formatDate(date)} · {slots.find((slot) => slot.startsAt === slotStartsAt)?.time}</p></div></StepCard>}
 
-              <section className="rounded-lg border border-clinic-line bg-white p-5 shadow-sm">
+              {step === 4 && <section className="rounded-xl border border-clinic-line bg-white p-5 shadow-sm">
                 <div className="flex items-start gap-3">
                   <CalendarCheck className="mt-1 text-clinic-brand" size={20} />
                   <div>
@@ -483,38 +450,55 @@ export function PublicBookingPage() {
                     )}
                   </div>
                 </div>
-                <button
+                <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><button type="button" onClick={() => setStep(3)} className="min-h-11 rounded-xl border border-clinic-line px-5 text-sm font-semibold">Volver</button><button
                   disabled={saving || !slotStartsAt || services.length === 0 || compatibleProfessionals.length === 0}
-                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-clinic-brand px-4 py-3 font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#0d3642] px-5 py-3 font-semibold text-white transition hover:bg-[#0f766e] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 >
                   <MessageCircle size={18} />
                   {saving ? "Confirmando..." : requiresOnlinePayment(selectedService) ? "Continuar al pago" : "Confirmar solicitud"}
-                </button>
-              </section>
+                </button></div>
+              </section>}
             </>
           )}
         </form>
+        <aside className="order-2 h-fit rounded-2xl border border-[#dcebea] bg-white p-5 shadow-sm lg:sticky lg:top-6"><BookingSummary clinic={clinic} service={selectedService} professional={compatibleProfessionals.find((p) => p.id === professionalId) ?? null} date={date} time={slots.find((slot) => slot.startsAt === slotStartsAt)?.time ?? ""}/></aside>
       </section>
+      <p className="mx-auto mt-6 max-w-7xl text-center text-xs text-clinic-muted"><LockKeyhole className="mr-1 inline" size={14}/> Sitio seguro y protegido. Cumplimos con la Ley 25.326 de Protección de Datos Personales.</p>
     </main>
   );
+}
+
+function BookingStepper({ step }: { step: number }) {
+  const labels = ["Prestación", "Profesional", "Fecha y hora", "Tus datos", "Confirmación"];
+  return <ol className="grid grid-cols-5 gap-1 border-b border-[#dcebea]">{labels.map((label, index) => { const current = index + 1; const completed = current < step; return <li key={label} className={`flex min-w-0 items-center gap-2 border-b-2 px-1 pb-3 text-xs font-semibold sm:text-sm ${current === step || completed ? "border-[#0f8b7c] text-[#0d3642]" : "border-transparent text-clinic-muted"}`}><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${current === step || completed ? "bg-[#0f8b7c] text-white" : "border border-[#dcebea] bg-white"}`}>{completed ? <Check size={15}/> : current}</span><span className="hidden truncate md:block">{label}</span></li>; })}</ol>;
+}
+
+function StepActions({ onBack, onNext, nextDisabled }: { onBack?: () => void; onNext: () => void; nextDisabled?: boolean }) {
+  return <div className="mt-7 flex flex-col-reverse gap-3 border-t border-[#dcebea] pt-5 sm:flex-row sm:justify-between">{onBack ? <button type="button" onClick={onBack} className="min-h-11 rounded-xl border border-clinic-line px-5 text-sm font-semibold text-clinic-ink"><ChevronLeft className="mr-1 inline" size={17}/>Volver</button> : <span/>}<button type="button" disabled={nextDisabled} onClick={onNext} className="min-h-11 rounded-xl bg-[#0d3642] px-5 text-sm font-semibold text-white disabled:opacity-40">Continuar <ChevronRight className="ml-1 inline" size={17}/></button></div>;
+}
+
+function BookingSummary({ clinic, service, professional, date, time }: { clinic: Clinic | null; service?: ServiceWithRelations; professional: ProfessionalWithRelations | null; date: string; time: string }) {
+  const items = [["Prestación", service?.name ?? "Aún no seleccionada", Stethoscope], ["Profesional", professional ? `Dr/a. ${professional.name} ${professional.last_name}` : "Aún no seleccionado", UserRound], ["Fecha y hora", date && time ? `${formatDate(date)} · ${time}` : "Aún no seleccionada", CalendarDays]];
+  return <><h2 className="text-lg font-semibold">Resumen de tu reserva</h2><div className="mt-5 rounded-xl border border-[#dcebea] p-4"><div className="flex gap-3"><span className="grid h-10 w-10 place-items-center rounded-lg bg-[#e6f4f1]"><Building2 size={19}/></span><div><p className="font-semibold">{clinic?.name ?? "Clínica"}</p><p className="text-sm text-clinic-muted">{clinic?.address ?? "Dirección a confirmar"}</p></div></div></div><div className="mt-4 rounded-xl bg-[#e6f4f1] p-4 text-sm text-[#0d7066]"><MessageCircle className="mr-2 inline" size={17}/>Te enviaremos la confirmación y los recordatorios por WhatsApp.</div><div className="mt-4 divide-y divide-[#e8efee]">{items.map(([label,value,Icon]: any) => <div key={label} className="flex gap-3 py-4"><span className="grid h-9 w-9 place-items-center rounded-lg bg-[#f6faf9]"><Icon size={17}/></span><div><p className="text-xs font-semibold text-clinic-muted">{label}</p><p className="mt-1 text-sm font-medium">{value}</p></div></div>)}</div><div className="mt-5 border-t border-[#dcebea] pt-4 text-sm text-clinic-muted"><p><ShieldCheck className="mr-2 inline text-[#0f8b7c]" size={16}/>Reserva segura</p><p className="mt-3"><LockKeyhole className="mr-2 inline text-[#0f8b7c]" size={16}/>Datos protegidos</p></div></>;
 }
 
 function StepCard({
   number,
   title,
-  children
+  children, subtitle
 }: {
   number: string;
   title: string;
   children: ReactNode;
+  subtitle?: string;
 }) {
   return (
-    <section className="rounded-lg border border-clinic-line bg-white p-5 shadow-sm">
+    <section className="rounded-2xl border border-[#dcebea] bg-white p-5 shadow-sm sm:p-7">
       <div className="mb-4 flex items-center gap-3">
         <span className="grid h-8 w-8 place-items-center rounded-lg bg-teal-50 text-sm font-semibold text-clinic-brand">
           {number}
         </span>
-        <h2 className="font-semibold text-clinic-ink">{title}</h2>
+        <div><h2 className="text-2xl font-semibold text-[#0d3642]">{title}</h2>{subtitle && <p className="mt-2 text-sm text-clinic-muted">{subtitle}</p>}</div>
       </div>
       {children}
     </section>
