@@ -1,20 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Banknote,
   CalendarCheck2,
-  CalendarClock,
   CalendarDays,
-  CheckCircle2,
   Clock3,
-  FilePenLine,
-  Link2,
-  MessageCircle,
   Percent,
-  PlugZap,
-  ReceiptText,
   RefreshCw,
-  UserX,
   UsersRound,
   WalletCards
 } from "lucide-react";
@@ -85,16 +76,12 @@ export function AdminDashboard() {
 
   const summary = useMemo(() => {
     const pending = appointments.filter((item) => item.status === "pending").length;
-    const confirmed = appointments.filter((item) => item.status === "confirmed").length;
-    const cancelled = appointments.filter((item) => ["cancelled", "no_show"].includes(item.status)).length;
     const nextAppointment = appointments
       .filter((item) => new Date(item.starts_at).getTime() >= Date.now())
       .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())[0];
     return {
       total: appointments.length,
       pending,
-      confirmed,
-      cancelled,
       nextAppointment,
       occupancy: Math.min(100, Math.round((appointments.length / DAILY_CAPACITY) * 100))
     };
@@ -105,7 +92,6 @@ export function AdminDashboard() {
   const newPatients = patients.filter((patient) => isDateInRange(patient.created_at, range, clinic?.timezone ?? undefined)).length;
   const onlineRequests = appointments.filter((item) => item.source === "online" && item.status === "pending").length;
   const professionalsWithoutSchedule = professionals.filter((professional) => professional.active && !professional.availability_rules?.length).length;
-  const topService = mostRequestedService(appointments);
   const appointmentsByDate = appointments.reduce<Record<string, AppointmentWithRelations[]>>((groups, appointment) => {
     const date = appointment.starts_at ? getDateInTimeZone(new Date(appointment.starts_at), clinic?.timezone ?? undefined) : "sin-fecha";
     (groups[date] ??= []).push(appointment);
@@ -115,20 +101,16 @@ export function AdminDashboard() {
 
   return (
     <AdminLayout onCreateAppointment={() => navigate("/admin/agenda")} onRefresh={loadDashboard}>
-      <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <main className="mx-auto flex max-w-[1320px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <section className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
           <div>
-            <p className="text-sm font-semibold text-clinic-brand">Panel operativo</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-normal text-clinic-ink">{isToday ? "Resumen de hoy" : "Resumen del período"}</h1>
+            <h1 className="text-3xl font-semibold tracking-normal text-clinic-ink">{isToday ? "Resumen de hoy" : "Resumen del período"}</h1>
             <p className="mt-2 max-w-2xl text-clinic-muted">
               Agenda, confirmaciones y tareas de recepción para {clinic?.name ?? "Medin"} · {range.label}.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button icon={<RefreshCw size={16} />} onClick={loadDashboard}>Actualizar</Button>
-            <Button icon={<CalendarClock size={16} />} onClick={() => navigate("/admin/agenda")} variant="primary">
-              Nuevo turno
-            </Button>
+            <Button icon={<RefreshCw size={16} />} onClick={loadDashboard} variant="secondary">Actualizar</Button>
           </div>
         </section>
 
@@ -136,21 +118,19 @@ export function AdminDashboard() {
 
         <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="today" onChange={setRange} />
 
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Metric title={isToday ? "Turnos hoy" : "Turnos del período"} value={String(summary.total)} helper={overbookings ? `Incluye ${overbookings} sobreturno${overbookings === 1 ? "" : "s"}` : "Actividad programada"} icon={<Clock3 size={19} />} />
           <Metric title="Pendientes" value={String(summary.pending)} helper="Para confirmar" icon={<CalendarDays size={19} />} tone="warning" />
-          <Metric title="Proximo turno" value={summary.nextAppointment ? formatTime(summary.nextAppointment.starts_at, clinic?.timezone ?? undefined) : "--"} helper={summary.nextAppointment?.patient ? `${summary.nextAppointment.patient.first_name} ${summary.nextAppointment.patient.last_name}` : "Sin proximos turnos"} icon={<CalendarCheck2 size={19} />} />
-          <Metric title="Confirmados" value={String(summary.confirmed)} helper="Pacientes listos" icon={<CheckCircle2 size={19} />} tone="success" />
-          <Metric title="Cancelados / ausentes" value={String(summary.cancelled)} helper="Revisar seguimiento" icon={<UserX size={19} />} tone="danger" />
-          <Metric title="Ocupacion" value={`${summary.occupancy}%`} helper="Capacidad estimada" icon={<Percent size={19} />} />
+          <Metric title="Próximo turno" value={summary.nextAppointment ? formatTime(summary.nextAppointment.starts_at, clinic?.timezone ?? undefined) : "--"} helper={summary.nextAppointment?.patient ? `${summary.nextAppointment.patient.first_name} ${summary.nextAppointment.patient.last_name}` : "Sin próximos turnos"} icon={<CalendarCheck2 size={19} />} />
+          <Metric title="Ocupación" value={`${summary.occupancy}%`} helper="Capacidad estimada" icon={<Percent size={19} />} />
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
+        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.75fr)]">
           <Panel title={isToday ? "Agenda de hoy" : "Agenda del período"} action={<LinkButton to={`/admin/agenda?preset=${range.preset}${range.preset === "custom" ? `&from=${range.dateFrom}&to=${range.dateTo}` : ""}`}>Ver agenda completa</LinkButton>}>
             {loading ? (
               <EmptyLine>Cargando agenda...</EmptyLine>
             ) : appointments.length === 0 ? (
-              <EmptyLine>No hay turnos cargados para el período.</EmptyLine>
+              <EmptyLine>No hay turnos programados para este período. Cuando se carguen reservas, vas a verlas acá.</EmptyLine>
             ) : (
               <div className="divide-y divide-clinic-line">
                 {Object.entries(appointmentsByDate).slice(0, 7).map(([date, dailyAppointments]) => (
@@ -170,7 +150,7 @@ export function AdminDashboard() {
             )}
           </Panel>
 
-          <Panel title="Proximas acciones">
+          <Panel title="Próximas acciones">
             <ActionItem count={summary.pending} label="Confirmar turnos pendientes" to="/admin/agenda" />
             <ActionItem count={onlineRequests} label="Revisar solicitudes online" to="/admin/agenda" />
             <ActionItem count={professionalsWithoutSchedule} label="Completar disponibilidad" to="/admin/disponibilidad" />
@@ -178,13 +158,12 @@ export function AdminDashboard() {
           </Panel>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <Panel title="Indicadores simples">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <SmallMetric label="Ausentismo del período" value={appointments.length ? String(periodNoShow) : "Sin datos"} />
+            <div className="grid gap-3 sm:grid-cols-3">
               <SmallMetric label="Pacientes nuevos del período" value={String(newPatients)} />
-              <SmallMetric label="Servicio mas solicitado" value={topService ?? "Sin datos"} />
               <SmallMetric label="Turnos por fuente" value={sourceBreakdown(appointments)} />
+              <SmallMetric label="Ausentismo del período" value={appointments.length ? String(periodNoShow) : "Sin datos"} />
             </div>
             {appointments.length < 3 && (
               <p className="mt-4 rounded-lg bg-clinic-surface px-3 py-2 text-sm text-clinic-muted">
@@ -194,42 +173,10 @@ export function AdminDashboard() {
           </Panel>
 
           <Panel title="Accesos rapidos">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
               <QuickLink icon={<UsersRound size={18} />} label="Profesionales" to="/admin/profesionales" />
               <QuickLink icon={<WalletCards size={18} />} label="Servicios" to="/admin/servicios" />
               <QuickLink icon={<CalendarDays size={18} />} label="Disponibilidad" to="/admin/disponibilidad" />
-              <QuickLink icon={<MessageCircle size={18} />} label="WhatsApp" to="/admin/whatsapp" />
-              <QuickLink icon={<MessageCircle size={18} />} label="Mensajes" to="/admin/mensajes" />
-              <QuickLink icon={<WalletCards size={18} />} label="Pagos" to="/admin/pagos" />
-              <QuickLink icon={<ReceiptText size={18} />} label="Facturacion" to="/admin/facturacion" />
-              <QuickLink icon={<FilePenLine size={18} />} label="Recetarios" to="/admin/recetarios" />
-            </div>
-          </Panel>
-        </section>
-
-        <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-          <Panel title="Financiacion disponible">
-            <div className="flex items-start gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-lg bg-blue-50 text-blue-700">
-                <Banknote size={21} />
-              </div>
-              <div>
-                <p className="font-semibold text-clinic-ink">Simula planes de pago para tratamientos.</p>
-                <p className="mt-1 text-sm text-clinic-muted">El simulador completo vive en el modulo financiero.</p>
-                <LinkButton className="mt-4" to="/admin/financiacion">Abrir simulador</LinkButton>
-              </div>
-            </div>
-          </Panel>
-
-          <Panel title="Integraciones preparadas">
-            <p className="mb-4 text-sm text-clinic-muted">
-              Conecta canales y automatizaciones cuando el flujo operativo este listo.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Integration icon={<MessageCircle size={18} />} name="WhatsApp" status="Preparado" />
-              <Integration icon={<Banknote size={18} />} name="Pagos" status="Proximamente" />
-              <Integration icon={<CalendarDays size={18} />} name="Google Calendar" status="Proximamente" />
-              <Integration icon={<PlugZap size={18} />} name="Scoring" status="En evaluacion" />
             </div>
           </Panel>
         </section>
@@ -240,7 +187,7 @@ export function AdminDashboard() {
 
 function Panel({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-clinic-line bg-white p-5 shadow-sm">
+    <section className="rounded-lg border border-clinic-line bg-white p-5 shadow-[0_8px_24px_rgba(13,54,66,0.035)]">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-clinic-ink">{title}</h2>
         {action}
@@ -258,8 +205,8 @@ function Metric({ title, value, helper, icon, tone = "default" }: { title: strin
     danger: "bg-red-50 text-red-700"
   };
   return (
-    <article className="rounded-lg border border-clinic-line bg-white p-4 shadow-sm">
-      <div className={`grid h-9 w-9 place-items-center rounded-lg ${colors[tone]}`}>{icon}</div>
+    <article className="rounded-lg border border-clinic-line bg-white p-5 shadow-[0_8px_24px_rgba(13,54,66,0.035)]">
+      <div className={`grid h-10 w-10 place-items-center rounded-full ${colors[tone]}`}>{icon}</div>
       <p className="mt-3 text-sm text-clinic-muted">{title}</p>
       <p className="mt-1 text-2xl font-semibold text-clinic-ink">{value}</p>
       <p className="mt-1 text-xs text-clinic-muted">{helper}</p>
@@ -278,7 +225,7 @@ function SmallMetric({ label, value }: { label: string; value: string }) {
 
 function ActionItem({ count, label, to }: { count: number; label: string; to: string }) {
   return (
-    <Link to={to} className="flex items-center justify-between gap-3 rounded-lg border border-clinic-line px-4 py-3 hover:bg-clinic-surface">
+    <Link to={to} className="flex items-center justify-between gap-3 rounded-lg border border-clinic-line px-4 py-3 transition hover:bg-[#e6f4f1]">
       <span className="text-sm font-medium text-clinic-ink">{label}</span>
       <span className="rounded-lg bg-teal-50 px-2.5 py-1 text-xs font-semibold text-clinic-brand">{count}</span>
     </Link>
@@ -287,22 +234,10 @@ function ActionItem({ count, label, to }: { count: number; label: string; to: st
 
 function QuickLink({ icon, label, to }: { icon: React.ReactNode; label: string; to: string }) {
   return (
-    <Link to={to} className="flex items-center gap-3 rounded-lg border border-clinic-line px-4 py-3 font-semibold text-clinic-ink hover:bg-clinic-surface">
-      <span className="text-clinic-brand">{icon}</span>
-      {label}
+    <Link to={to} className="flex min-h-24 flex-col items-center justify-center gap-3 rounded-lg border border-clinic-line px-3 py-4 text-center text-sm font-semibold text-clinic-ink transition hover:bg-[#e6f4f1]">
+      <span className="grid h-9 w-9 place-items-center rounded-full bg-[#e6f4f1] text-clinic-brand">{icon}</span>
+      <span>{label}</span>
     </Link>
-  );
-}
-
-function Integration({ icon, name, status }: { icon: React.ReactNode; name: string; status: string }) {
-  return (
-    <div className="rounded-lg border border-clinic-line p-4">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-clinic-brand">{icon}</span>
-        <span className="rounded-lg bg-clinic-surface px-2 py-1 text-xs font-semibold text-clinic-muted">{status}</span>
-      </div>
-      <p className="mt-3 font-semibold text-clinic-ink">{name}</p>
-    </div>
   );
 }
 
@@ -348,13 +283,4 @@ function sourceBreakdown(appointments: AppointmentWithRelations[]) {
   const online = appointments.filter((item) => item.source === "online").length;
   const whatsapp = appointments.filter((item) => item.source === "whatsapp").length;
   return `${manual} manual / ${online} online / ${whatsapp} WhatsApp`;
-}
-
-function mostRequestedService(appointments: AppointmentWithRelations[]) {
-  const counts = new Map<string, number>();
-  appointments.forEach((appointment) => {
-    const name = appointment.service?.name ?? appointment.reason;
-    counts.set(name, (counts.get(name) ?? 0) + 1);
-  });
-  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }

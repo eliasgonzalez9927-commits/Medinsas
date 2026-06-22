@@ -5,18 +5,18 @@ export default {
     extend: {
       colors: {
         clinic: {
-          ink: "#172026",
-          muted: "#5E6A72",
-          line: "#D8E1E7",
-          surface: "#F7FAFC",
-          brand: "#0F766E",
+          ink: "#0D3642",
+          muted: "#667085",
+          line: "#DCE8E6",
+          surface: "#F6FAF9",
+          brand: "#0D766E",
           accent: "#2563EB",
           warning: "#D97706",
           danger: "#DC2626"
         }
       },
       boxShadow: {
-        soft: "0 18px 40px rgba(23, 32, 38, 0.08)"
+        soft: "0 14px 34px rgba(13, 54, 66, 0.07)"
       }
     }
   },
