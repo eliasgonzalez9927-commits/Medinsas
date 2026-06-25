@@ -23,7 +23,7 @@ export function OnlineBookingPage() {
             <div>
               <h2 className="font-semibold text-clinic-ink">Link publico activo</h2>
               <p className="mt-1 text-sm text-clinic-muted">
-                Los pacientes pueden solicitar turnos desde mobile y confirmar por WhatsApp.
+                Los pacientes pueden solicitar turnos desde mobile y dejar sus datos de contacto.
               </p>
             </div>
             <ToggleRight className="text-clinic-brand" size={34} />

@@ -18,12 +18,14 @@ import {
   updateLocation,
   upsertClinicHour
 } from "../../../lib/clinic-data";
+import { getClinicNotificationSettings, updateClinicNotificationSettings } from "../../../lib/notifications";
 import { canManageClinic, canManageUsers } from "../../../lib/permissions";
 import { supabase } from "../../../lib/supabase";
 import {
   Clinic,
   ClinicHours,
   ClinicInput,
+  ClinicNotificationSettings,
   ClinicMemberWithProfile,
   Location,
   LocationInput,
@@ -276,7 +278,7 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
               professionals={professionals}
             />
           )}
-          {activeTab === "notifications" && <NotificationsPanel />}
+          {activeTab === "notifications" && <NotificationsPanel clinic={clinic} disabled={!permissions.manageClinic || saving} />}
           {activeTab === "branding" && <PreparedPanel icon={<SlidersHorizontal size={20} />} title="Branding" text="Logo, color principal, textos publicos y dominio personalizado quedan preparados sobre la tabla clinics." />}
           {activeTab === "integrations" && <PreparedPanel icon={<ShieldCheck size={20} />} title="Integraciones" text="Resend queda activo desde backend. WhatsApp, ARCA y receta electronica se mantienen como integraciones futuras controladas." />}
         </>
@@ -491,22 +493,75 @@ function MemberRow({ disabled, member, onRefresh }: { disabled: boolean; member:
   );
 }
 
-function NotificationsPanel() {
+function NotificationsPanel({ clinic, disabled }: { clinic: Clinic; disabled: boolean }) {
+  const [settings, setSettings] = useState<ClinicNotificationSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    getClinicNotificationSettings(clinic.id)
+      .then(setSettings)
+      .catch((err) => setError(err instanceof Error ? err.message : "No pudimos cargar notificaciones."));
+  }, [clinic.id]);
+
+  async function update<K extends keyof ClinicNotificationSettings>(key: K, value: ClinicNotificationSettings[K]) {
+    if (!settings) return;
+    setSaving(true);
+    setNotice("");
+    setError("");
+    const previous = settings;
+    const next = { ...settings, [key]: value };
+    setSettings(next);
+    try {
+      const saved = await updateClinicNotificationSettings(clinic.id, { [key]: value });
+      setSettings(saved);
+      setNotice("Configuración de notificaciones guardada.");
+    } catch (err) {
+      setSettings(previous);
+      setError(err instanceof Error ? err.message : "No pudimos guardar notificaciones.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!settings) {
+    return <SectionCard className="p-5 text-sm text-clinic-muted">Cargando notificaciones...</SectionCard>;
+  }
+
   return (
     <section className="grid gap-6 xl:grid-cols-2">
       <SectionCard className="p-5">
-        <Header icon={<Mail size={20} />} title="Notificaciones automaticas" text="Toggles preparados para reservas online y eventos operativos." />
+        <Header icon={<Mail size={20} />} title="Notificaciones automáticas" text="Eventos internos, email transaccional y preparación de WhatsApp futuro." />
+        {notice && <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div>}
+        {error && <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
         <div className="mt-5 grid gap-3">
-          {["Enviar email al paciente cuando solicita turno", "Enviar email cuando se confirma", "Enviar email cuando se cancela", "Enviar recordatorio por email", "Preparar WhatsApp futuro"].map((label) => (
-            <label key={label} className="flex items-center justify-between rounded-lg border border-clinic-line px-4 py-3">
-              <span className="text-sm font-medium text-clinic-ink">{label}</span>
-              <input type="checkbox" defaultChecked={label !== "Enviar recordatorio por email" && label !== "Preparar WhatsApp futuro"} />
-            </label>
-          ))}
+          <Toggle disabled={disabled || saving} label="Notificaciones internas en la plataforma" checked={settings.in_app_enabled} onChange={(checked) => update("in_app_enabled", checked)} />
+          <Toggle disabled={disabled || saving} label="Preparar emails transaccionales" checked={settings.email_enabled} onChange={(checked) => update("email_enabled", checked)} />
+          <Toggle disabled={disabled || saving} label="Preparar WhatsApp futuro" checked={settings.whatsapp_enabled} onChange={(checked) => update("whatsapp_enabled", checked)} />
+          <Toggle disabled={disabled || saving} label="Recordatorio 24h antes" checked={settings.reminder_24h_enabled} onChange={(checked) => update("reminder_24h_enabled", checked)} />
+          <Toggle disabled={disabled || saving} label="Recordatorio 2h antes" checked={settings.reminder_2h_enabled} onChange={(checked) => update("reminder_2h_enabled", checked)} />
+          <Toggle disabled={disabled || saving} label="Avisar nueva reserva online" checked={settings.notify_new_booking} onChange={(checked) => update("notify_new_booking", checked)} />
+          <Toggle disabled={disabled || saving} label="Avisar pago aprobado" checked={settings.notify_payment_approved} onChange={(checked) => update("notify_payment_approved", checked)} />
+          <Toggle disabled={disabled || saving} label="Avisar solicitudes de reprogramación" checked={settings.notify_reschedule_requests} onChange={(checked) => update("notify_reschedule_requests", checked)} />
+          <Toggle disabled={disabled || saving} label="Avisar solicitudes de cancelación" checked={settings.notify_cancellation_requests} onChange={(checked) => update("notify_cancellation_requests", checked)} />
+          <Input label="WhatsApp de la clínica" value={settings.whatsapp_phone_number ?? ""} onChange={(value) => update("whatsapp_phone_number", value || null)} />
         </div>
       </SectionCard>
-      <PreparedPanel icon={<Mail size={20} />} title="Resend" text="Los emails se envian desde backend con RESEND_API_KEY. Los webhooks quedan preparados en /api/webhooks/resend." />
+      <section className="grid gap-6">
+        <PreparedPanel icon={<Mail size={20} />} title="Resend" text="Los emails quedan preparados como entregas pendientes. El envío real usa backend con RESEND_API_KEY cuando se active el worker correspondiente." />
+        <PreparedPanel icon={<Mail size={20} />} title="WhatsApp futuro" text="WhatsApp automático todavía no está activo. Esta configuración prepara la integración para la clínica." />
+      </section>
     </section>
+  );
+}
+
+function Toggle({ checked, disabled, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex items-center justify-between rounded-lg border border-clinic-line px-4 py-3">
+      <span className="text-sm font-medium text-clinic-ink">{label}</span>
+      <input disabled={disabled} type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+    </label>
   );
 }
 

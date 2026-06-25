@@ -10,6 +10,7 @@ import { AppointmentRequestsPage } from "./pages/admin/modules/AppointmentReques
 import { AvailabilityPage } from "./pages/admin/modules/AvailabilityPage";
 import { ReportsPage } from "./pages/admin/modules/SecondaryModulePage";
 import { MessagesPage } from "./pages/admin/modules/MessagesPage";
+import { NotificationsPage } from "./pages/admin/modules/NotificationsPage";
 import { OnlineBookingPage } from "./pages/admin/modules/OnlineBookingPage";
 import { OnboardingPage } from "./pages/admin/modules/OnboardingPage";
 import { PatientsPage } from "./pages/admin/modules/PatientsPage";
@@ -73,6 +74,8 @@ export function App() {
         <Route path="/admin/booking" element={<OnlineBookingPage />} />
         <Route path="/admin/reservas-online" element={<OnlineBookingPage />} />
         <Route path="/admin/whatsapp" element={<ComingSoonPage title="WhatsApp" description="Próximamente vas a poder usar automatizaciones, confirmaciones y recordatorios mediante una integración oficial de WhatsApp." />} />
+        <Route path="/admin/notificaciones" element={<NotificationsPage />} />
+        <Route path="/admin/notificaciones/configuracion" element={<SettingsNotificationsPage />} />
         <Route path="/admin/mensajes" element={<MessagesPage />} />
         <Route path="/admin/pagos" element={<PaymentsPage />} />
         <Route path="/admin/pagos/configuracion" element={<PaymentSettingsPage />} />

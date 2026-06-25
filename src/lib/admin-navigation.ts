@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Banknote,
+  Bell,
   CalendarDays,
   ClipboardCheck,
   ClipboardList,
@@ -65,6 +66,7 @@ export const ADMIN_MODULES: AdminModuleDefinition[] = [
   { key: "financing", label: "Financiación", path: "/admin/financiacion", icon: Banknote, group: "administration", status: "coming_soon", moduleFlag: "financiacion", description: "Opciones de financiación y simulaciones para tratamientos." },
   { key: "billing", label: "Facturación", path: "/admin/facturacion", icon: ReceiptText, group: "administration", status: "coming_soon", moduleFlag: "facturacion", description: "Comprobantes internos e integración fiscal cuando esté lista." },
 
+  { key: "notifications", label: "Notificaciones", path: "/admin/notificaciones", icon: Bell, group: "communication", status: "active" },
   { key: "messages", label: "Mensajes", path: "/admin/mensajes", icon: MessageCircle, group: "communication", status: "beta", moduleFlag: "mensajes" },
   { key: "whatsapp", label: "WhatsApp", path: "/admin/whatsapp", icon: MessageCircle, group: "communication", status: "coming_soon", moduleFlag: "whatsapp", description: "Automatizaciones y conversaciones por WhatsApp con integración oficial." },
 

@@ -67,7 +67,7 @@ clinic-saas-mvp/
 
 1. Crea un proyecto en Supabase.
 2. Ejecuta `supabase/schema.sql` en el SQL Editor.
-3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql`, `supabase/migrations/006_auth_admin_access.sql`, `supabase/migrations/007_billing_prescriptions_foundation.sql`, `supabase/migrations/008_settings_users_messaging.sql`, `supabase/migrations/009_mercado_pago_payments.sql`, `supabase/migrations/010_clinic_timezone_fix.sql`, `supabase/migrations/011_payment_expiration_admin_tools.sql`, `supabase/migrations/012_superadmin_onboarding.sql`, `supabase/migrations/013_patient_access_foundation.sql` y `supabase/migrations/014_patient_requests_admin_tools.sql`.
+3. Ejecuta las migraciones en orden: `supabase/migrations/002_ai_whatsapp_agent.sql`, `supabase/migrations/003_product_architecture.sql`, `supabase/migrations/004_connect_operational_base.sql`, `supabase/migrations/005_connect_agenda_patients_booking.sql`, `supabase/migrations/006_auth_admin_access.sql`, `supabase/migrations/007_billing_prescriptions_foundation.sql`, `supabase/migrations/008_settings_users_messaging.sql`, `supabase/migrations/009_mercado_pago_payments.sql`, `supabase/migrations/010_clinic_timezone_fix.sql`, `supabase/migrations/011_payment_expiration_admin_tools.sql`, `supabase/migrations/012_superadmin_onboarding.sql`, `supabase/migrations/013_patient_access_foundation.sql`, `supabase/migrations/014_patient_requests_admin_tools.sql`, `supabase/migrations/015_operational_clinic_tools.sql`, `supabase/migrations/016_patient_coverage_booking.sql`, `supabase/migrations/017_overbookings.sql`, `supabase/migrations/018_saas_subscriptions.sql`, `supabase/migrations/019_plan_change_approval.sql` y `supabase/migrations/020_notifications_base.sql`.
 4. Copia `.env.example` a `.env` y completa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 5. Instala dependencias con `npm install`.
 6. Ejecuta `npm run dev`.
@@ -102,6 +102,8 @@ clinic-saas-mvp/
 - `/admin/servicios`: catalogo de servicios/tratamientos.
 - `/admin/booking`: configuracion de reservas online y links publicos.
 - `/admin/whatsapp`: plantillas y preparacion de flujos por WhatsApp.
+- `/admin/notificaciones`: centro simple de eventos internos y entregas preparadas.
+- `/admin/notificaciones/configuracion`: configuracion de canales, recordatorios y WhatsApp futuro.
 - `/admin/mensajes`: comunicaciones por email a pacientes con confirmacion y logs.
 - `/admin/pagos`: listado y trazabilidad de pagos.
 - `/admin/pagos/:id`: detalle de pago y eventos.
@@ -347,6 +349,33 @@ Los mensajes generales respetan `patients.email_opt_in`. Los emails transacciona
 quedan preparados con plantillas iniciales y logs; WhatsApp real y webhooks completos de Resend
 quedan pendientes. La ruta preparada `/api/webhooks/resend` queda lista para completar
 validacion de firma y eventos `delivered`, `bounced`, `opened` y `clicked`.
+
+### Notificaciones internas
+
+La migracion `020_notifications_base.sql` crea:
+
+- `notification_events`: eventos operativos para paciente, clinica o plataforma.
+- `notification_deliveries`: entregas preparadas por canal `in_app`, `email` y `whatsapp`.
+- `notification_templates`: plantillas base con variables simples `{{variable}}`.
+- `clinic_notification_settings`: configuracion de canales, recordatorios y avisos por clinica.
+
+Eventos conectados desde base de datos, con triggers defensivos que no bloquean el flujo principal:
+
+- Nueva reserva online.
+- Turno solicitado o registrado sin pago online.
+- Pago aprobado.
+- Solicitud de reprogramacion.
+- Solicitud de cancelacion.
+- Sobreturno creado.
+- Solicitud de cambio de plan.
+
+`/admin/notificaciones` muestra los eventos de la clinica activa y `/admin/configuracion/notificaciones`
+permite activar o desactivar canales y tipos de aviso. Las entregas de email quedan en estado
+`pending` para integrarse con un worker/Edge Function que use Resend. WhatsApp queda como
+`skipped` mientras `whatsapp_enabled=false`; no se envia WhatsApp automatico todavia.
+
+WhatsApp manual asistido esta disponible desde la agenda con acciones para copiar mensaje o abrir
+`wa.me` usando el telefono del paciente, datos del turno y link `/mi-turno/:token` cuando exista.
 
 ## Pagos con Mercado Pago
 

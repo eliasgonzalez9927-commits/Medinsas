@@ -728,7 +728,7 @@ export async function getAppointments(
   try {
     let query = supabase
       .from("appointments")
-      .select("*, patients(*), professionals(*), services(*), locations(*)")
+      .select("*, patients(*), professionals(*), services(*), locations(*), appointment_public_links(token, expires_at, revoked_at)")
       .eq("clinic_id", clinicId)
       .order("starts_at");
     if (filters.date || filters.dateFrom || filters.dateTo) {
@@ -1089,7 +1089,8 @@ function mapAppointment(row: any): AppointmentWithRelations {
     patient: row.patients ?? null,
     professional: row.professionals ?? null,
     service: row.services ?? null,
-    location: row.locations ?? null
+    location: row.locations ?? null,
+    public_links: row.appointment_public_links ?? []
   };
 }
 

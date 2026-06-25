@@ -186,6 +186,11 @@ export type AppointmentWithRelations = Appointment & {
   professional: Professional | null;
   service: Service | null;
   location: Location | null;
+  public_links?: Array<{
+    token: string;
+    expires_at: string | null;
+    revoked_at: string | null;
+  }>;
 };
 
 export type PatientWithAppointments = Patient & {
@@ -633,6 +638,78 @@ export type MessageLog = {
   related_entity_id: string | null;
   sent_at: string | null;
   created_at: string;
+};
+
+export type NotificationAudience = "patient" | "clinic" | "platform";
+export type NotificationEventStatus = "pending" | "processed" | "cancelled" | "failed" | string;
+export type NotificationDeliveryChannel = "in_app" | "email" | "whatsapp" | string;
+export type NotificationDeliveryStatus = "pending" | "sent" | "failed" | "skipped" | string;
+
+export type NotificationEvent = {
+  id: string;
+  clinic_id: string | null;
+  patient_id: string | null;
+  appointment_id: string | null;
+  payment_id: string | null;
+  event_type: string;
+  audience: NotificationAudience | string;
+  title: string;
+  message: string | null;
+  status: NotificationEventStatus;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  processed_at: string | null;
+  patients?: Pick<Patient, "id" | "first_name" | "last_name" | "phone" | "email"> | null;
+  appointments?: Pick<Appointment, "id" | "public_code" | "starts_at" | "status"> | null;
+};
+
+export type NotificationDelivery = {
+  id: string;
+  event_id: string;
+  clinic_id: string | null;
+  channel: NotificationDeliveryChannel;
+  recipient_type: string;
+  recipient_name: string | null;
+  recipient_email: string | null;
+  recipient_phone: string | null;
+  status: NotificationDeliveryStatus;
+  provider: string | null;
+  provider_message_id: string | null;
+  error_message: string | null;
+  sent_at: string | null;
+  created_at: string;
+  metadata: Record<string, unknown>;
+};
+
+export type NotificationTemplate = {
+  id: string;
+  key: string;
+  channel: "email" | "whatsapp" | "in_app" | string;
+  audience: NotificationAudience | string;
+  title: string | null;
+  body: string;
+  active: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ClinicNotificationSettings = {
+  id: string;
+  clinic_id: string;
+  email_enabled: boolean;
+  whatsapp_enabled: boolean;
+  in_app_enabled: boolean;
+  reminder_24h_enabled: boolean;
+  reminder_2h_enabled: boolean;
+  notify_new_booking: boolean;
+  notify_payment_approved: boolean;
+  notify_reschedule_requests: boolean;
+  notify_cancellation_requests: boolean;
+  whatsapp_phone_number: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
 };
 
 export type HealthCoverage = {

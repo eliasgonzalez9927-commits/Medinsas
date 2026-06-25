@@ -417,6 +417,19 @@ export function AgendaPage() {
     }
   }
 
+  function copyWhatsAppMessage(appointment: AppointmentWithRelations) {
+    const message = buildManualWhatsAppMessage(appointment, clinic);
+    navigator.clipboard?.writeText(message);
+    setNotice("Mensaje de WhatsApp copiado.");
+  }
+
+  function openWhatsApp(appointment: AppointmentWithRelations) {
+    const phone = normalizePhoneForWhatsApp(appointment.patient?.phone ?? "");
+    if (!phone) return;
+    const message = buildManualWhatsAppMessage(appointment, clinic);
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+  }
+
   return (
     <AdminPageShell
       actionLabel="Crear turno manual"
@@ -635,6 +648,22 @@ export function AgendaPage() {
                   {appointment.status === "pending" && (
                     <Button onClick={() => handleStatus(appointment.id, "confirm")}>Confirmar</Button>
                   )}
+                  <Button
+                    icon={<Copy size={16} />}
+                    onClick={() => copyWhatsAppMessage(appointment)}
+                    title={appointment.patient?.phone ? "Copiar mensaje para WhatsApp" : "El paciente no tiene teléfono cargado."}
+                    disabled={!appointment.patient?.phone}
+                  >
+                    Copiar mensaje
+                  </Button>
+                  <Button
+                    icon={<MessageCircle size={16} />}
+                    onClick={() => openWhatsApp(appointment)}
+                    title={appointment.patient?.phone ? "Abrir WhatsApp" : "El paciente no tiene teléfono cargado."}
+                    disabled={!appointment.patient?.phone}
+                  >
+                    Abrir WhatsApp
+                  </Button>
                   {!["cancelled", "completed"].includes(appointment.status) && (
                     <>
                       <Button onClick={() => handleStatus(appointment.id, "completed")}>Atendido</Button>
@@ -650,6 +679,43 @@ export function AgendaPage() {
       </SectionCard>
     </AdminPageShell>
   );
+}
+
+function buildManualWhatsAppMessage(appointment: AppointmentWithRelations, clinic: Clinic | null) {
+  const patientName = appointment.patient
+    ? `${appointment.patient.first_name} ${appointment.patient.last_name}`.trim()
+    : "paciente";
+  const clinicName = clinic?.name ?? "Medin";
+  const serviceName = appointment.service?.name ?? appointment.reason ?? "tu consulta";
+  const professionalName = appointment.professional
+    ? `Dr/a. ${appointment.professional.name} ${appointment.professional.last_name}`.trim()
+    : "el profesional asignado";
+  const appointmentDateTime = new Intl.DateTimeFormat("es-AR", {
+    dateStyle: "long",
+    timeStyle: "short",
+    timeZone: clinic?.timezone ?? "America/Argentina/Mendoza"
+  }).format(new Date(appointment.starts_at));
+  const publicTurnUrl = getPublicTurnUrl(appointment);
+  const details = publicTurnUrl ? ` Podés ver los detalles acá: ${publicTurnUrl}` : "";
+  return `Hola ${patientName}, te confirmamos tu turno en ${clinicName} para ${serviceName} con ${professionalName} el ${appointmentDateTime}.${details}`;
+}
+
+function getPublicTurnUrl(appointment: AppointmentWithRelations) {
+  const link = (appointment.public_links ?? []).find((item) => {
+    if (item.revoked_at) return false;
+    if (!item.expires_at) return true;
+    return new Date(item.expires_at).getTime() > Date.now();
+  });
+  if (!link?.token) return "";
+  return `${window.location.origin}/mi-turno/${link.token}`;
+}
+
+function normalizePhoneForWhatsApp(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("54")) return digits;
+  if (digits.startsWith("0")) return `54${digits.slice(1)}`;
+  return `54${digits}`;
 }
 
 function QuickAction({ icon, label }: { icon: ReactNode; label: string }) {
