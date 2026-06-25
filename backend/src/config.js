@@ -20,7 +20,8 @@ const envSchema = z.object({
   MERCADO_PAGO_PUBLIC_KEY: z.string().optional(),
   MERCADO_PAGO_WEBHOOK_SECRET: z.string().optional(),
   MERCADO_PAGO_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
-  APP_PUBLIC_URL: z.string().url().optional()
+  APP_PUBLIC_URL: z.string().url().optional(),
+  LANDING_PUBLIC_URL: z.string().url().optional()
 });
 
 export const config = envSchema.parse(process.env);

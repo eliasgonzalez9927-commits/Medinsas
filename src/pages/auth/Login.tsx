@@ -42,7 +42,7 @@ export function Login() {
             </span>
             <div>
               <p className="text-xl font-semibold text-clinic-ink">Medin</p>
-              <p className="text-sm text-clinic-muted">Gestion clinica modular</p>
+              <p className="text-sm text-clinic-muted">Gestión clínica moderna</p>
             </div>
           </div>
 
@@ -50,7 +50,7 @@ export function Login() {
             Acceso al panel
           </h1>
           <p className="mt-3 text-clinic-muted">
-            Ingresa con tu usuario del equipo para administrar agenda, pacientes y reservas.
+            Ingresá con tu usuario del equipo para administrar agenda, pacientes y reservas.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
@@ -66,7 +66,7 @@ export function Login() {
               />
             </label>
             <label className="block">
-              <span className="text-sm font-medium text-clinic-ink">Contrasena</span>
+              <span className="text-sm font-medium text-clinic-ink">Contraseña</span>
               <input
                 type="password"
                 value={password}
@@ -94,17 +94,17 @@ export function Login() {
           </form>
 
           <p className="mt-6 text-sm text-clinic-muted">
-            Los accesos del equipo son creados por administracion.
+            Los accesos del equipo son creados por administración.
           </p>
         </div>
       </section>
       <aside className="hidden bg-clinic-ink px-12 py-16 text-white lg:flex lg:items-end">
         <div className="max-w-lg">
           <p className="text-sm font-semibold uppercase tracking-widest text-teal-200">
-            MVP para clinicas
+            Plataforma Medin
           </p>
           <h2 className="mt-4 text-4xl font-semibold tracking-normal">
-            Agenda, pacientes y seguimiento operativo en una sola vista.
+            Agenda, pacientes y operación clínica en una sola vista.
           </h2>
         </div>
       </aside>

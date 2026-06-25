@@ -1079,7 +1079,7 @@ async function sendWithResend({ to, subject, text, html }) {
 async function buildPatientEmail(payment) {
   const detail = buildAppointmentDetail(payment);
   const isConfirmed = payment.appointments?.status === "confirmed" && detail.hasSchedule;
-  const calendarUrl = `${(config.APP_PUBLIC_URL ?? "").replace(/\/$/, "")}/api/appointments/${payment.appointment_id}/calendar.ics`;
+  const calendarUrl = `${resolvePublicUrl()}/api/appointments/${payment.appointment_id}/calendar.ics`;
   const publicLink = payment.appointment_id ? await ensureAppointmentPublicLink(payment.appointment_id) : null;
   const appointmentUrl = publicLink ? buildPublicAppointmentUrl(publicLink.token) : null;
   const kind = resolvePaymentKind(payment);
@@ -1322,7 +1322,7 @@ function buildIcsEvent(appointment) {
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Medin//ClinicOS//ES",
+    "PRODID:-//Medin//Medin//ES",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",

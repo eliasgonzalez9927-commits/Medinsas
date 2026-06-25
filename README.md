@@ -388,7 +388,8 @@ MERCADO_PAGO_ACCESS_TOKEN=
 MERCADO_PAGO_PUBLIC_KEY=
 MERCADO_PAGO_WEBHOOK_SECRET=
 MERCADO_PAGO_ENV=sandbox
-APP_PUBLIC_URL=https://clinic-saas-mvp.vercel.app
+APP_PUBLIC_URL=https://app.medin.com.ar
+LANDING_PUBLIC_URL=https://medin.com.ar
 ```
 
 Para probar en modo test:
@@ -418,20 +419,73 @@ La migracion `011_payment_expiration_admin_tools.sql` agrega `payments.expires_a
 `Vencido`; no cuenta como pendiente ni cobrado. El boton `Actualizar estado` consulta el backend
 para sincronizar con Mercado Pago o marcar el pago como vencido si corresponde.
 
-### Dominio publico
+### Dominios publicos
 
-Para usar `https://app.medin.com.ar` como dominio final:
+Dominios definidos para Medin:
 
-1. Agregar `app.medin.com.ar` en Vercel, seccion Domains del proyecto.
-2. Crear en DNS un `CNAME` para `app` apuntando a `cname.vercel-dns.com`, o al valor exacto que indique Vercel.
-3. Cambiar `APP_PUBLIC_URL` en Vercel a `https://app.medin.com.ar`.
-4. Hacer redeploy para que backend use el nuevo dominio en Mercado Pago, emails y calendario.
-5. Cambiar el webhook de Mercado Pago a `https://app.medin.com.ar/api/payments/mercadopago/webhook`.
-6. Probar una reserva con seña desde `https://app.medin.com.ar/reservar/clinica-central`.
+- Landing comercial: `https://medin.com.ar`
+- Landing con www: `https://www.medin.com.ar`
+- App/plataforma: `https://app.medin.com.ar`
+- Emails transaccionales: `notificaciones.medin.com.ar`
 
-`APP_PUBLIC_URL` es server-side y no debe llevar prefijo `VITE_`. Mientras el dominio final no este
-validado, debe mantenerse en `https://clinic-saas-mvp.vercel.app`. El frontend genera links publicos
-desde `window.location.origin`, con ese mismo fallback temporal.
+Variables de entorno relacionadas:
+
+```txt
+APP_PUBLIC_URL=https://app.medin.com.ar
+LANDING_PUBLIC_URL=https://medin.com.ar
+```
+
+`APP_PUBLIC_URL` es server-side y no debe llevar prefijo `VITE_`. Con `app.medin.com.ar` verificado,
+debe cambiarse en Vercel de `https://clinic-saas-mvp.vercel.app` a `https://app.medin.com.ar` y luego
+hacer redeploy. El backend usa esta variable para Mercado Pago, emails, links publicos de turno y
+archivos `.ics`. El frontend genera links publicos desde `window.location.origin`, con fallback temporal
+a la URL actual de Vercel.
+
+Configuracion de Vercel para la app:
+
+1. En el proyecto `clinic-saas-mvp`, confirmar que `app.medin.com.ar` figura como dominio valido.
+2. Cambiar `APP_PUBLIC_URL` de `https://clinic-saas-mvp.vercel.app` a `https://app.medin.com.ar`.
+3. Hacer redeploy para que el backend use el nuevo dominio en Mercado Pago, emails y calendario.
+4. Mantener `https://clinic-saas-mvp.vercel.app` disponible durante la ventana de QA de transicion.
+
+Comando sugerido con Vercel CLI, cargando el valor de forma interactiva:
+
+```bash
+npx vercel env rm APP_PUBLIC_URL production
+npx vercel env add APP_PUBLIC_URL production
+npx vercel --prod
+```
+
+Preparacion de Vercel para la landing:
+
+1. En el proyecto landing, agregar `medin.com.ar` y `www.medin.com.ar` en Vercel, seccion Domains.
+2. Crear los registros DNS que indique Vercel para apex y `www`.
+3. Configurar `LANDING_PUBLIC_URL=https://medin.com.ar` si la landing o la app necesitan construir links comerciales.
+
+Mercado Pago despues de verificar `app.medin.com.ar`:
+
+1. Cambiar el webhook en Mercado Pago Developers a `https://app.medin.com.ar/api/payments/mercadopago/webhook`.
+2. Confirmar que las credenciales siguen en el proyecto de la app: `MERCADO_PAGO_ACCESS_TOKEN`,
+   `MERCADO_PAGO_PUBLIC_KEY`, `MERCADO_PAGO_WEBHOOK_SECRET` y `MERCADO_PAGO_ENV`.
+3. Probar una reserva con seña desde `https://app.medin.com.ar/reservar/clinica-central`.
+
+QA post-dominio:
+
+- Login y acceso a `/admin`.
+- Reserva publica en `/reservar/clinica-central`.
+- Reserva sin pago online.
+- Reserva con pago sandbox y redirect de Mercado Pago.
+- Webhook de Mercado Pago con evento `payment.created`.
+- Link privado `/mi-turno/:token`.
+- Boton de Google Calendar.
+- Descarga `.ics`.
+- Emails post-pago o confirmacion, si Resend esta activo.
+
+Durante la transicion, mantener permitidas y probadas estas URLs:
+
+- `https://clinic-saas-mvp.vercel.app`
+- `https://app.medin.com.ar`
+- `https://medin.com.ar`
 
 ## Integracion WhatsApp
 
