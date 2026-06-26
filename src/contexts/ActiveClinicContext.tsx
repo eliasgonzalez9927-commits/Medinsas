@@ -26,7 +26,12 @@ export function ActiveClinicProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const isPlatformAdmin = profile?.role === "platform_admin";
+  // platform_admin puede venir de profiles.role o, como en los datos reales hoy,
+  // de una fila clinic_members.role = "platform_admin" (mismo criterio que
+  // is_admin()/is_platform_admin() en la base y que AuthContext.role).
+  const isPlatformAdmin =
+    profile?.role === "platform_admin" ||
+    clinicMemberships.some((membership) => membership.role === "platform_admin");
   const storageKey = user ? `medin.activeClinicId.${user.id}` : "";
 
   const activeClinic = useMemo(
