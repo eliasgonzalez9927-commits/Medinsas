@@ -5,6 +5,7 @@ import { logger } from "./lib/logger.js";
 import { mercadoPagoPaymentsRouter } from "./routes/mercadoPagoPayments.js";
 import { messagesRouter } from "./routes/messages.js";
 import { notificationsRouter } from "./routes/notifications.js";
+import { superadminRouter } from "./routes/superadmin.js";
 import { whatsappWebhookRouter } from "./routes/whatsappWebhook.js";
 import { config } from "./config.js";
 
@@ -44,6 +45,7 @@ app.get("/health/env", (_req, res) => {
 app.use(whatsappWebhookRouter);
 app.use(messagesRouter);
 app.use(notificationsRouter);
+app.use(superadminRouter);
 app.use(mercadoPagoPaymentsRouter);
 
 app.use((error, _req, res, _next) => {
