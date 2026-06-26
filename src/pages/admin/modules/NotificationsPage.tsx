@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bell, CalendarDays, CheckCircle2, Mail, MessageCircle, Monitor, RefreshCw, Search } from "lucide-react";
+import { Bell, CalendarDays, CheckCircle2, Mail, MessageCircle, Monitor, RefreshCw, Search, Send } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { useAuth } from "../../../contexts/AuthContext";
 import { getDefaultClinic } from "../../../lib/clinic-data";
 import { getNotificationEvents } from "../../../lib/notifications";
+import { supabase } from "../../../lib/supabase";
 import { Clinic, NotificationDelivery, NotificationEvent } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
 
@@ -17,12 +19,16 @@ const filterLabels: Record<NotificationFilter, string> = {
 };
 
 export function NotificationsPage() {
+  const { role } = useAuth();
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [events, setEvents] = useState<NotificationEvent[]>([]);
   const [filter, setFilter] = useState<NotificationFilter>("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [processing, setProcessing] = useState(false);
+  const [processNotice, setProcessNotice] = useState("");
+  const canProcessEmails = role === "platform_admin";
 
   async function load() {
     setLoading(true);
@@ -70,6 +76,39 @@ export function NotificationsPage() {
     setFilter(next);
   }
 
+  async function processEmails() {
+    setProcessing(true);
+    setProcessNotice("");
+    setError("");
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) throw new Error("Sesion expirada.");
+      const response = await fetch("/api/notifications/process-email-deliveries", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${data.session.access_token}`
+        },
+        body: JSON.stringify({ limit: 25 })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = result.error === "PLATFORM_ADMIN_REQUIRED"
+          ? "Solo un administrador de plataforma puede procesar emails pendientes."
+          : result.error === "UNAUTHORIZED"
+            ? "Sesion expirada. Volve a iniciar sesion."
+            : "No pudimos procesar los emails pendientes.";
+        throw new Error(message);
+      }
+      setProcessNotice(`Procesados: ${result.processed ?? 0}. Enviados: ${result.sent ?? 0}. Fallidos: ${result.failed ?? 0}. Omitidos: ${result.skipped ?? 0}.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos procesar los emails pendientes.");
+    } finally {
+      setProcessing(false);
+    }
+  }
+
   return (
     <AdminPageShell
       description="Eventos internos, entregas preparadas y trazabilidad para email, WhatsApp futuro y avisos en la plataforma."
@@ -78,6 +117,24 @@ export function NotificationsPage() {
       title="Notificaciones"
     >
       {error && <Message tone="error">{error}</Message>}
+      {processNotice && <Message tone="success">{processNotice}</Message>}
+
+      {canProcessEmails && (
+        <SectionCard className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold text-clinic-ink">Entregas de email pendientes</h2>
+            <p className="mt-1 text-sm text-clinic-muted">Envia por Resend las notificaciones transaccionales con estado pendiente.</p>
+          </div>
+          <Button
+            variant="primary"
+            icon={<Send size={16} />}
+            disabled={processing}
+            onClick={() => processEmails()}
+          >
+            {processing ? "Procesando..." : "Procesar emails pendientes"}
+          </Button>
+        </SectionCard>
+      )}
 
       <section className="grid gap-4 md:grid-cols-4">
         {(Object.keys(filterLabels) as NotificationFilter[]).map((item) => (
@@ -208,8 +265,11 @@ function DeliveryPill({ delivery }: { delivery: NotificationDelivery }) {
   );
 }
 
-function Message({ tone, children }: { tone: "error"; children: string }) {
-  return <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{children}</div>;
+function Message({ tone, children }: { tone: "error" | "success"; children: string }) {
+  const toneClasses = tone === "success"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : "border-red-200 bg-red-50 text-red-700";
+  return <div className={`rounded-lg border px-4 py-3 text-sm ${toneClasses}`}>{children}</div>;
 }
 
 function formatDate(value: string) {

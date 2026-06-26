@@ -10,7 +10,10 @@ const processSchema = z.object({
   limit: z.coerce.number().int().positive().max(100).optional()
 });
 
-notificationsRouter.post("/api/notifications/process-email-deliveries", async (req, res, next) => {
+notificationsRouter.post("/api/notifications/process-email-deliveries", processEmailDeliveriesHandler);
+notificationsRouter.post("/notifications/process-email-deliveries", processEmailDeliveriesHandler);
+
+async function processEmailDeliveriesHandler(req, res, next) {
   try {
     const auth = await authenticate(req);
     assertPermission(auth.role, "canManageClinic");
@@ -24,7 +27,7 @@ notificationsRouter.post("/api/notifications/process-email-deliveries", async (r
     if (error instanceof z.ZodError) return res.status(400).json({ error: "INVALID_PAYLOAD" });
     next(error);
   }
-});
+}
 
 async function authenticate(req) {
   const header = req.get("authorization") ?? "";
