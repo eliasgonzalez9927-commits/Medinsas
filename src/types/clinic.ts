@@ -661,6 +661,7 @@ export type NotificationEvent = {
   processed_at: string | null;
   patients?: Pick<Patient, "id" | "first_name" | "last_name" | "phone" | "email"> | null;
   appointments?: Pick<Appointment, "id" | "public_code" | "starts_at" | "status"> | null;
+  notification_deliveries?: NotificationDelivery[];
 };
 
 export type NotificationDelivery = {

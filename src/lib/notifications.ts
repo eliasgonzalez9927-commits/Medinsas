@@ -41,7 +41,7 @@ export async function getNotificationEvents(clinicId: string, status = "all"): P
   try {
     let query = supabase
       .from("notification_events")
-      .select("*, patients(id, first_name, last_name, phone, email), appointments(id, public_code, starts_at, status)")
+      .select("*, patients(id, first_name, last_name, phone, email), appointments(id, public_code, starts_at, status), notification_deliveries(*)")
       .eq("clinic_id", clinicId)
       .order("created_at", { ascending: false })
       .limit(100);

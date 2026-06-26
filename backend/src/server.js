@@ -4,6 +4,7 @@ import pinoHttp from "pino-http";
 import { logger } from "./lib/logger.js";
 import { mercadoPagoPaymentsRouter } from "./routes/mercadoPagoPayments.js";
 import { messagesRouter } from "./routes/messages.js";
+import { notificationsRouter } from "./routes/notifications.js";
 import { whatsappWebhookRouter } from "./routes/whatsappWebhook.js";
 import { config } from "./config.js";
 
@@ -33,12 +34,16 @@ app.get("/health/env", (_req, res) => {
     mercadoPagoEnv: Boolean(config.MERCADO_PAGO_ENV),
     appPublicUrl: Boolean(config.APP_PUBLIC_URL),
     supabaseUrl: Boolean(config.SUPABASE_URL),
-    supabaseServiceRoleKey: Boolean(config.SUPABASE_SERVICE_ROLE_KEY)
+    supabaseServiceRoleKey: Boolean(config.SUPABASE_SERVICE_ROLE_KEY),
+    resendApiKey: Boolean(config.RESEND_API_KEY),
+    resendFromEmail: Boolean(config.RESEND_FROM_EMAIL),
+    resendReplyToEmail: Boolean(config.RESEND_REPLY_TO_EMAIL)
   });
 });
 
 app.use(whatsappWebhookRouter);
 app.use(messagesRouter);
+app.use(notificationsRouter);
 app.use(mercadoPagoPaymentsRouter);
 
 app.use((error, _req, res, _next) => {

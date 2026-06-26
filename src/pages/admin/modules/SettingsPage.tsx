@@ -549,7 +549,7 @@ function NotificationsPanel({ clinic, disabled }: { clinic: Clinic; disabled: bo
         </div>
       </SectionCard>
       <section className="grid gap-6">
-        <PreparedPanel icon={<Mail size={20} />} title="Resend" text="Los emails quedan preparados como entregas pendientes. El envío real usa backend con RESEND_API_KEY cuando se active el worker correspondiente." />
+        <PreparedPanel icon={<Mail size={20} />} title="Resend" text="Los emails transaccionales se enviarán cuando el dominio y RESEND_API_KEY estén configurados en el backend. Si falta la API key, la entrega queda marcada con error claro sin romper el flujo clínico." />
         <PreparedPanel icon={<Mail size={20} />} title="WhatsApp futuro" text="WhatsApp automático todavía no está activo. Esta configuración prepara la integración para la clínica." />
       </section>
     </section>

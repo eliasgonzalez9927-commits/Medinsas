@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bell, CalendarDays, CheckCircle2, RefreshCw, Search } from "lucide-react";
+import { Bell, CalendarDays, CheckCircle2, Mail, MessageCircle, Monitor, RefreshCw, Search } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
 import { getDefaultClinic } from "../../../lib/clinic-data";
 import { getNotificationEvents } from "../../../lib/notifications";
-import { Clinic, NotificationEvent } from "../../../types/clinic";
+import { Clinic, NotificationDelivery, NotificationEvent } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
 
 type NotificationFilter = "all" | "pending" | "processed" | "failed";
@@ -123,7 +123,7 @@ export function NotificationsPage() {
         ) : (
           <div className="divide-y divide-clinic-line">
             {visibleEvents.map((event) => (
-              <article key={event.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[220px_1fr_180px_150px] lg:items-center">
+              <article key={event.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[220px_1fr_220px_150px] lg:items-center">
                 <div className="flex items-start gap-3">
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-teal-50 text-clinic-brand">
                     <Bell size={17} />
@@ -140,6 +140,13 @@ export function NotificationsPage() {
                     {event.patients && <span>Paciente: {event.patients.first_name} {event.patients.last_name}</span>}
                     {event.appointments?.public_code && <span>Código: {event.appointments.public_code}</span>}
                   </div>
+                  {event.notification_deliveries && event.notification_deliveries.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {event.notification_deliveries.map((delivery) => (
+                        <DeliveryPill key={delivery.id} delivery={delivery} />
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 text-sm text-clinic-muted">
                   <CalendarDays size={16} />
@@ -170,6 +177,35 @@ function StatusPill({ status }: { status: string }) {
         ? "bg-slate-100 text-slate-700"
         : "bg-amber-50 text-amber-700";
   return <span className={`inline-flex items-center justify-center gap-1 rounded-lg px-3 py-1 text-xs font-semibold ${tone}`}><CheckCircle2 size={14} />{label[status] ?? status}</span>;
+}
+
+function DeliveryPill({ delivery }: { delivery: NotificationDelivery }) {
+  const Icon = delivery.channel === "email" ? Mail : delivery.channel === "whatsapp" ? MessageCircle : Monitor;
+  const channelLabel: Record<string, string> = {
+    email: "Email",
+    whatsapp: "WhatsApp",
+    in_app: "Plataforma"
+  };
+  const statusLabel: Record<string, string> = {
+    pending: "Pendiente",
+    sent: "Enviado",
+    failed: "Fallido",
+    skipped: "Omitido"
+  };
+  const tone = delivery.status === "sent"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : delivery.status === "failed"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : delivery.status === "skipped"
+        ? "border-slate-200 bg-slate-50 text-slate-600"
+        : "border-amber-200 bg-amber-50 text-amber-700";
+
+  return (
+    <span title={delivery.error_message ?? delivery.recipient_email ?? undefined} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`}>
+      <Icon size={13} />
+      {channelLabel[delivery.channel] ?? delivery.channel}: {statusLabel[delivery.status] ?? delivery.status}
+    </span>
+  );
 }
 
 function Message({ tone, children }: { tone: "error"; children: string }) {

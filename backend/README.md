@@ -31,6 +31,9 @@ WHATSAPP_VERIFY_TOKEN=
 WHATSAPP_ACCESS_TOKEN=
 WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_APP_SECRET=
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=Medin Turnos <turnos@notificaciones.medin.com.ar>
+RESEND_REPLY_TO_EMAIL=medinsaas@gmail.com
 ```
 
 ## Meta WhatsApp Cloud API

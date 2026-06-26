@@ -326,15 +326,14 @@ Los helpers viven en `src/lib/permissions.ts` y el backend replica la matriz en
 
 ### Resend
 
-El envio de emails se hace desde backend en `/api/messages/send`. El frontend nunca
-lee `RESEND_API_KEY`.
+El envio de emails se hace desde backend. El frontend nunca lee `RESEND_API_KEY`.
 
 Variables backend:
 
 ```txt
 RESEND_API_KEY=
-RESEND_FROM_EMAIL=Medin <no-reply@tu-dominio.com>
-RESEND_REPLY_TO_EMAIL=soporte@tu-dominio.com
+RESEND_FROM_EMAIL=Medin Turnos <turnos@notificaciones.medin.com.ar>
+RESEND_REPLY_TO_EMAIL=medinsaas@gmail.com
 ```
 
 Pasos:
@@ -344,9 +343,12 @@ Pasos:
 3. Cargar `RESEND_API_KEY`, `RESEND_FROM_EMAIL` y `RESEND_REPLY_TO_EMAIL` en Vercel para el backend.
 4. Redeploy.
 5. Entrar a `/admin/mensajes`, elegir destinatarios, escribir asunto/mensaje y confirmar envio.
+6. Para transaccionales, procesar entregas pendientes con `POST /api/notifications/process-email-deliveries` usando un token de usuario `platform_admin`.
 
 Los mensajes generales respetan `patients.email_opt_in`. Los emails transaccionales de turnos
-quedan preparados con plantillas iniciales y logs; WhatsApp real y webhooks completos de Resend
+usan `notification_deliveries` con `channel=email` y `status=pending`. Si `RESEND_API_KEY`
+no esta configurada, la entrega queda como `skipped` con error claro y no rompe turnos, pagos
+ni solicitudes. WhatsApp real, scheduler de recordatorios y webhooks completos de Resend
 quedan pendientes. La ruta preparada `/api/webhooks/resend` queda lista para completar
 validacion de firma y eventos `delivered`, `bounced`, `opened` y `clicked`.
 
@@ -369,10 +371,19 @@ Eventos conectados desde base de datos, con triggers defensivos que no bloquean 
 - Sobreturno creado.
 - Solicitud de cambio de plan.
 
-`/admin/notificaciones` muestra los eventos de la clinica activa y `/admin/configuracion/notificaciones`
-permite activar o desactivar canales y tipos de aviso. Las entregas de email quedan en estado
-`pending` para integrarse con un worker/Edge Function que use Resend. WhatsApp queda como
-`skipped` mientras `whatsapp_enabled=false`; no se envia WhatsApp automatico todavia.
+`/admin/notificaciones` muestra los eventos de la clinica activa y las entregas asociadas por
+canal, incluyendo email `pending`, `sent`, `failed` o `skipped`. `/admin/configuracion/notificaciones`
+permite activar o desactivar canales y tipos de aviso. Las entregas de email se procesan con
+`backend/src/services/resendEmailService.js` desde el endpoint manual seguro:
+
+```bash
+curl -X POST https://app.medin.com.ar/api/notifications/process-email-deliveries \
+  -H "Authorization: Bearer <SUPABASE_ACCESS_TOKEN_PLATFORM_ADMIN>" \
+  -H "Content-Type: application/json" \
+  -d '{"limit":25}'
+```
+
+WhatsApp queda como `skipped` mientras `whatsapp_enabled=false`; no se envia WhatsApp automatico todavia.
 
 WhatsApp manual asistido esta disponible desde la agenda con acciones para copiar mensaje o abrir
 `wa.me` usando el telefono del paciente, datos del turno y link `/mi-turno/:token` cuando exista.
