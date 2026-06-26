@@ -25,6 +25,8 @@ export function AdminLayout({
   const [modules, setModules] = useState<Record<string, boolean>>({});
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [lastRefreshAt, setLastRefreshAt] = useState<Date>(() => new Date());
   const displayName = profile?.full_name ?? user?.email ?? "Equipo clínico";
   const displayRole = role ? roleLabels[role] : "Usuario";
 
@@ -59,6 +61,11 @@ export function AdminLayout({
     if (!query) return;
     setMobileNavOpen(false);
     navigate(`/admin/agenda?search=${encodeURIComponent(query)}`);
+  }
+
+  function handleRefresh() {
+    setLastRefreshAt(new Date());
+    onRefresh();
   }
 
   function modulePath(item: AdminModuleDefinition) {
@@ -101,7 +108,7 @@ export function AdminLayout({
                 className={({ isActive }) => {
                   if (item.group === "platform") {
                     return `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                      isActive ? "bg-slate-950 text-white" : "bg-slate-900 text-slate-100 hover:bg-slate-800"
+                      isActive ? "bg-[#dff2ee] text-[#0D3642] shadow-[inset_3px_0_0_#8fd2c6]" : "bg-[#f6faf9] text-clinic-ink hover:bg-[#e6f4f1]"
                     }`;
                   }
                   return `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
@@ -160,7 +167,7 @@ export function AdminLayout({
       {platformNavigation && <div className="border-t border-clinic-line px-3 py-4">{platformNavigation}</div>}
 
       <div className="border-t border-clinic-line p-4">
-        <div className="flex items-center gap-3 rounded-xl border border-clinic-line bg-clinic-surface p-3">
+        <div className="flex items-center gap-3 rounded-2xl border border-clinic-line bg-clinic-surface p-3">
           <div className="grid h-9 w-9 place-items-center rounded-xl bg-white text-clinic-muted"><UserRound size={18} /></div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-clinic-ink">{displayName}</p>
@@ -188,8 +195,8 @@ export function AdminLayout({
       )}
 
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 border-b border-clinic-line bg-white/95 shadow-[0_1px_0_rgba(13,54,66,0.02)] backdrop-blur">
-          <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-20 border-b border-clinic-line bg-white/90 shadow-[0_1px_0_rgba(13,54,66,0.02)] backdrop-blur">
+          <div className="flex min-h-[72px] items-center gap-3 px-4 sm:px-6 lg:px-8">
             <button type="button" className="grid h-10 w-10 place-items-center rounded-lg border border-clinic-line text-clinic-muted lg:hidden" aria-label="Abrir navegación" onClick={() => setMobileNavOpen(true)}><Menu size={20} /></button>
             <Link to="/admin" className="flex items-center gap-2 font-semibold text-clinic-ink lg:hidden"><span className="grid h-9 w-9 place-items-center rounded-full border border-[#8fd2c6] bg-[#e6f4f1] text-clinic-brand"><CirclePlus size={19} /></span>Medin</Link>
 
@@ -199,10 +206,37 @@ export function AdminLayout({
             </form>
 
             <div className="ml-auto flex items-center gap-2">
+              <p className="hidden whitespace-nowrap text-xs text-clinic-muted xl:block">Última actualización: {formatRefreshLabel(lastRefreshAt)}</p>
               <div className="hidden min-w-0 text-right xl:block"><p className="truncate text-sm font-semibold text-clinic-ink">{clinic?.name ?? "Medin"}</p><p className="text-xs text-clinic-muted">{displayRole}</p></div>
-              <Button className="hidden sm:inline-flex" onClick={onRefresh} variant="secondary">Actualizar</Button>
+              <Button className="hidden sm:inline-flex" onClick={handleRefresh} variant="secondary">Actualizar</Button>
               <Button onClick={onCreateAppointment} variant="primary">Nuevo turno</Button>
-              <Button icon={<LogOut size={16} />} onClick={signOut} variant="ghost">Cerrar sesión</Button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setUserMenuOpen((current) => !current)}
+                  className="flex h-11 items-center gap-2 rounded-2xl border border-clinic-line bg-white px-2.5 text-left transition hover:bg-[#f6faf9]"
+                  aria-haspopup="menu"
+                  aria-expanded={userMenuOpen}
+                >
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-[#e6f4f1] text-clinic-brand"><UserRound size={17} /></span>
+                  <span className="hidden min-w-0 sm:block">
+                    <span className="block max-w-32 truncate text-sm font-semibold text-clinic-ink">{displayName}</span>
+                    <span className="block text-xs text-clinic-muted">{displayRole}</span>
+                  </span>
+                  <ChevronDown size={15} className="text-clinic-muted" />
+                </button>
+                {userMenuOpen && (
+                  <div className="absolute right-0 top-12 z-30 w-64 rounded-2xl border border-clinic-line bg-white p-2 shadow-[0_18px_42px_rgba(13,54,66,0.12)]" role="menu">
+                    <div className="px-3 py-2">
+                      <p className="truncate text-sm font-semibold text-clinic-ink">{displayName}</p>
+                      <p className="truncate text-xs text-clinic-muted">{user?.email}</p>
+                    </div>
+                    <button type="button" onClick={signOut} className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-clinic-muted transition hover:bg-[#e6f4f1] hover:text-clinic-ink" role="menuitem">
+                      <LogOut size={16} /> Cerrar sesión
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <form className="border-t border-clinic-line px-4 py-3 md:hidden" onSubmit={(event) => { event.preventDefault(); runGlobalSearch(); }}>
@@ -218,4 +252,11 @@ export function AdminLayout({
 function clinicStatusLabel(status?: string | null) {
   const labels: Record<string, string> = { active: "Activa", trial: "Prueba", suspended: "Suspendida" };
   return labels[status ?? ""] ?? "Activa";
+}
+
+function formatRefreshLabel(value: Date) {
+  const minutes = Math.max(0, Math.floor((Date.now() - value.getTime()) / 60000));
+  if (minutes < 1) return "recién";
+  if (minutes === 1) return "hace 1 minuto";
+  return `hace ${minutes} minutos`;
 }

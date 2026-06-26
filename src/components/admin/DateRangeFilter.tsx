@@ -6,11 +6,15 @@ import { DATE_RANGE_PRESETS, DateRangePreset, DateRangeValue, resolveDateRange }
 export function DateRangeFilter({
   timezone = "America/Argentina/Mendoza",
   defaultPreset,
-  onChange
+  onChange,
+  variant = "card",
+  presets
 }: {
   timezone?: string;
   defaultPreset: DateRangePreset;
   onChange?: (value: DateRangeValue) => void;
+  variant?: "card" | "segmented";
+  presets?: DateRangePreset[];
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const onChangeRef = useRef(onChange);
@@ -35,6 +39,41 @@ export function DateRangeFilter({
       next.delete("to");
     }
     setSearchParams(next, { replace: true });
+  }
+
+  const visiblePresets = (presets ?? DATE_RANGE_PRESETS.map((item) => item.value))
+    .map((item) => DATE_RANGE_PRESETS.find((presetItem) => presetItem.value === item))
+    .filter(Boolean) as typeof DATE_RANGE_PRESETS;
+
+  if (variant === "segmented") {
+    return (
+      <section className="flex flex-col gap-3 rounded-2xl border border-clinic-line bg-white/80 p-2 shadow-[0_10px_28px_rgba(13,54,66,0.035)] backdrop-blur sm:inline-flex sm:flex-row sm:items-center">
+        <div className="flex gap-1 overflow-x-auto">
+          {visiblePresets.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => update(item.value)}
+              className={`min-h-10 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                preset === item.value
+                  ? "bg-[#0D3642] text-white shadow-[0_8px_18px_rgba(13,54,66,0.14)]"
+                  : "border border-transparent bg-white text-clinic-muted hover:border-clinic-line hover:text-clinic-ink"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        {preset === "custom" && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="sr-only" htmlFor="period-from">Desde</label>
+            <input id="period-from" type="date" value={value.dateFrom} onChange={(event) => update("custom", event.target.value, value.dateTo)} className="h-10 rounded-xl border border-clinic-line bg-white px-3 text-sm outline-none transition focus:border-clinic-brand focus:ring-4 focus:ring-teal-100" />
+            <label className="sr-only" htmlFor="period-to">Hasta</label>
+            <input id="period-to" type="date" value={value.dateTo} min={value.dateFrom} onChange={(event) => update("custom", value.dateFrom, event.target.value)} className="h-10 rounded-xl border border-clinic-line bg-white px-3 text-sm outline-none transition focus:border-clinic-brand focus:ring-4 focus:ring-teal-100" />
+          </div>
+        )}
+      </section>
+    );
   }
 
   return (
