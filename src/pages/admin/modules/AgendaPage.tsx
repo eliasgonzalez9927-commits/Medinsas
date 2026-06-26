@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { SectionCard } from "../../../components/admin/SectionCard";
@@ -66,10 +66,16 @@ type OverbookingForm = {
   confirmed: boolean;
 };
 
+type DateAvailability = {
+  date: string;
+  slots: AvailableSlot[];
+};
+
 const today = new Date().toISOString().slice(0, 10);
 
 export function AgendaPage() {
   const { role, user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
@@ -87,6 +93,9 @@ export function AgendaPage() {
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [slots, setSlots] = useState<AvailableSlot[]>([]);
+  const [availableDates, setAvailableDates] = useState<DateAvailability[]>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityMessage, setAvailabilityMessage] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [paymentLinks, setPaymentLinks] = useState<Record<string, string>>({});
@@ -181,14 +190,17 @@ export function AgendaPage() {
       setSlots([]);
       return;
     }
+    let cancelled = false;
     getAvailableSlots({
       clinicId: clinic.id,
       professionalId: form.professional_id,
       serviceId: form.service_id,
+      locationId: form.location_id || null,
       date: form.date,
       timezone: clinic.timezone ?? "America/Argentina/Mendoza"
     })
       .then((available) => {
+        if (cancelled) return;
         setSlots(available);
         setForm((current) => ({
           ...current,
@@ -196,9 +208,79 @@ export function AgendaPage() {
             ? current.slot_starts_at
             : available[0]?.startsAt ?? ""
         }));
+        setAvailabilityMessage(
+          available.length > 0
+            ? `Horarios disponibles para ${formatDateLabel(form.date)}.`
+            : "No hay horarios disponibles para esta fecha."
+        );
       })
       .catch((err) => setError(err instanceof Error ? err.message : "No pudimos cargar horarios."));
-  }, [clinic?.id, form.professional_id, form.service_id, form.date]);
+    return () => {
+      cancelled = true;
+    };
+  }, [clinic?.id, form.professional_id, form.service_id, form.location_id, form.date]);
+
+  useEffect(() => {
+    if (!clinic || !form.professional_id || !form.service_id) {
+      setAvailableDates([]);
+      setAvailabilityMessage("");
+      return;
+    }
+
+    const activeClinic = clinic;
+    let cancelled = false;
+    async function loadUpcomingAvailability() {
+      setAvailabilityLoading(true);
+      setAvailabilityMessage("Buscando próximas fechas disponibles...");
+      try {
+        const found: DateAvailability[] = [];
+        for (let index = 0; index < 60 && found.length < 7; index += 1) {
+          const date = addDaysToDateString(today, index);
+          const available = await getAvailableSlots({
+            clinicId: activeClinic.id,
+            professionalId: form.professional_id,
+            serviceId: form.service_id,
+            locationId: form.location_id || null,
+            date,
+            timezone: activeClinic.timezone ?? "America/Argentina/Mendoza"
+          });
+          if (cancelled) return;
+          if (available.length > 0) found.push({ date, slots: available });
+        }
+        if (cancelled) return;
+        setAvailableDates(found);
+        if (found[0]) {
+          setForm((current) => {
+            if (
+              current.professional_id !== form.professional_id ||
+              current.service_id !== form.service_id ||
+              current.location_id !== form.location_id
+            ) {
+              return current;
+            }
+            return {
+              ...current,
+              date: current.date && found.some((item) => item.date === current.date) ? current.date : found[0].date,
+              slot_starts_at: current.slot_starts_at || found[0].slots[0]?.startsAt || ""
+            };
+          });
+          setAvailabilityMessage(`Primer turno disponible: ${formatDateLabel(found[0].date)} a las ${found[0].slots[0]?.time}.`);
+        } else {
+          setSlots([]);
+          setAvailabilityMessage("No encontramos disponibilidad en los próximos 60 días para este profesional y servicio.");
+        }
+      } catch (err) {
+        if (!cancelled) setAvailabilityMessage(err instanceof Error ? err.message : "No pudimos calcular la próxima disponibilidad.");
+      } finally {
+        if (!cancelled) setAvailabilityLoading(false);
+      }
+    }
+
+    loadUpcomingAvailability();
+    return () => {
+      cancelled = true;
+    };
+  }, [clinic?.id, form.professional_id, form.service_id, form.location_id]);
 
   const metrics = useMemo(() => {
     return {
@@ -233,12 +315,56 @@ export function AgendaPage() {
     setNotice("");
     setForm((current) => ({
       ...current,
-      date: selectedDate,
+      date: "",
+      slot_starts_at: "",
       patient_id: current.patient_id || patients[0]?.id || "",
       professional_id: current.professional_id || professionals[0]?.id || "",
       service_id: current.service_id || services[0]?.id || "",
       location_id: current.location_id || locations[0]?.id || "",
       reason: current.reason || services[0]?.name || ""
+    }));
+  }
+
+  function resetAvailabilitySelection(update: Partial<AppointmentForm>) {
+    setSlots([]);
+    setAvailableDates([]);
+    setAvailabilityMessage("");
+    setForm((current) => ({
+      ...current,
+      ...update,
+      date: "",
+      slot_starts_at: ""
+    }));
+  }
+
+  function selectFirstAvailability() {
+    const first = availableDates[0];
+    if (!first) {
+      setAvailabilityMessage("No encontramos disponibilidad en los próximos 60 días para este profesional y servicio.");
+      return;
+    }
+    setForm((current) => ({
+      ...current,
+      date: first.date,
+      slot_starts_at: first.slots[0]?.startsAt ?? ""
+    }));
+    setAvailabilityMessage(`Primer turno disponible: ${formatDateLabel(first.date)} a las ${first.slots[0]?.time}.`);
+  }
+
+  function selectAvailableDate(date: string) {
+    const option = availableDates.find((item) => item.date === date);
+    setForm((current) => ({
+      ...current,
+      date,
+      slot_starts_at: option?.slots[0]?.startsAt ?? ""
+    }));
+  }
+
+  function selectManualDate(date: string) {
+    setForm((current) => ({
+      ...current,
+      date,
+      slot_starts_at: ""
     }));
   }
 
@@ -282,7 +408,7 @@ export function AgendaPage() {
       const endTime = new Date(new Date(startsAt).getTime() + duration * 60_000).toISOString();
       const sameDay = await getAppointments(clinic.id, { date: overbookingForm.date, timezone: clinic.timezone ?? undefined, professionalId: overbookingForm.professional_id });
       const conflict = sameDay.find((appointment) => appointment.status !== "cancelled" && new Date(appointment.starts_at).getTime() < new Date(endTime).getTime() && new Date(appointment.end_time ?? appointment.starts_at).getTime() > new Date(startsAt).getTime());
-      const availableSlots = await getAvailableSlots({ clinicId: clinic.id, professionalId: overbookingForm.professional_id, serviceId: overbookingForm.service_id, date: overbookingForm.date, timezone: clinic.timezone ?? "America/Argentina/Mendoza" });
+      const availableSlots = await getAvailableSlots({ clinicId: clinic.id, professionalId: overbookingForm.professional_id, serviceId: overbookingForm.service_id, locationId: overbookingForm.location_id || null, date: overbookingForm.date, timezone: clinic.timezone ?? "America/Argentina/Mendoza" });
       const warnings = [
         ...(conflict ? ["Este horario ya tiene un turno asignado. El sobreturno se agregará como excepción."] : []),
         ...(!conflict && !availableSlots.some((slot) => slot.startsAt === startsAt) ? ["Este horario está fuera de la disponibilidad configurada del profesional."] : [])
@@ -350,6 +476,19 @@ export function AgendaPage() {
     setSaving(true);
     setError("");
     try {
+      const freshSlots = await getAvailableSlots({
+        clinicId: clinic.id,
+        professionalId: form.professional_id,
+        serviceId: form.service_id,
+        locationId: form.location_id || null,
+        date: form.date,
+        timezone: clinic.timezone ?? "America/Argentina/Mendoza"
+      });
+      if (!freshSlots.some((slot) => slot.startsAt === selectedSlot.startsAt)) {
+        setSlots(freshSlots);
+        setForm((current) => ({ ...current, slot_starts_at: freshSlots[0]?.startsAt ?? "" }));
+        throw new Error("Ese horario ya no está disponible. Elegí otro horario o creá un sobreturno.");
+      }
       const payload: AppointmentInput = {
         clinic_id: clinic.id,
         patient_id: form.patient_id,
@@ -461,45 +600,107 @@ export function AgendaPage() {
                 </option>
               ))}
             </Select>
-            <Select label="Profesional" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} required>
+            <Select label="Profesional" value={form.professional_id} onChange={(value) => resetAvailabilitySelection({ professional_id: value })} required>
               {professionals.map((professional) => (
                 <option key={professional.id} value={professional.id}>
                   Dr/a. {professional.name} {professional.last_name}
                 </option>
               ))}
             </Select>
-            <Select label="Servicio" value={form.service_id} onChange={(value) => setForm({ ...form, service_id: value, reason: services.find((item) => item.id === value)?.name ?? form.reason })} required>
+            <Select label="Servicio" value={form.service_id} onChange={(value) => resetAvailabilitySelection({ service_id: value, reason: services.find((item) => item.id === value)?.name ?? form.reason })} required>
               {services.map((service) => (
                 <option key={service.id} value={service.id}>
                   {service.name}
                 </option>
               ))}
             </Select>
-            <Input label="Fecha" value={form.date} onChange={(value) => setForm({ ...form, date: value })} type="date" required />
-            <Select label="Horario disponible" value={form.slot_starts_at} onChange={(value) => setForm({ ...form, slot_starts_at: value })} required>
-              <option value="">Seleccionar horario</option>
-              {slots.map((slot) => (
-                <option key={slot.startsAt} value={slot.startsAt}>
-                  {slot.time}
-                </option>
-              ))}
-            </Select>
-            <Select label="Modalidad" value={form.appointment_type} onChange={(value) => setForm({ ...form, appointment_type: value as "in_person" | "telemedicine" })}>
-              <option value="in_person">Presencial</option>
-              <option value="telemedicine">Telemedicina</option>
-            </Select>
-            <Select label="Sede" value={form.location_id} onChange={(value) => setForm({ ...form, location_id: value })}>
-              <option value="">Sin sede</option>
+            <Select label="Sede" value={form.location_id} onChange={(value) => resetAvailabilitySelection({ location_id: value })}>
+              <option value="">Todas las sedes</option>
               {locations.map((location) => (
                 <option key={location.id} value={location.id}>
                   {location.name}
                 </option>
               ))}
             </Select>
+            <section className="rounded-xl border border-clinic-line bg-[#f6faf9] p-4 md:col-span-2 xl:col-span-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="font-semibold text-clinic-ink">Disponibilidad</h3>
+                  <p className="mt-1 text-sm text-clinic-muted">
+                    Los turnos manuales comunes solo se crean sobre horarios disponibles. Para excepciones usá Sobreturno.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button disabled={availabilityLoading || availableDates.length === 0} onClick={selectFirstAvailability}>
+                    Primer turno disponible
+                  </Button>
+                  {canCreateOverbooking(role) && <Button onClick={openOverbooking}>Crear sobreturno</Button>}
+                  <Button onClick={() => navigate("/admin/disponibilidad")}>
+                    Gestionar disponibilidad
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-lg border border-[#dcebea] bg-white px-4 py-3 text-sm font-medium text-clinic-ink">
+                {availabilityLoading ? "Buscando disponibilidad..." : availabilityMessage || "Seleccioná profesional, servicio y sede para ver disponibilidad."}
+              </div>
+
+              <div className="mt-4">
+                <p className="text-sm font-semibold text-clinic-ink">Fechas disponibles</p>
+                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                  {availableDates.length > 0 ? availableDates.map((item) => (
+                    <button
+                      key={item.date}
+                      type="button"
+                      onClick={() => selectAvailableDate(item.date)}
+                      className={`min-w-[116px] rounded-xl border px-3 py-3 text-left text-sm transition ${
+                        form.date === item.date ? "border-clinic-brand bg-white text-clinic-brand shadow-sm" : "border-clinic-line bg-white text-clinic-ink hover:border-[#8FD2C6]"
+                      }`}
+                    >
+                      <span className="block font-semibold">{formatShortDateLabel(item.date)}</span>
+                      <span className="mt-1 block text-xs text-clinic-muted">{item.slots.length} horarios</span>
+                    </button>
+                  )) : (
+                    <p className="rounded-lg border border-clinic-line bg-white px-4 py-3 text-sm text-clinic-muted">No hay fechas disponibles para esta combinación.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
+                <Input label="Fecha manual" value={form.date} onChange={selectManualDate} type="date" required />
+                <div>
+                  <p className="text-sm font-semibold text-clinic-ink">Horarios disponibles</p>
+                  {slots.length === 0 ? (
+                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      No hay horarios disponibles para esta combinación.
+                    </div>
+                  ) : (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {slots.map((slot) => (
+                        <button
+                          key={slot.startsAt}
+                          type="button"
+                          onClick={() => setForm((current) => ({ ...current, slot_starts_at: slot.startsAt }))}
+                          className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                            form.slot_starts_at === slot.startsAt ? "border-clinic-brand bg-clinic-brand text-white" : "border-clinic-line bg-white text-clinic-ink hover:border-[#8FD2C6]"
+                          }`}
+                        >
+                          {slot.time}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+            <Select label="Modalidad" value={form.appointment_type} onChange={(value) => setForm({ ...form, appointment_type: value as "in_person" | "telemedicine" })}>
+              <option value="in_person">Presencial</option>
+              <option value="telemedicine">Telemedicina</option>
+            </Select>
             <Input label="Motivo" value={form.reason} onChange={(value) => setForm({ ...form, reason: value })} required />
             <Input label="Notas" value={form.notes} onChange={(value) => setForm({ ...form, notes: value })} />
             <div className="flex gap-2 md:col-span-2 xl:col-span-3">
-              <Button disabled={saving || patients.length === 0 || slots.length === 0} type="submit" variant="primary">
+              <Button disabled={saving || patients.length === 0 || slots.length === 0 || !form.slot_starts_at} type="submit" variant="primary">
                 {saving ? "Guardando..." : "Crear turno"}
               </Button>
               <Button onClick={() => setFormOpen(false)}>Cancelar</Button>
@@ -792,6 +993,29 @@ function formatTime(value: string, timezone = "America/Argentina/Mendoza") {
   }).format(new Date(value));
 }
 
+function formatDateLabel(date: string) {
+  return new Intl.DateTimeFormat("es-AR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    timeZone: "UTC"
+  }).format(new Date(`${date}T12:00:00Z`));
+}
+
+function formatShortDateLabel(date: string) {
+  return new Intl.DateTimeFormat("es-AR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    timeZone: "UTC"
+  }).format(new Date(`${date}T12:00:00Z`));
+}
+
+function addDaysToDateString(date: string, days: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
 function sourceLabel(value: string) {
   const labels: Record<string, string> = {
     manual: "Manual",
@@ -805,8 +1029,8 @@ function sourceLabel(value: string) {
 function PaymentStatusBadge({ status }: { status: string }) {
   const labels: Record<string, string> = {
     unpaid: "Sin pago",
-    deposit_pending: "Sena pendiente",
-    deposit_paid: "Sena pagada",
+    deposit_pending: "Seña pendiente",
+    deposit_paid: "Seña pagada",
     paid: "Pagado",
     rejected: "Rechazado",
     refunded: "Reembolsado"

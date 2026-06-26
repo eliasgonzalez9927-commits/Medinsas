@@ -43,7 +43,7 @@ export function GrowthDashboard({ periodLabel = "Mes actual" }: { periodLabel?: 
         <div>
           <h2 className="text-lg font-semibold text-clinic-ink">Indicadores de gestion</h2>
           <p className="mt-1 text-sm text-clinic-muted">
-            Senales clave para mejorar agenda, retencion y rentabilidad.
+            Señales clave para mejorar agenda, retención y rentabilidad.
           </p>
         </div>
         <div className="inline-flex items-center gap-2 rounded-lg bg-clinic-surface px-3 py-2 text-sm font-medium text-clinic-muted">

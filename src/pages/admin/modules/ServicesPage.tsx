@@ -248,7 +248,7 @@ export function ServicesPage() {
               type="number"
             />
             <Input label="Precio" value={form.price} onChange={(value) => setForm({ ...form, price: value })} type="number" />
-            <Input label="Monto de sena" value={form.deposit_amount} onChange={(value) => setForm({ ...form, deposit_amount: value })} type="number" />
+            <Input label="Monto de seña" value={form.deposit_amount} onChange={(value) => setForm({ ...form, deposit_amount: value })} type="number" />
             <label className="md:col-span-2">
               <span className="text-sm font-medium text-clinic-ink">Descripcion</span>
               <textarea
@@ -258,7 +258,7 @@ export function ServicesPage() {
               />
             </label>
             <div className="grid gap-3 md:col-span-2 sm:grid-cols-5">
-              <Checkbox label="Requiere sena" checked={form.deposit_required} onChange={(checked) => setForm({ ...form, deposit_required: checked })} />
+              <Checkbox label="Requiere seña" checked={form.deposit_required} onChange={(checked) => setForm({ ...form, deposit_required: checked })} />
               <Checkbox label="Requiere pago" checked={form.payment_required} onChange={(checked) => setForm({ ...form, payment_required: checked })} />
               <Checkbox label="Pago online" checked={form.allow_online_payment} onChange={(checked) => setForm({ ...form, allow_online_payment: checked })} />
               <Checkbox label="Permite financiacion" checked={form.financing_enabled} onChange={(checked) => setForm({ ...form, financing_enabled: checked })} />
@@ -312,7 +312,7 @@ export function ServicesPage() {
                 </p>
                 {(service.payment_required || service.deposit_required) && (
                   <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-700">
-                    Pago online {service.deposit_required ? `· Sena ${currency.format(service.deposit_amount ?? 0)}` : "requerido"}
+                    Pago online {service.deposit_required ? `· Seña ${currency.format(service.deposit_amount ?? 0)}` : "requerido"}
                   </p>
                 )}
                 <p className="text-clinic-muted">
@@ -324,7 +324,7 @@ export function ServicesPage() {
               </div>
               <div className="mt-5 flex flex-wrap gap-2">
                 {service.public_booking_enabled && <Pill>Reserva online</Pill>}
-                {service.deposit_required && <Pill tone="warning">Requiere sena</Pill>}
+                {service.deposit_required && <Pill tone="warning">Requiere seña</Pill>}
                 {service.financing_enabled && <Pill tone="info">Permite financiacion</Pill>}
               </div>
               <div className="mt-5 flex flex-wrap gap-2">

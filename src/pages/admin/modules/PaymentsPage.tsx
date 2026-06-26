@@ -368,10 +368,10 @@ export function PaymentSettingsPage() {
             <Select label="Modo" value={form.mode} onChange={(value) => setForm({ ...form, mode: value })} options={[{ value: "sandbox", label: "Test / sandbox" }, { value: "production", label: "Produccion" }]} />
             <Input label="Public key" value={form.public_key} onChange={(value) => setForm({ ...form, public_key: value })} />
             <Input label="Nombre publico en checkout" value={form.checkout_public_name} onChange={(value) => setForm({ ...form, checkout_public_name: value })} />
-            <label className="flex items-center gap-2"><input checked={form.collect_deposit_online} onChange={(event) => setForm({ ...form, collect_deposit_online: event.target.checked })} type="checkbox" /><span className="text-sm font-medium">Cobrar sena en reservas online</span></label>
-            <Select label="Tipo de sena" value={form.deposit_type} onChange={(value) => setForm({ ...form, deposit_type: value })} options={[{ value: "fixed", label: "Monto fijo" }, { value: "percentage", label: "Porcentaje" }]} />
-            <Input label="Monto fijo de sena" value={form.deposit_amount} onChange={(value) => setForm({ ...form, deposit_amount: value })} type="number" />
-            <Input label="Porcentaje de sena" value={form.deposit_percentage} onChange={(value) => setForm({ ...form, deposit_percentage: value })} type="number" />
+            <label className="flex items-center gap-2"><input checked={form.collect_deposit_online} onChange={(event) => setForm({ ...form, collect_deposit_online: event.target.checked })} type="checkbox" /><span className="text-sm font-medium">Cobrar seña en reservas online</span></label>
+            <Select label="Tipo de seña" value={form.deposit_type} onChange={(value) => setForm({ ...form, deposit_type: value })} options={[{ value: "fixed", label: "Monto fijo" }, { value: "percentage", label: "Porcentaje" }]} />
+            <Input label="Monto fijo de seña" value={form.deposit_amount} onChange={(value) => setForm({ ...form, deposit_amount: value })} type="number" />
+            <Input label="Porcentaje de seña" value={form.deposit_percentage} onChange={(value) => setForm({ ...form, deposit_percentage: value })} type="number" />
             <Input label="Vencimiento link en minutos" value={form.payment_link_expiration_minutes} onChange={(value) => setForm({ ...form, payment_link_expiration_minutes: value })} type="number" />
             <Input label="Email de soporte" value={form.support_email} onChange={(value) => setForm({ ...form, support_email: value })} />
             <div className="md:col-span-2"><Button type="submit" variant="primary">Guardar configuracion</Button></div>

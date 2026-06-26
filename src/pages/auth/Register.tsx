@@ -65,7 +65,7 @@ export function Register() {
             />
           </label>
           <label>
-            <span className="text-sm font-medium text-clinic-ink">Contrasena</span>
+            <span className="text-sm font-medium text-clinic-ink">Contraseña</span>
             <input
               type="password"
               value={password}

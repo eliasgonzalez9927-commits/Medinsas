@@ -755,7 +755,7 @@ export async function getAppointments(
 
 export async function createAppointment(data: AppointmentInput): Promise<Appointment> {
   try {
-    await assertSlotAvailable(data.clinic_id, data.professional_id, data.service_id, data.starts_at);
+    await assertSlotAvailable(data.clinic_id, data.professional_id, data.service_id, data.starts_at, data.location_id);
     const { data: created, error } = await supabase
       .from("appointments")
       .insert({
@@ -937,12 +937,14 @@ export async function getAvailableSlots({
   clinicId,
   professionalId,
   serviceId,
+  locationId,
   date,
   timezone = "America/Argentina/Mendoza"
 }: {
   clinicId: string;
   professionalId: string;
   serviceId: string;
+  locationId?: string | null;
   date: string;
   timezone?: string;
 }): Promise<AvailableSlot[]> {
@@ -956,7 +958,11 @@ export async function getAvailableSlots({
   if (!service || !service.active) return [];
   const duration = service?.duration_minutes ?? 30;
   const dayOfWeek = new Date(`${date}T12:00:00`).getDay();
-  const rules = rulesResult.data.filter((rule) => rule.day_of_week === dayOfWeek && rule.active);
+  const rules = rulesResult.data.filter((rule) =>
+    rule.day_of_week === dayOfWeek &&
+    rule.active &&
+    (!locationId || !rule.location_id || rule.location_id === locationId)
+  );
   const dayBlocks = blocks.filter((block) => block.date === date);
   const busyAppointments = appointments.filter(
     (appointment) =>
@@ -1051,11 +1057,17 @@ export async function getPublicAvailableSlots({
   }
 }
 
-async function assertSlotAvailable(clinicId: string, professionalId: string, serviceId: string, startsAt: string) {
-  const date = startsAt.slice(0, 10);
-  const slots = await getAvailableSlots({ clinicId, professionalId, serviceId, date });
+async function assertSlotAvailable(clinicId: string, professionalId: string, serviceId: string, startsAt: string, locationId?: string | null) {
+  const { data: clinic } = await supabase
+    .from("clinics")
+    .select("timezone")
+    .eq("id", clinicId)
+    .maybeSingle();
+  const timezone = clinic?.timezone ?? "America/Argentina/Mendoza";
+  const date = getDateInTimeZone(new Date(startsAt), timezone);
+  const slots = await getAvailableSlots({ clinicId, professionalId, serviceId, locationId, date, timezone });
   if (!slots.some((slot) => slot.startsAt === startsAt)) {
-    throw new FriendlyDataError("Ese horario ya no esta disponible. Elegi otro horario para continuar.");
+    throw new FriendlyDataError("Ese horario ya no está disponible. Elegí otro horario o creá un sobreturno.");
   }
 }
 

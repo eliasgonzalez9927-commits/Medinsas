@@ -162,7 +162,7 @@ cancelacion o reprogramacion.
 
 No debe mostrar historia clinica, diagnosticos, notas internas, evoluciones, indicaciones sensibles ni
 datos medicos regulados. El portal paciente futuro deberia implementarse con magic link, codigo por
-email o WhatsApp, sin contrasena obligatoria en la primera version.
+email o WhatsApp, sin contraseña obligatoria en la primera version.
 
 ## Base operativa conectada
 
@@ -252,7 +252,7 @@ CLINIC_SLUG="clinica-central" \
 npm run admin:create
 ```
 
-Luego entra en `/login` con ese email y contrasena. Todas las rutas `/admin` redirigen a
+Luego entra en `/login` con ese email y contraseña. Todas las rutas `/admin` redirigen a
 `/login` si no hay sesion activa.
 
 ## Facturacion y recetarios
@@ -430,7 +430,7 @@ Para probar en modo test:
 3. Redeploy para que el backend lea las nuevas variables.
 4. Verificar `/api/health/env`; solo devuelve booleanos, nunca secretos.
 5. Entrar a `/admin/pagos/configuracion` y activar Mercado Pago.
-6. En `/admin/servicios`, configurar un servicio con `Pago online`, `Requiere sena` y monto de sena.
+6. En `/admin/servicios`, configurar un servicio con `Pago online`, `Requiere seña` y monto de seña.
 7. Probar `/reservar/clinica-central`, crear la reserva y continuar a Mercado Pago.
 8. Confirmar el estado en `/admin/pagos`.
 
