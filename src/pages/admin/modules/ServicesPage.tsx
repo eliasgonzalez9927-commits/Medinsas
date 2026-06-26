@@ -1,17 +1,18 @@
 import { FormEvent, useEffect, useState } from "react";
 import { BadgeDollarSign, Clock3, Download, Edit3, FileUp, Plus, SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import {
   createService,
-  getDefaultClinic,
   getServices,
   getSpecialties,
   toggleServiceStatus,
   updateService
 } from "../../../lib/clinic-data";
-import { Clinic, ServiceInput, ServiceWithRelations, Specialty } from "../../../types/clinic";
+import { ServiceInput, ServiceWithRelations, Specialty } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
 import { supabase } from "../../../lib/supabase";
 
@@ -59,7 +60,7 @@ function downloadServicesTemplate() {
 }
 
 export function ServicesPage() {
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const [services, setServices] = useState<ServiceWithRelations[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,19 +76,13 @@ export function ServicesPage() {
   const [bulkValue, setBulkValue] = useState("");
 
   async function load() {
+    if (!clinic) return;
     setLoading(true);
     setError("");
     try {
-      const loadedClinic = await getDefaultClinic();
-      setClinic(loadedClinic);
-      if (!loadedClinic) {
-        setError("No encontramos la clinica configurada. Ejecuta las migraciones y el seed inicial.");
-        setServices([]);
-        return;
-      }
       const [serviceResult, loadedSpecialties] = await Promise.all([
-        getServices(loadedClinic.id),
-        getSpecialties(loadedClinic.id)
+        getServices(clinic.id),
+        getSpecialties(clinic.id)
       ]);
       setServices(serviceResult.data);
       setFromFallback(serviceResult.fromFallback);
@@ -100,8 +95,8 @@ export function ServicesPage() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    if (clinic) load();
+  }, [clinic?.id]);
 
   function openCreate() {
     setForm({ ...emptyForm, specialty_id: specialties[0]?.id ?? "" });
@@ -150,7 +145,7 @@ export function ServicesPage() {
         public_booking_enabled: form.public_booking_enabled
       };
       if (form.id) {
-        await updateService(form.id, payload);
+        await updateService(form.id, payload, clinic.id);
         setNotice("Servicio actualizado correctamente.");
       } else {
         await createService(payload);
@@ -210,7 +205,6 @@ export function ServicesPage() {
       onAction={openCreate}
       title="Servicios y tratamientos"
     >
-      <div className="flex flex-wrap gap-2"><Link to="/admin/importaciones" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink"><FileUp size={16} /> Importar servicios</Link><Button icon={<Download size={16} />} onClick={exportServices}>Exportar servicios</Button><Button icon={<Download size={16} />} onClick={() => downloadServicesTemplate()}>Descargar plantilla CSV</Button><Button icon={<SlidersHorizontal size={16} />} onClick={() => setBulkOpen((open) => !open)}>{bulkOpen ? "Cerrar edición masiva" : "Actualizar precios"}</Button></div>
       {notice && <Message tone="success">{notice}</Message>}
       {fromFallback && (
         <Message tone="warning">
@@ -218,10 +212,12 @@ export function ServicesPage() {
         </Message>
       )}
       {error && <Message tone="error">{error}</Message>}
+      {!clinic && !clinicLoading && <NoActiveClinicState />}
+      {clinic && <div className="flex flex-wrap gap-2"><Link to="/admin/importaciones" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink"><FileUp size={16} /> Importar servicios</Link><Button icon={<Download size={16} />} onClick={exportServices}>Exportar servicios</Button><Button icon={<Download size={16} />} onClick={() => downloadServicesTemplate()}>Descargar plantilla CSV</Button><Button icon={<SlidersHorizontal size={16} />} onClick={() => setBulkOpen((open) => !open)}>{bulkOpen ? "Cerrar edición masiva" : "Actualizar precios"}</Button></div>}
 
-      {bulkOpen && <SectionCard className="p-5"><h2 className="font-semibold">Vista previa de cambios</h2><p className="mt-1 text-sm text-clinic-muted">Seleccioná servicios y confirmá el cambio antes de aplicarlo.</p><div className="mt-4 grid gap-3 md:grid-cols-[1fr_180px_auto]"><select value={bulkMode} onChange={(event) => setBulkMode(event.target.value as typeof bulkMode)} className="h-10 rounded-lg border border-clinic-line px-3 text-sm"><option value="percent">Aumentar precio por porcentaje</option><option value="fixed">Aumentar precio por monto fijo</option><option value="deposit">Reemplazar seña</option><option value="duration">Reemplazar duración</option></select><input value={bulkValue} onChange={(event) => setBulkValue(event.target.value)} type="number" placeholder={bulkMode === "percent" ? "Ej. 20" : "Monto / minutos"} className="h-10 rounded-lg border border-clinic-line px-3 text-sm"/><Button disabled={!selected.size || !bulkValue || saving} onClick={applyBulk} variant="primary">Aplicar a {selected.size} servicios</Button></div></SectionCard>}
+      {clinic && bulkOpen && <SectionCard className="p-5"><h2 className="font-semibold">Vista previa de cambios</h2><p className="mt-1 text-sm text-clinic-muted">Seleccioná servicios y confirmá el cambio antes de aplicarlo.</p><div className="mt-4 grid gap-3 md:grid-cols-[1fr_180px_auto]"><select value={bulkMode} onChange={(event) => setBulkMode(event.target.value as typeof bulkMode)} className="h-10 rounded-lg border border-clinic-line px-3 text-sm"><option value="percent">Aumentar precio por porcentaje</option><option value="fixed">Aumentar precio por monto fijo</option><option value="deposit">Reemplazar seña</option><option value="duration">Reemplazar duración</option></select><input value={bulkValue} onChange={(event) => setBulkValue(event.target.value)} type="number" placeholder={bulkMode === "percent" ? "Ej. 20" : "Monto / minutos"} className="h-10 rounded-lg border border-clinic-line px-3 text-sm"/><Button disabled={!selected.size || !bulkValue || saving} onClick={applyBulk} variant="primary">Aplicar a {selected.size} servicios</Button></div></SectionCard>}
 
-      {formOpen && (
+      {clinic && formOpen && (
         <SectionCard className="p-5">
           <h2 className="font-semibold text-clinic-ink">{form.id ? "Editar servicio" : "Crear servicio"}</h2>
           <form onSubmit={handleSubmit} className="mt-5 grid gap-4 md:grid-cols-2">
@@ -274,7 +270,7 @@ export function ServicesPage() {
         </SectionCard>
       )}
 
-      {loading ? (
+      {clinic && (loading ? (
         <div className="rounded-lg border border-clinic-line bg-white p-8 text-center text-clinic-muted">Cargando servicios...</div>
       ) : services.length === 0 ? (
         <SectionCard className="p-8 text-center">
@@ -336,7 +332,7 @@ export function ServicesPage() {
             </SectionCard>
           ))}
         </section>
-      )}
+      ))}
     </AdminPageShell>
   );
 }

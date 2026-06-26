@@ -316,13 +316,14 @@ export async function getPayments(clinicId: string, filters: PaymentFilters = {}
   }
 }
 
-export async function getPaymentById(id: string): Promise<PaymentWithRelations | null> {
+export async function getPaymentById(id: string, clinicId?: string): Promise<PaymentWithRelations | null> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("payments")
       .select("*, clinics(*), patients(*), appointments(*), services(*)")
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+    if (clinicId) query = query.eq("clinic_id", clinicId);
+    const { data, error } = await query.maybeSingle();
     if (error) throw error;
     return data as PaymentWithRelations | null;
   } catch (error) {
@@ -331,13 +332,14 @@ export async function getPaymentById(id: string): Promise<PaymentWithRelations |
   }
 }
 
-export async function getPaymentEvents(paymentId: string): Promise<PaymentEvent[]> {
+export async function getPaymentEvents(paymentId: string, clinicId?: string): Promise<PaymentEvent[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("payment_events")
       .select("*")
-      .eq("payment_id", paymentId)
-      .order("created_at", { ascending: false });
+      .eq("payment_id", paymentId);
+    if (clinicId) query = query.eq("clinic_id", clinicId);
+    const { data, error } = await query.order("created_at", { ascending: false });
     if (error) throw error;
     return (data ?? []) as PaymentEvent[];
   } catch (error) {
@@ -362,14 +364,14 @@ export async function getPaymentSettings(clinicId: string): Promise<PaymentSetti
   }
 }
 
-export async function updatePaymentSettings(id: string, data: Partial<PaymentSettings>): Promise<PaymentSettings> {
+export async function updatePaymentSettings(id: string, data: Partial<PaymentSettings>, clinicId?: string): Promise<PaymentSettings> {
   try {
-    const { data: updated, error } = await supabase
+    let query = supabase
       .from("payment_settings")
       .update({ ...data, updated_at: new Date().toISOString() })
-      .eq("id", id)
-      .select("*")
-      .single();
+      .eq("id", id);
+    if (clinicId) query = query.eq("clinic_id", clinicId);
+    const { data: updated, error } = await query.select("*").single();
     if (error) throw error;
     return updated as PaymentSettings;
   } catch (error) {
@@ -417,9 +419,9 @@ export async function getProfessionals(clinicId: string): Promise<ClinicDataResu
   }
 }
 
-export async function getProfessionalById(idOrSlug: string): Promise<ProfessionalWithRelations | null> {
+export async function getProfessionalById(idOrSlug: string, clinicId?: string): Promise<ProfessionalWithRelations | null> {
   try {
-    const query = supabase
+    let query = supabase
       .from("professionals")
       .select(
         `
@@ -429,14 +431,15 @@ export async function getProfessionalById(idOrSlug: string): Promise<Professiona
         availability_rules(*)
       `
       );
+    if (clinicId) query = query.eq("clinic_id", clinicId);
     const { data, error } = isUuid(idOrSlug)
       ? await query.eq("id", idOrSlug).maybeSingle()
       : await query.eq("slug", idOrSlug).maybeSingle();
     if (error) throw error;
-    return data ? mapProfessional(data) : mapFallbackProfessionalById(idOrSlug);
+    return data ? mapProfessional(data) : clinicId ? null : mapFallbackProfessionalById(idOrSlug);
   } catch (error) {
     console.error("Failed to load professional", error);
-    return mapFallbackProfessionalById(idOrSlug);
+    return clinicId ? null : mapFallbackProfessionalById(idOrSlug);
   }
 }
 
@@ -455,14 +458,14 @@ export async function createProfessional(data: ProfessionalInput): Promise<Profe
   }
 }
 
-export async function updateProfessional(id: string, data: Partial<ProfessionalInput>): Promise<Professional> {
+export async function updateProfessional(id: string, data: Partial<ProfessionalInput>, clinicId?: string): Promise<Professional> {
   try {
-    const { data: updated, error } = await supabase
+    let query = supabase
       .from("professionals")
       .update(data)
-      .eq("id", id)
-      .select("*")
-      .single();
+      .eq("id", id);
+    if (clinicId) query = query.eq("clinic_id", clinicId);
+    const { data: updated, error } = await query.select("*").single();
     if (error) throw error;
     return updated as Professional;
   } catch (error) {
@@ -514,14 +517,14 @@ export async function createService(data: ServiceInput): Promise<Service> {
   }
 }
 
-export async function updateService(id: string, data: Partial<ServiceInput>): Promise<Service> {
+export async function updateService(id: string, data: Partial<ServiceInput>, clinicId?: string): Promise<Service> {
   try {
-    const { data: updated, error } = await supabase
+    let query = supabase
       .from("services")
       .update(data)
-      .eq("id", id)
-      .select("*")
-      .single();
+      .eq("id", id);
+    if (clinicId) query = query.eq("clinic_id", clinicId);
+    const { data: updated, error } = await query.select("*").single();
     if (error) throw error;
     return updated as Service;
   } catch (error) {
@@ -592,9 +595,11 @@ export async function updateAvailabilityRule(
   }
 }
 
-export async function deleteAvailabilityRule(id: string): Promise<void> {
+export async function deleteAvailabilityRule(id: string, clinicId?: string): Promise<void> {
   try {
-    const { error } = await supabase.from("availability_rules").delete().eq("id", id);
+    let query = supabase.from("availability_rules").delete().eq("id", id);
+    if (clinicId) query = query.eq("clinic_id", clinicId);
+    const { error } = await query;
     if (error) throw error;
   } catch (error) {
     console.error("Failed to delete availability rule", error);
@@ -634,9 +639,11 @@ export async function createAvailabilityBlock(data: AvailabilityBlockInput): Pro
   }
 }
 
-export async function deleteAvailabilityBlock(id: string): Promise<void> {
+export async function deleteAvailabilityBlock(id: string, clinicId?: string): Promise<void> {
   try {
-    const { error } = await supabase.from("availability_blocks").delete().eq("id", id);
+    let query = supabase.from("availability_blocks").delete().eq("id", id);
+    if (clinicId) query = query.eq("clinic_id", clinicId);
+    const { error } = await query;
     if (error) throw error;
   } catch (error) {
     console.error("Failed to delete availability block", error);
@@ -679,13 +686,14 @@ export async function searchPatients(clinicId: string, query: string): Promise<P
   }
 }
 
-export async function getPatientById(id: string): Promise<PatientWithAppointments | null> {
+export async function getPatientById(id: string, clinicId?: string): Promise<PatientWithAppointments | null> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("patients")
       .select("*, appointments(*)")
-      .eq("id", id)
-      .maybeSingle();
+      .eq("id", id);
+    if (clinicId) query = query.eq("clinic_id", clinicId);
+    const { data, error } = await query.maybeSingle();
     if (error) throw error;
     return data ? mapPatient(data) : null;
   } catch (error) {
@@ -705,14 +713,14 @@ export async function createPatient(data: PatientInput): Promise<Patient> {
   }
 }
 
-export async function updatePatient(id: string, data: Partial<PatientInput>): Promise<Patient> {
+export async function updatePatient(id: string, data: Partial<PatientInput>, clinicId?: string): Promise<Patient> {
   try {
-    const { data: updated, error } = await supabase
+    let query = supabase
       .from("patients")
       .update(data)
-      .eq("id", id)
-      .select("*")
-      .single();
+      .eq("id", id);
+    if (clinicId) query = query.eq("clinic_id", clinicId);
+    const { data: updated, error } = await query.select("*").single();
     if (error) throw error;
     return updated as Patient;
   } catch (error) {
@@ -838,14 +846,14 @@ export async function createOverbooking(data: OverbookingInput): Promise<Appoint
   }
 }
 
-export async function updateAppointment(id: string, data: Partial<AppointmentInput>): Promise<Appointment> {
+export async function updateAppointment(id: string, data: Partial<AppointmentInput>, clinicId?: string): Promise<Appointment> {
   try {
-    const { data: updated, error } = await supabase
+    let query = supabase
       .from("appointments")
       .update(data)
-      .eq("id", id)
-      .select("*")
-      .single();
+      .eq("id", id);
+    if (clinicId) query = query.eq("clinic_id", clinicId);
+    const { data: updated, error } = await query.select("*").single();
     if (error) throw error;
     return updated as Appointment;
   } catch (error) {
@@ -857,16 +865,20 @@ export async function updateAppointment(id: string, data: Partial<AppointmentInp
 export async function updateAppointmentStatus(
   id: string,
   status: AppointmentStatus,
-  metadata: Record<string, unknown> = {}
+  metadata: Record<string, unknown> = {},
+  clinicId?: string
 ): Promise<void> {
   try {
-    const { data: current, error: readError } = await supabase
+    let readQuery = supabase
       .from("appointments")
       .select("status")
-      .eq("id", id)
-      .single();
+      .eq("id", id);
+    if (clinicId) readQuery = readQuery.eq("clinic_id", clinicId);
+    const { data: current, error: readError } = await readQuery.single();
     if (readError) throw readError;
-    const { error } = await supabase.from("appointments").update({ status }).eq("id", id);
+    let updateQuery = supabase.from("appointments").update({ status }).eq("id", id);
+    if (clinicId) updateQuery = updateQuery.eq("clinic_id", clinicId);
+    const { error } = await updateQuery;
     if (error) throw error;
     const eventByStatus: Record<string, string> = {
       confirmed: "appointment_confirmed",
@@ -890,24 +902,24 @@ export async function updateAppointmentStatus(
   }
 }
 
-export async function confirmAppointment(id: string) {
-  return updateAppointmentStatus(id, "confirmed");
+export async function confirmAppointment(id: string, clinicId?: string) {
+  return updateAppointmentStatus(id, "confirmed", {}, clinicId);
 }
 
-export async function cancelAppointment(id: string, reason?: string) {
-  await updateAppointment(id, { cancellation_reason: reason ?? null } as Partial<AppointmentInput>);
-  return updateAppointmentStatus(id, "cancelled", { reason });
+export async function cancelAppointment(id: string, reason?: string, clinicId?: string) {
+  await updateAppointment(id, { cancellation_reason: reason ?? null } as Partial<AppointmentInput>, clinicId);
+  return updateAppointmentStatus(id, "cancelled", { reason }, clinicId);
 }
 
-export async function markAppointmentCompleted(id: string) {
-  return updateAppointmentStatus(id, "completed");
+export async function markAppointmentCompleted(id: string, clinicId?: string) {
+  return updateAppointmentStatus(id, "completed", {}, clinicId);
 }
 
-export async function markAppointmentNoShow(id: string) {
-  return updateAppointmentStatus(id, "no_show");
+export async function markAppointmentNoShow(id: string, clinicId?: string) {
+  return updateAppointmentStatus(id, "no_show", {}, clinicId);
 }
 
-export async function rescheduleAppointment(id: string, newStartTime: string, newEndTime: string) {
+export async function rescheduleAppointment(id: string, newStartTime: string, newEndTime: string, clinicId?: string) {
   const { data: current, error } = await supabase
     .from("appointments")
     .select("clinic_id, professional_id, service_id")
@@ -917,6 +929,9 @@ export async function rescheduleAppointment(id: string, newStartTime: string, ne
     console.error("Failed to read appointment before reschedule", error);
     throw new FriendlyDataError("No pudimos reprogramar el turno.");
   }
+  if (clinicId && current.clinic_id !== clinicId) {
+    throw new FriendlyDataError("Este turno pertenece a otra clinica.");
+  }
   if (!current.clinic_id || !current.professional_id || !current.service_id) {
     throw new FriendlyDataError("El turno no tiene profesional o servicio asignado.");
   }
@@ -925,7 +940,7 @@ export async function rescheduleAppointment(id: string, newStartTime: string, ne
     starts_at: newStartTime,
     end_time: newEndTime,
     status: "rescheduled"
-  } as Partial<AppointmentInput>);
+  } as Partial<AppointmentInput>, clinicId);
   await logAppointmentEvent(id, "appointment_rescheduled", null, "rescheduled", {
     starts_at: newStartTime,
     end_time: newEndTime

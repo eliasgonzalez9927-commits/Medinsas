@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CreditCard, ExternalLink, RefreshCw, Settings, WalletCards } from "lucide-react";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { Button } from "../../../components/ui/Button";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import {
-  getDefaultClinic,
   getPaymentById,
   getPaymentEvents,
   getPayments,
@@ -15,7 +16,7 @@ import {
 import { getPublicAppUrl } from "../../../lib/public-url";
 import { DateRangeValue, resolveDateRange } from "../../../lib/date-range";
 import { supabase } from "../../../lib/supabase";
-import { Clinic, PaymentEvent, PaymentSettings, PaymentWithRelations } from "../../../types/clinic";
+import { PaymentEvent, PaymentSettings, PaymentWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
 
 type EnvHealth = {
@@ -29,7 +30,7 @@ type EnvHealth = {
 };
 
 export function PaymentsPage() {
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const [payments, setPayments] = useState<PaymentWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -37,13 +38,11 @@ export function PaymentsPage() {
   const [range, setRange] = useState<DateRangeValue>(() => resolveDateRange("this_month"));
 
   async function load() {
+    if (!clinic) return;
     setLoading(true);
     setError("");
     try {
-      const loadedClinic = await getDefaultClinic();
-      setClinic(loadedClinic);
-      if (!loadedClinic) return;
-      setPayments(await getPayments(loadedClinic.id, { dateFrom: range.dateFrom, dateTo: range.dateTo, timezone: loadedClinic.timezone ?? undefined }));
+      setPayments(await getPayments(clinic.id, { dateFrom: range.dateFrom, dateTo: range.dateTo, timezone: clinic.timezone ?? undefined }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar los pagos.");
     } finally {
@@ -52,8 +51,9 @@ export function PaymentsPage() {
   }
 
   useEffect(() => {
-    load();
-  }, [range.dateFrom, range.dateTo]);
+    if (clinic) load();
+    else if (!clinicLoading) setLoading(false);
+  }, [clinic?.id, clinicLoading, range.dateFrom, range.dateTo]);
 
   const summary = useMemo(() => {
     const approved = payments.filter((payment) => getEffectivePaymentStatus(payment) === "approved");
@@ -91,7 +91,9 @@ export function PaymentsPage() {
       title="Pagos"
     >
       {error && <Message tone="error">{error}</Message>}
-      <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="this_month" onChange={setRange} />
+      {!clinic && !clinicLoading && <NoActiveClinicState />}
+      {clinic && <DateRangeFilter timezone={clinic.timezone ?? "America/Argentina/Mendoza"} defaultPreset="this_month" onChange={setRange} />}
+      {clinic && <>
       <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
         <Metric label="Pagos" value={String(summary.total)} />
         <Metric label="Aprobados" value={String(summary.approved)} />
@@ -145,12 +147,14 @@ export function PaymentsPage() {
           </div>
         )}
       </SectionCard>
+      </>}
     </AdminPageShell>
   );
 }
 
 export function PaymentDetailPage() {
   const { id = "" } = useParams();
+  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const [payment, setPayment] = useState<PaymentWithRelations | null>(null);
   const [events, setEvents] = useState<PaymentEvent[]>([]);
   const [error, setError] = useState("");
@@ -158,18 +162,19 @@ export function PaymentDetailPage() {
   const [syncing, setSyncing] = useState(false);
 
   async function load() {
+    if (!clinic) return;
     try {
-      const loadedPayment = await getPaymentById(id);
+      const loadedPayment = await getPaymentById(id, clinic.id);
       setPayment(loadedPayment);
-      if (loadedPayment) setEvents(await getPaymentEvents(loadedPayment.id).catch(() => []));
+      if (loadedPayment) setEvents(await getPaymentEvents(loadedPayment.id, clinic.id).catch(() => []));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar el pago.");
     }
   }
 
   useEffect(() => {
-    load();
-  }, [id]);
+    if (clinic) load();
+  }, [id, clinic?.id]);
 
   async function syncCurrentPayment() {
     if (!payment) return;
@@ -196,7 +201,9 @@ export function PaymentDetailPage() {
     >
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
-      {!payment ? (
+      {!clinic && !clinicLoading ? (
+        <NoActiveClinicState />
+      ) : !payment ? (
         <SectionCard className="p-8 text-center text-clinic-muted">Cargando pago...</SectionCard>
       ) : (
         <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
@@ -268,7 +275,7 @@ export function PaymentDetailPage() {
 }
 
 export function PaymentSettingsPage() {
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
   const [form, setForm] = useState({
     active: false,
@@ -287,11 +294,9 @@ export function PaymentSettingsPage() {
   const [envHealth, setEnvHealth] = useState<EnvHealth | null>(null);
 
   async function load() {
+    if (!clinic) return;
     try {
-      const loadedClinic = await getDefaultClinic();
-      setClinic(loadedClinic);
-      if (!loadedClinic) return;
-      const loadedSettings = await getPaymentSettings(loadedClinic.id);
+      const loadedSettings = await getPaymentSettings(clinic.id);
       setSettings(loadedSettings);
       const healthResponse = await fetch("/api/health/env");
       if (healthResponse.ok) {
@@ -317,8 +322,8 @@ export function PaymentSettingsPage() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    if (clinic) load();
+  }, [clinic?.id]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -335,7 +340,7 @@ export function PaymentSettingsPage() {
         deposit_percentage: form.deposit_percentage ? Number(form.deposit_percentage) : null,
         payment_link_expiration_minutes: form.payment_link_expiration_minutes ? Number(form.payment_link_expiration_minutes) : null,
         support_email: form.support_email || null
-      });
+      }, clinic?.id);
       setSettings(updated);
       setNotice("Configuracion de pagos actualizada.");
     } catch (err) {
@@ -352,7 +357,8 @@ export function PaymentSettingsPage() {
     >
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
-      <section className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
+      {!clinic && !clinicLoading && <NoActiveClinicState />}
+      {clinic && <section className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
         <SectionCard className="p-5">
           <div className="flex items-start gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-lg bg-teal-50 text-clinic-brand">
@@ -401,7 +407,7 @@ export function PaymentSettingsPage() {
             Variables requeridas en Vercel: MERCADO_PAGO_ACCESS_TOKEN, MERCADO_PAGO_PUBLIC_KEY, MERCADO_PAGO_WEBHOOK_SECRET, MERCADO_PAGO_ENV, APP_PUBLIC_URL, SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.
           </div>
         </SectionCard>
-      </section>
+      </section>}
     </AdminPageShell>
   );
 }

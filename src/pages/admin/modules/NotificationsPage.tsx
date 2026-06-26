@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bell, CalendarDays, CheckCircle2, Mail, MessageCircle, Monitor, RefreshCw, Search, Send } from "lucide-react";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import { useAuth } from "../../../contexts/AuthContext";
-import { getDefaultClinic } from "../../../lib/clinic-data";
 import { getNotificationEvents } from "../../../lib/notifications";
 import { supabase } from "../../../lib/supabase";
-import { Clinic, NotificationDelivery, NotificationEvent } from "../../../types/clinic";
+import { NotificationDelivery, NotificationEvent } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
 
 type NotificationFilter = "all" | "pending" | "processed" | "failed";
@@ -20,7 +21,7 @@ const filterLabels: Record<NotificationFilter, string> = {
 
 export function NotificationsPage() {
   const { role } = useAuth();
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const { activeClinic: clinic, activeRole, loading: clinicLoading } = useActiveClinic();
   const [events, setEvents] = useState<NotificationEvent[]>([]);
   const [filter, setFilter] = useState<NotificationFilter>("all");
   const [search, setSearch] = useState("");
@@ -28,19 +29,14 @@ export function NotificationsPage() {
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
   const [processNotice, setProcessNotice] = useState("");
-  const canProcessEmails = role === "platform_admin";
+  const canProcessEmails = (activeRole ?? role) === "platform_admin";
 
   async function load() {
+    if (!clinic) return;
     setLoading(true);
     setError("");
     try {
-      const loadedClinic = clinic ?? await getDefaultClinic();
-      setClinic(loadedClinic);
-      if (!loadedClinic) {
-        setEvents([]);
-        return;
-      }
-      setEvents(await getNotificationEvents(loadedClinic.id));
+      setEvents(await getNotificationEvents(clinic.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar las notificaciones.");
     } finally {
@@ -49,8 +45,9 @@ export function NotificationsPage() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    if (clinic) load();
+    else if (!clinicLoading) setLoading(false);
+  }, [clinic?.id, clinicLoading]);
 
   const metrics = useMemo(() => ({
     all: events.length,
@@ -118,8 +115,9 @@ export function NotificationsPage() {
     >
       {error && <Message tone="error">{error}</Message>}
       {processNotice && <Message tone="success">{processNotice}</Message>}
+      {!clinic && !clinicLoading && <NoActiveClinicState />}
 
-      {canProcessEmails && (
+      {clinic && canProcessEmails && (
         <SectionCard className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold text-clinic-ink">Entregas de email pendientes</h2>
@@ -136,7 +134,7 @@ export function NotificationsPage() {
         </SectionCard>
       )}
 
-      <section className="grid gap-4 md:grid-cols-4">
+      {clinic && <section className="grid gap-4 md:grid-cols-4">
         {(Object.keys(filterLabels) as NotificationFilter[]).map((item) => (
           <button
             key={item}
@@ -149,9 +147,9 @@ export function NotificationsPage() {
             <p className="mt-2 text-2xl font-semibold">{metrics[item]}</p>
           </button>
         ))}
-      </section>
+      </section>}
 
-      <SectionCard className="p-5">
+      {clinic && <SectionCard className="p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <label className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-clinic-muted" size={16} />
@@ -166,9 +164,9 @@ export function NotificationsPage() {
             Actualizar
           </Button>
         </div>
-      </SectionCard>
+      </SectionCard>}
 
-      <SectionCard className="overflow-hidden">
+      {clinic && <SectionCard className="overflow-hidden">
         <div className="border-b border-clinic-line px-5 py-4">
           <h2 className="font-semibold text-clinic-ink">Eventos registrados</h2>
           <p className="mt-1 text-sm text-clinic-muted">WhatsApp queda preparado como entrega futura; no se envía automáticamente todavía.</p>
@@ -214,7 +212,7 @@ export function NotificationsPage() {
             ))}
           </div>
         )}
-      </SectionCard>
+      </SectionCard>}
     </AdminPageShell>
   );
 }

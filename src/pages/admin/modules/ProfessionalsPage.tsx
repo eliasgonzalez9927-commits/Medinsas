@@ -1,16 +1,17 @@
 import { FormEvent, useEffect, useState } from "react";
 import { CalendarDays, Copy, Download, Edit3, FileUp, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import {
   createProfessional,
-  getDefaultClinic,
   getProfessionals,
   toggleProfessionalStatus,
   updateProfessional
 } from "../../../lib/clinic-data";
-import { Clinic, ProfessionalInput, ProfessionalWithRelations } from "../../../types/clinic";
+import { ProfessionalInput, ProfessionalWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
 
 type FormState = {
@@ -35,7 +36,7 @@ const emptyForm: FormState = {
 };
 
 export function ProfessionalsPage() {
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const [professionals, setProfessionals] = useState<ProfessionalWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -46,17 +47,11 @@ export function ProfessionalsPage() {
   const [saving, setSaving] = useState(false);
 
   async function load() {
+    if (!clinic) return;
     setLoading(true);
     setError("");
     try {
-      const loadedClinic = await getDefaultClinic();
-      setClinic(loadedClinic);
-      if (!loadedClinic) {
-        setError("No encontramos la clinica configurada. Ejecuta las migraciones y el seed inicial.");
-        setProfessionals([]);
-        return;
-      }
-      const result = await getProfessionals(loadedClinic.id);
+      const result = await getProfessionals(clinic.id);
       setProfessionals(result.data);
       setFromFallback(result.fromFallback);
     } catch (err) {
@@ -67,8 +62,8 @@ export function ProfessionalsPage() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    if (clinic) load();
+  }, [clinic?.id]);
 
   function openCreate() {
     setForm(emptyForm);
@@ -109,7 +104,7 @@ export function ProfessionalsPage() {
         active: true
       };
       if (form.id) {
-        await updateProfessional(form.id, payload);
+        await updateProfessional(form.id, payload, clinic.id);
         setNotice("Profesional actualizado correctamente.");
       } else {
         await createProfessional(payload);
@@ -181,9 +176,10 @@ export function ProfessionalsPage() {
         </Message>
       )}
       {error && <Message tone="error">{error}</Message>}
-      <div className="flex flex-wrap gap-2"><Link to="/admin/importaciones" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink"><FileUp size={16} /> Importar profesionales</Link><Button icon={<Download size={16} />} onClick={exportProfessionals}>Exportar profesionales</Button><Button icon={<Download size={16} />} onClick={downloadTemplate}>Descargar plantilla CSV</Button></div>
+      {!clinic && !clinicLoading && <NoActiveClinicState />}
+      {clinic && <div className="flex flex-wrap gap-2"><Link to="/admin/importaciones" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink"><FileUp size={16} /> Importar profesionales</Link><Button icon={<Download size={16} />} onClick={exportProfessionals}>Exportar profesionales</Button><Button icon={<Download size={16} />} onClick={downloadTemplate}>Descargar plantilla CSV</Button></div>}
 
-      {formOpen && (
+      {clinic && formOpen && (
         <SectionCard className="p-5">
           <h2 className="font-semibold text-clinic-ink">
             {form.id ? "Editar profesional" : "Crear profesional"}
@@ -218,7 +214,7 @@ export function ProfessionalsPage() {
         </SectionCard>
       )}
 
-      {loading ? (
+      {clinic && (loading ? (
         <LoadingState />
       ) : professionals.length === 0 ? (
         <EmptyState onCreate={openCreate} />
@@ -270,7 +266,7 @@ export function ProfessionalsPage() {
             </SectionCard>
           ))}
         </section>
-      )}
+      ))}
     </AdminPageShell>
   );
 }

@@ -6,6 +6,7 @@ import { ClinicMember, Profile, UserRole } from "../types/database";
 type AuthSnapshot = {
   profile: Profile | null;
   clinicMembership: ClinicMember | null;
+  clinicMemberships: ClinicMember[];
   role: UserRole | null;
 };
 
@@ -13,6 +14,7 @@ type AuthContextValue = {
   user: User | null;
   profile: Profile | null;
   clinicMembership: ClinicMember | null;
+  clinicMemberships: ClinicMember[];
   role: UserRole | null;
   session: Session | null;
   loading: boolean;
@@ -40,29 +42,29 @@ async function fetchProfile(userId: string) {
   return data as Profile | null;
 }
 
-async function fetchClinicMembership(userId: string) {
+async function fetchClinicMemberships(userId: string) {
   const { data, error } = await supabase
     .from("clinic_members")
     .select("id, clinic_id, user_id, role, active, created_at, updated_at")
     .eq("user_id", userId)
     .eq("active", true)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
 
   if (error) throw error;
-  return data as ClinicMember | null;
+  return (data ?? []) as ClinicMember[];
 }
 
 async function fetchAuthSnapshot(userId: string): Promise<AuthSnapshot> {
-  const [profile, clinicMembership] = await Promise.all([
+  const [profile, clinicMemberships] = await Promise.all([
     fetchProfile(userId),
-    fetchClinicMembership(userId)
+    fetchClinicMemberships(userId)
   ]);
+  const clinicMembership = clinicMemberships[0] ?? null;
   return {
     profile,
     clinicMembership,
-    role: clinicMembership?.role ?? profile?.role ?? null
+    clinicMemberships,
+    role: profile?.role === "platform_admin" ? "platform_admin" : clinicMembership?.role ?? profile?.role ?? null
   };
 }
 
@@ -70,12 +72,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [clinicMembership, setClinicMembership] = useState<ClinicMember | null>(null);
+  const [clinicMemberships, setClinicMemberships] = useState<ClinicMember[]>([]);
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   function applySnapshot(snapshot: AuthSnapshot) {
     setProfile(snapshot.profile);
     setClinicMembership(snapshot.clinicMembership);
+    setClinicMemberships(snapshot.clinicMemberships);
     setRole(snapshot.role);
   }
 
@@ -95,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (nextSession?.user) {
         applySnapshot(await fetchAuthSnapshot(nextSession.user.id));
       } else {
-        applySnapshot({ profile: null, clinicMembership: null, role: null });
+        applySnapshot({ profile: null, clinicMembership: null, clinicMemberships: [], role: null });
       }
       setLoading(false);
     });
@@ -109,12 +113,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       profile,
       clinicMembership,
+      clinicMemberships,
       role,
       loading,
       async signIn(email, password) {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        if (!data.user) return { profile: null, clinicMembership: null, role: null };
+        if (!data.user) return { profile: null, clinicMembership: null, clinicMemberships: [], role: null };
         const snapshot = await fetchAuthSnapshot(data.user.id);
         applySnapshot(snapshot);
         return snapshot;
@@ -138,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
       }
     }),
-    [clinicMembership, loading, profile, role, session]
+    [clinicMembership, clinicMemberships, loading, profile, role, session]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

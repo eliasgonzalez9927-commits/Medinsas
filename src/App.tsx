@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { useActiveClinic } from "./contexts/ActiveClinicContext";
 import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ADMIN_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-roles";
@@ -33,9 +34,10 @@ import { SuperadminPlansPage, SuperadminSubscriptionsPage } from "./pages/supera
 
 function HomeRedirect() {
   const { role, loading } = useAuth();
+  const { activeRole, loading: clinicLoading } = useActiveClinic();
 
-  if (loading) return null;
-  return <Navigate to={getPostLoginPath(role) ?? "/login"} replace />;
+  if (loading || clinicLoading) return null;
+  return <Navigate to={getPostLoginPath(activeRole ?? role) ?? "/login"} replace />;
 }
 
 export function App() {

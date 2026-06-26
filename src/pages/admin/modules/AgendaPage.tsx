@@ -2,8 +2,10 @@ import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import {
   cancelAppointment,
   confirmAppointment,
@@ -12,7 +14,6 @@ import {
   createPatient,
   getAppointments,
   getAvailableSlots,
-  getDefaultClinic,
   getLocations,
   getClinicMembers,
   getPatients,
@@ -75,9 +76,9 @@ const today = new Date().toISOString().slice(0, 10);
 
 export function AgendaPage() {
   const { role, user } = useAuth();
+  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [clinic, setClinic] = useState<Clinic | null>(null);
   const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
   const [professionals, setProfessionals] = useState<ProfessionalWithRelations[]>([]);
   const [services, setServices] = useState<ServiceWithRelations[]>([]);
@@ -119,20 +120,15 @@ export function AgendaPage() {
   });
 
   async function loadBase() {
+    if (!clinic) return;
     setLoading(true);
     setError("");
     try {
-      const loadedClinic = await getDefaultClinic();
-      setClinic(loadedClinic);
-      if (!loadedClinic) {
-        setError("No encontramos la clinica configurada. Ejecuta las migraciones y el seed inicial.");
-        return;
-      }
       const [professionalResult, serviceResult, loadedPatients, loadedLocations] = await Promise.all([
-        getProfessionals(loadedClinic.id),
-        getServices(loadedClinic.id),
-        getPatients(loadedClinic.id),
-        getLocations(loadedClinic.id)
+        getProfessionals(clinic.id),
+        getServices(clinic.id),
+        getPatients(clinic.id),
+        getLocations(clinic.id)
       ]);
       const activeProfessionals = professionalResult.data.filter((item) => item.active);
       const activeServices = serviceResult.data.filter((item) => item.active);
@@ -140,7 +136,7 @@ export function AgendaPage() {
       setServices(activeServices);
       setPatients(loadedPatients);
       setLocations(loadedLocations);
-      setMembers((await getClinicMembers(loadedClinic.id).catch(() => [])).map((member) => ({ user_id: member.user_id, profiles: member.profiles ? { full_name: member.profiles.full_name } : null })));
+      setMembers((await getClinicMembers(clinic.id).catch(() => [])).map((member) => ({ user_id: member.user_id, profiles: member.profiles ? { full_name: member.profiles.full_name } : null })));
       setForm((current) => ({
         ...current,
         patient_id: current.patient_id || loadedPatients[0]?.id || "",
@@ -148,7 +144,7 @@ export function AgendaPage() {
         service_id: current.service_id || activeServices[0]?.id || "",
         location_id: current.location_id || loadedLocations[0]?.id || ""
       }));
-      await loadAppointments(loadedClinic.id, loadedClinic.timezone ?? "America/Argentina/Mendoza");
+      await loadAppointments(clinic.id, clinic.timezone ?? "America/Argentina/Mendoza");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar la agenda.");
     } finally {
@@ -170,8 +166,8 @@ export function AgendaPage() {
   }
 
   useEffect(() => {
-    loadBase();
-  }, []);
+    if (clinic) loadBase();
+  }, [clinic?.id]);
 
   useEffect(() => {
     setSearchQuery(searchParams.get("search") ?? "");
@@ -518,10 +514,10 @@ export function AgendaPage() {
   async function handleStatus(id: string, action: "confirm" | "cancel" | "completed" | "no_show") {
     setError("");
     try {
-      if (action === "confirm") await confirmAppointment(id);
-      if (action === "cancel") await cancelAppointment(id, "Cancelado desde agenda");
-      if (action === "completed") await markAppointmentCompleted(id);
-      if (action === "no_show") await markAppointmentNoShow(id);
+      if (action === "confirm") await confirmAppointment(id, clinic?.id);
+      if (action === "cancel") await cancelAppointment(id, "Cancelado desde agenda", clinic?.id);
+      if (action === "completed") await markAppointmentCompleted(id, clinic?.id);
+      if (action === "no_show") await markAppointmentNoShow(id, clinic?.id);
       setNotice("Estado actualizado.");
       await loadAppointments();
     } catch (err) {
@@ -581,15 +577,16 @@ export function AgendaPage() {
     >
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
+      {!clinic && !clinicLoading && <NoActiveClinicState />}
 
-      <section className="grid gap-4 md:grid-cols-4">
+      {clinic && <section className="grid gap-4 md:grid-cols-4">
         <QuickAction icon={<Clock3 size={18} />} label={`${metrics.pending} turnos sin confirmar`} />
         <QuickAction icon={<UserX size={18} />} label={`${metrics.noShow} pacientes no asistieron`} />
         <QuickAction icon={<MessageCircle size={18} />} label={`${metrics.whatsapp} recordatorios pendientes`} />
         <QuickAction icon={<UserCheck size={18} />} label={`${metrics.freeSlots} huecos disponibles`} />
-      </section>
+      </section>}
 
-      {formOpen && (
+      {clinic && formOpen && (
         <SectionCard className="p-5">
           <h2 className="font-semibold text-clinic-ink">Crear turno manual</h2>
           <form onSubmit={handleSubmit} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -709,7 +706,7 @@ export function AgendaPage() {
         </SectionCard>
       )}
 
-      {overbookingOpen && (
+      {clinic && overbookingOpen && (
         <SectionCard className="border-amber-200 p-5">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-clinic-ink">Crear sobreturno</h2><p className="mt-1 text-sm text-clinic-muted">Excepción interna. No modifica ni genera disponibilidad pública.</p></div><span className="rounded-lg bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">Controlado</span></div>
           <form onSubmit={handleCreateOverbooking} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -788,7 +785,7 @@ export function AgendaPage() {
         </label>
       </SectionCard>
 
-      <SectionCard className="overflow-hidden">
+      {clinic && <SectionCard className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
           <h2 className="font-semibold text-clinic-ink">{range.preset === "today" ? "Turnos del día" : "Turnos del período"}</h2>
           <Button icon={<Plus size={16} />} onClick={openCreate}>
@@ -877,7 +874,7 @@ export function AgendaPage() {
             ))}
           </div>
         )}
-      </SectionCard>
+      </SectionCard>}
     </AdminPageShell>
   );
 }

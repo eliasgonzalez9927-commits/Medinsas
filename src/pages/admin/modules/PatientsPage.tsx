@@ -3,15 +3,16 @@ import { Download, Edit3, FileUp, Search, UserPlus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { Button } from "../../../components/ui/Button";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import {
   createPatient,
-  getDefaultClinic,
   getPatients,
   searchPatients,
   updatePatient
 } from "../../../lib/clinic-data";
-import { Clinic, PatientInput, PatientWithAppointments } from "../../../types/clinic";
+import { PatientInput, PatientWithAppointments } from "../../../types/clinic";
 import { DateRangeValue, isDateInRange, resolveDateRange } from "../../../lib/date-range";
 import { AdminPageShell } from "./AdminPageShell";
 
@@ -39,7 +40,7 @@ const emptyForm: PatientForm = {
 };
 
 export function PatientsPage() {
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const [patients, setPatients] = useState<PatientWithAppointments[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -52,19 +53,13 @@ export function PatientsPage() {
   const [temporalFilter, setTemporalFilter] = useState<"all" | "created" | "last_appointment" | "next_appointment" | "inactive">("all");
 
   async function load(search = query) {
+    if (!clinic) return;
     setLoading(true);
     setError("");
     try {
-      const loadedClinic = clinic ?? (await getDefaultClinic());
-      setClinic(loadedClinic);
-      if (!loadedClinic) {
-        setPatients([]);
-        setError("No encontramos la clinica configurada. Ejecuta las migraciones y el seed inicial.");
-        return;
-      }
       const loadedPatients = search.trim()
-        ? await searchPatients(loadedClinic.id, search)
-        : await getPatients(loadedClinic.id);
+        ? await searchPatients(clinic.id, search)
+        : await getPatients(clinic.id);
       setPatients(loadedPatients);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar los pacientes.");
@@ -74,15 +69,15 @@ export function PatientsPage() {
   }
 
   useEffect(() => {
-    load("");
-  }, []);
+    if (clinic) load("");
+  }, [clinic?.id]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       if (clinic) load(query);
     }, 350);
     return () => window.clearTimeout(timeout);
-  }, [query]);
+  }, [clinic?.id, query]);
 
   const visiblePatients = useMemo(() => patients.filter((patient) => {
     const appointments = patient.appointments ?? [];
@@ -153,7 +148,7 @@ export function PatientsPage() {
         notes: form.notes || null
       };
       if (form.id) {
-        await updatePatient(form.id, payload);
+        await updatePatient(form.id, payload, clinic.id);
         setNotice("Paciente actualizado correctamente.");
       } else {
         await createPatient(payload);
@@ -178,26 +173,27 @@ export function PatientsPage() {
     >
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
+      {!clinic && !clinicLoading && <NoActiveClinicState />}
 
-      <div className="flex flex-wrap gap-2">
+      {clinic && <div className="flex flex-wrap gap-2">
         <Link to="/admin/importaciones?type=patients" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink hover:bg-clinic-surface"><FileUp size={16} /> Importar pacientes</Link>
         <Button icon={<Download size={16} />} onClick={exportPatients}>Exportar pacientes</Button>
         <Button icon={<Download size={16} />} onClick={downloadTemplate}>Descargar plantilla CSV</Button>
-      </div>
+      </div>}
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_240px]">
+      {clinic && <div className="grid gap-4 xl:grid-cols-[1fr_240px]">
         <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="this_month" onChange={setRange} />
         <label className="rounded-lg border border-clinic-line bg-white p-4 text-sm font-medium text-clinic-ink shadow-sm">Filtro temporal<select value={temporalFilter} onChange={(event) => setTemporalFilter(event.target.value as typeof temporalFilter)} className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm"><option value="all">Sin filtro temporal</option><option value="created">Fecha de alta</option><option value="last_appointment">Último turno</option><option value="next_appointment">Próximo turno</option><option value="inactive">Sin actividad</option></select></label>
-      </div>
+      </div>}
 
-      <section className="grid gap-4 md:grid-cols-4">
+      {clinic && <section className="grid gap-4 md:grid-cols-4">
         <Metric label="Pacientes cargados" value={String(totals.total)} />
         <Metric label="Pacientes nuevos del período" value={String(totals.newPatients)} />
         <Metric label="Con turnos en el período" value={String(totals.withAppointmentsInPeriod)} />
         <Metric label="Sin actividad" value={String(Math.max(totals.total - totals.withAppointments, 0))} />
-      </section>
+      </section>}
 
-      {formOpen && (
+      {clinic && formOpen && (
         <SectionCard className="p-5">
           <h2 className="font-semibold text-clinic-ink">{form.id ? "Editar paciente" : "Crear paciente"}</h2>
           <form onSubmit={handleSubmit} className="mt-5 grid gap-4 md:grid-cols-2">
@@ -226,7 +222,7 @@ export function PatientsPage() {
         </SectionCard>
       )}
 
-      <SectionCard className="p-5">
+      {clinic && <SectionCard className="p-5">
         <div className="relative max-w-xl">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-clinic-muted" />
           <input
@@ -236,9 +232,9 @@ export function PatientsPage() {
             className="h-11 w-full rounded-lg border border-clinic-line bg-clinic-surface pl-10 pr-4 text-sm outline-none focus:border-clinic-brand focus:bg-white focus:ring-4 focus:ring-teal-100"
           />
         </div>
-      </SectionCard>
+      </SectionCard>}
 
-      {loading ? (
+      {clinic && (loading ? (
         <div className="rounded-lg border border-clinic-line bg-white p-8 text-center text-clinic-muted">Cargando pacientes...</div>
       ) : visiblePatients.length === 0 ? (
         <SectionCard className="p-8 text-center">
@@ -279,7 +275,7 @@ export function PatientsPage() {
             })}
           </div>
         </SectionCard>
-      )}
+      ))}
     </AdminPageShell>
   );
 }

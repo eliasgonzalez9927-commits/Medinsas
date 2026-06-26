@@ -1,15 +1,16 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Building2, CalendarClock, Mail, MapPin, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import { useAuth } from "../../../contexts/AuthContext";
 import {
   createLocation,
   createUserInvitation,
   getClinicHours,
   getClinicMembers,
-  getDefaultClinic,
   getLocations,
   getProfessionals,
   getUserInvitations,
@@ -90,7 +91,7 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
   const { role, user } = useAuth();
   const { hash } = useLocation();
   const [activeTab, setActiveTab] = useState<SettingsTab>(hashToTab(hash) ?? initialTab);
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const { activeClinic: clinic, activeRole, loading: clinicLoading, refreshClinics } = useActiveClinic();
   const [locations, setLocations] = useState<Location[]>([]);
   const [hours, setHours] = useState<ClinicHours[]>([]);
   const [members, setMembers] = useState<ClinicMemberWithProfile[]>([]);
@@ -102,23 +103,21 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
   const [error, setError] = useState("");
 
   const permissions = useMemo(() => ({
-    manageClinic: canManageClinic(role),
-    manageUsers: canManageUsers(role)
-  }), [role]);
+    manageClinic: canManageClinic(activeRole ?? role),
+    manageUsers: canManageUsers(activeRole ?? role)
+  }), [activeRole, role]);
 
   async function load() {
+    if (!clinic) return;
     setLoading(true);
     setError("");
     try {
-      const loadedClinic = await getDefaultClinic();
-      setClinic(loadedClinic);
-      if (!loadedClinic) return;
       const [loadedLocations, loadedHours, loadedMembers, loadedInvitations, professionalResult] = await Promise.all([
-        getLocations(loadedClinic.id),
-        getClinicHours(loadedClinic.id).catch(() => []),
-        getClinicMembers(loadedClinic.id).catch(() => []),
-        getUserInvitations(loadedClinic.id).catch(() => []),
-        getProfessionals(loadedClinic.id)
+        getLocations(clinic.id),
+        getClinicHours(clinic.id).catch(() => []),
+        getClinicMembers(clinic.id).catch(() => []),
+        getUserInvitations(clinic.id).catch(() => []),
+        getProfessionals(clinic.id)
       ]);
       setLocations(loadedLocations);
       setHours(loadedHours);
@@ -133,8 +132,9 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    if (clinic) load();
+    else if (!clinicLoading) setLoading(false);
+  }, [clinic?.id, clinicLoading]);
 
   useEffect(() => {
     const next = hashToTab(hash);
@@ -146,8 +146,8 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
     setSaving(true);
     setError("");
     try {
-      const updated = await updateClinic(clinic.id, data);
-      setClinic(updated);
+      await updateClinic(clinic.id, data);
+      await refreshClinics();
       setNotice("Datos de la clinica actualizados.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos guardar la clinica.");
@@ -258,10 +258,10 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
         </div>
       </SectionCard>
 
-      {loading ? (
+      {loading || clinicLoading ? (
         <SectionCard className="p-8 text-center text-clinic-muted">Cargando configuracion...</SectionCard>
       ) : !clinic ? (
-        <Message tone="error">No encontramos la clinica principal.</Message>
+        <NoActiveClinicState />
       ) : (
         <>
           {activeTab === "clinic" && <ClinicForm clinic={clinic} disabled={!permissions.manageClinic || saving} onSave={saveClinic} />}

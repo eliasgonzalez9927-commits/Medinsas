@@ -1,13 +1,12 @@
 import { Building2, ChevronDown, CirclePlus, LogOut, Menu, Search, UserRound, X } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useActiveClinic } from "../../contexts/ActiveClinicContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { ADMIN_MODULES, ADMIN_NAVIGATION_GROUPS, AdminModuleDefinition } from "../../lib/admin-navigation";
 import { roleLabels } from "../../lib/auth-roles";
-import { getDefaultClinic } from "../../lib/clinic-data";
 import { BASE_MODULES } from "../../lib/modules";
 import { supabase } from "../../lib/supabase";
-import { Clinic } from "../../types/clinic";
 import { Button } from "../ui/Button";
 
 export function AdminLayout({
@@ -20,41 +19,50 @@ export function AdminLayout({
   onCreateAppointment: () => void;
 }) {
   const { profile, role, signOut, user } = useAuth();
+  const {
+    activeClinic: clinic,
+    activeRole,
+    availableClinics,
+    error: clinicError,
+    loading: clinicLoading,
+    setActiveClinicId
+  } = useActiveClinic();
   const navigate = useNavigate();
-  const [clinic, setClinic] = useState<Clinic | null>(null);
   const [modules, setModules] = useState<Record<string, boolean>>({});
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [lastRefreshAt, setLastRefreshAt] = useState<Date>(() => new Date());
   const displayName = profile?.full_name ?? user?.email ?? "Equipo clínico";
-  const displayRole = role ? roleLabels[role] : "Usuario";
+  const displayRole = activeRole ? roleLabels[activeRole] : role ? roleLabels[role] : "Usuario";
+  const canSwitchClinic = availableClinics.length > 1 || role === "platform_admin";
 
   const visibleModules = useMemo(() => {
     return ADMIN_MODULES.filter((item) => {
       if (item.status === "hidden") return false;
-      if (item.allowedRoles && (!role || !item.allowedRoles.includes(role))) return false;
-      if (role === "professional" || role === "doctor") return item.key === "agenda";
+      if (item.allowedRoles && (!activeRole || !item.allowedRoles.includes(activeRole))) return false;
+      if (activeRole === "professional" || activeRole === "doctor") return item.key === "agenda";
       if (!item.moduleFlag) return true;
       const moduleFlags = Array.isArray(item.moduleFlag) ? item.moduleFlag : [item.moduleFlag];
       if (moduleFlags.some((flag) => BASE_MODULES.includes(flag))) return true;
       return moduleFlags.some((flag) => modules[flag] ?? false);
     });
-  }, [modules, role]);
+  }, [activeRole, modules]);
 
   useEffect(() => {
     async function loadWorkspace() {
-      const currentClinic = await getDefaultClinic().catch(() => null);
-      setClinic(currentClinic);
-      if (!currentClinic) return;
+      if (!clinic) {
+        setModules({});
+        return;
+      }
       const { data } = await supabase
         .from("clinic_modules")
         .select("module_key, enabled")
-        .eq("clinic_id", currentClinic.id);
+        .eq("clinic_id", clinic.id);
       setModules(Object.fromEntries((data ?? []).map((item: { module_key: string; enabled: boolean }) => [item.module_key, item.enabled])));
     }
     loadWorkspace();
-  }, []);
+  }, [clinic?.id]);
 
   function runGlobalSearch() {
     const query = globalSearch.trim();
@@ -69,7 +77,7 @@ export function AdminLayout({
   }
 
   function modulePath(item: AdminModuleDefinition) {
-    return (role === "professional" || role === "doctor") && item.key === "agenda" ? "/admin/mi-agenda" : item.path;
+    return (activeRole === "professional" || activeRole === "doctor") && item.key === "agenda" ? "/admin/mi-agenda" : item.path;
   }
 
   function navigationSection(groupKey: typeof ADMIN_NAVIGATION_GROUPS[number]["key"], compact = false) {
@@ -153,13 +161,33 @@ export function AdminLayout({
         <div className="mt-2 flex items-center gap-3">
           <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#e6f4f1] text-clinic-brand"><Building2 size={18} /></span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-clinic-ink">{clinic?.name ?? "Cargando clínica..."}</p>
+            <p className="truncate text-sm font-semibold text-clinic-ink">{clinicLoading ? "Cargando clínica..." : clinic?.name ?? "Sin clínica asignada"}</p>
             <p className="text-xs text-clinic-muted">{displayRole} · {clinicStatusLabel(clinic?.status)}</p>
           </div>
         </div>
-        <button type="button" disabled title="El selector multi-clínica estará disponible próximamente." className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-clinic-muted disabled:cursor-not-allowed disabled:opacity-70">
-          Cambiar clínica <ChevronDown size={14} />
-        </button>
+        {canSwitchClinic ? (
+          <label className="mt-3 block">
+            <span className="sr-only">Cambiar clínica</span>
+            <span className="relative block">
+              <select
+                value={clinic?.id ?? ""}
+                onChange={(event) => {
+                  if (event.target.value) setActiveClinicId(event.target.value);
+                }}
+                className="h-9 w-full appearance-none rounded-lg border border-clinic-line bg-clinic-surface px-3 pr-8 text-xs font-semibold text-clinic-ink outline-none transition focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+              >
+                {availableClinics.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} · {item.slug}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-clinic-muted" size={14} />
+            </span>
+          </label>
+        ) : (
+          <p className="mt-3 text-xs font-semibold text-clinic-muted">{clinicError || "Clínica asignada"}</p>
+        )}
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-5">{clinicalNavigation}</nav>

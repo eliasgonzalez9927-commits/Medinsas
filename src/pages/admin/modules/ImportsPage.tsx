@@ -2,18 +2,19 @@ import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { Download, FileSpreadsheet, Upload } from "lucide-react";
 import { AdminPageShell } from "./AdminPageShell";
 import { useLocation } from "react-router-dom";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { Button } from "../../../components/ui/Button";
 import { SectionCard } from "../../../components/admin/SectionCard";
-import { getDefaultClinic, getPatients } from "../../../lib/clinic-data";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
+import { getPatients } from "../../../lib/clinic-data";
 import { supabase } from "../../../lib/supabase";
-import { Clinic, PatientWithAppointments } from "../../../types/clinic";
 
 type CsvRow = Record<string, string>;
 type ImportMode = "create" | "update" | "upsert";
 
 export function ImportsPage() {
   const { search } = useLocation();
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const [rows, setRows] = useState<CsvRow[]>([]);
   const [filename, setFilename] = useState("");
   const [mode, setMode] = useState<ImportMode>("upsert");
@@ -22,7 +23,25 @@ export function ImportsPage() {
   const [error, setError] = useState("");
   const [jobs, setJobs] = useState<any[]>([]);
 
-  useEffect(() => { getDefaultClinic().then(async (currentClinic) => { setClinic(currentClinic); if (!currentClinic) return; const { data, error: jobsError } = await supabase.from("import_jobs").select("*").eq("clinic_id", currentClinic.id).order("created_at", { ascending: false }).limit(50); if (jobsError) setError("No pudimos cargar el historial."); else setJobs(data ?? []); }).catch(() => setError("No pudimos cargar la clínica.")); }, []);
+  useEffect(() => {
+    if (!clinic) return;
+    const clinicId = clinic.id;
+    async function loadJobs() {
+      try {
+        const { data, error: jobsError } = await supabase
+          .from("import_jobs")
+          .select("*")
+          .eq("clinic_id", clinicId)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (jobsError) setError("No pudimos cargar el historial.");
+        else setJobs(data ?? []);
+      } catch {
+        setError("No pudimos cargar la clínica.");
+      }
+    }
+    loadJobs();
+  }, [clinic?.id]);
   const preview = useMemo(() => rows.slice(0, 5), [rows]);
   const patientImportMode = new URLSearchParams(search).get("type") === "patients";
 
@@ -78,8 +97,9 @@ export function ImportsPage() {
 
   return <AdminPageShell title="Historial de importaciones" eyebrow="Auditoría de datos" description="Las importaciones se inician desde Pacientes, Servicios o Profesionales. Acá podés revisar sus resultados.">
     {notice && <Alert tone="success">{notice}</Alert>}{error && <Alert tone="error">{error}</Alert>}
-    {patientImportMode && <section className="grid gap-6 xl:grid-cols-[.8fr_1.2fr]"><SectionCard className="p-5"><h2 className="font-semibold">Importar pacientes</h2><p className="mt-1 text-sm text-clinic-muted">La deduplicación usa DNI, email y luego teléfono. Revisá el archivo antes de confirmar.</p><div className="mt-5 flex flex-wrap gap-2"><Button onClick={downloadTemplate} icon={<Download size={16} />}>Descargar plantilla</Button><Button onClick={exportPatients} icon={<Download size={16} />}>Exportar pacientes</Button></div><label className="mt-5 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-clinic-line bg-clinic-surface px-4 py-8 text-sm font-semibold text-clinic-ink"><Upload size={18} /> Seleccionar CSV<input type="file" accept=".csv,text/csv" className="hidden" onChange={readFile} /></label>{filename && <p className="mt-3 text-sm text-clinic-muted">{filename} · {rows.length} filas</p>}<label className="mt-5 block text-sm font-medium">Modo<select value={mode} onChange={(event) => setMode(event.target.value as ImportMode)} className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3"><option value="upsert">Crear y actualizar</option><option value="create">Crear solamente</option><option value="update">Actualizar existentes</option></select></label><Button className="mt-5" disabled={!rows.length || saving} onClick={importPatients} icon={<FileSpreadsheet size={16} />} variant="primary">{saving ? "Importando..." : "Confirmar importación"}</Button></SectionCard><SectionCard className="overflow-hidden"><div className="border-b border-clinic-line px-5 py-4"><h2 className="font-semibold">Previsualización</h2></div>{preview.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-clinic-surface text-clinic-muted"><tr>{Object.keys(preview[0]).slice(0, 7).map((key) => <th className="px-4 py-3 font-medium" key={key}>{key}</th>)}</tr></thead><tbody>{preview.map((row, index) => <tr className="border-t border-clinic-line" key={index}>{Object.keys(preview[0]).slice(0, 7).map((key) => <td className="px-4 py-3" key={key}>{row[key]}</td>)}</tr>)}</tbody></table></div> : <p className="px-5 py-8 text-sm text-clinic-muted">Seleccioná un CSV para ver una vista previa.</p>}</SectionCard></section>}
-    <SectionCard className="overflow-hidden"><div className="border-b border-clinic-line px-5 py-4"><h2 className="font-semibold">Últimas ejecuciones</h2></div>{jobs.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-clinic-surface text-clinic-muted"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Archivo</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Resultado</th></tr></thead><tbody>{jobs.map((job) => <tr className="border-t border-clinic-line" key={job.id}><td className="px-4 py-3">{new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(job.created_at))}</td><td className="px-4 py-3">{job.type}</td><td className="px-4 py-3">{job.filename ?? "Sin archivo"}</td><td className="px-4 py-3">{job.status}</td><td className="px-4 py-3">{job.created_count} creados · {job.updated_count} actualizados · {job.error_count} errores</td></tr>)}</tbody></table></div> : <p className="px-5 py-8 text-sm text-clinic-muted">Todavía no hay importaciones registradas.</p>}</SectionCard>
+    {!clinic && !clinicLoading && <NoActiveClinicState />}
+    {clinic && patientImportMode && <section className="grid gap-6 xl:grid-cols-[.8fr_1.2fr]"><SectionCard className="p-5"><h2 className="font-semibold">Importar pacientes</h2><p className="mt-1 text-sm text-clinic-muted">La deduplicación usa DNI, email y luego teléfono. Revisá el archivo antes de confirmar.</p><div className="mt-5 flex flex-wrap gap-2"><Button onClick={downloadTemplate} icon={<Download size={16} />}>Descargar plantilla</Button><Button onClick={exportPatients} icon={<Download size={16} />}>Exportar pacientes</Button></div><label className="mt-5 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-clinic-line bg-clinic-surface px-4 py-8 text-sm font-semibold text-clinic-ink"><Upload size={18} /> Seleccionar CSV<input type="file" accept=".csv,text/csv" className="hidden" onChange={readFile} /></label>{filename && <p className="mt-3 text-sm text-clinic-muted">{filename} · {rows.length} filas</p>}<label className="mt-5 block text-sm font-medium">Modo<select value={mode} onChange={(event) => setMode(event.target.value as ImportMode)} className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3"><option value="upsert">Crear y actualizar</option><option value="create">Crear solamente</option><option value="update">Actualizar existentes</option></select></label><Button className="mt-5" disabled={!rows.length || saving} onClick={importPatients} icon={<FileSpreadsheet size={16} />} variant="primary">{saving ? "Importando..." : "Confirmar importación"}</Button></SectionCard><SectionCard className="overflow-hidden"><div className="border-b border-clinic-line px-5 py-4"><h2 className="font-semibold">Previsualización</h2></div>{preview.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-clinic-surface text-clinic-muted"><tr>{Object.keys(preview[0]).slice(0, 7).map((key) => <th className="px-4 py-3 font-medium" key={key}>{key}</th>)}</tr></thead><tbody>{preview.map((row, index) => <tr className="border-t border-clinic-line" key={index}>{Object.keys(preview[0]).slice(0, 7).map((key) => <td className="px-4 py-3" key={key}>{row[key]}</td>)}</tr>)}</tbody></table></div> : <p className="px-5 py-8 text-sm text-clinic-muted">Seleccioná un CSV para ver una vista previa.</p>}</SectionCard></section>}
+    {clinic && <SectionCard className="overflow-hidden"><div className="border-b border-clinic-line px-5 py-4"><h2 className="font-semibold">Últimas ejecuciones</h2></div>{jobs.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-clinic-surface text-clinic-muted"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Archivo</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Resultado</th></tr></thead><tbody>{jobs.map((job) => <tr className="border-t border-clinic-line" key={job.id}><td className="px-4 py-3">{new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(job.created_at))}</td><td className="px-4 py-3">{job.type}</td><td className="px-4 py-3">{job.filename ?? "Sin archivo"}</td><td className="px-4 py-3">{job.status}</td><td className="px-4 py-3">{job.created_count} creados · {job.updated_count} actualizados · {job.error_count} errores</td></tr>)}</tbody></table></div> : <p className="px-5 py-8 text-sm text-clinic-muted">Todavía no hay importaciones registradas.</p>}</SectionCard>}
   </AdminPageShell>;
 }
 

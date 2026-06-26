@@ -1,19 +1,21 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Mail, Send, ShieldAlert } from "lucide-react";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import { useAuth } from "../../../contexts/AuthContext";
-import { getDefaultClinic, getMessageLogs, getPatients, getProfessionals, getServices } from "../../../lib/clinic-data";
+import { getMessageLogs, getPatients, getProfessionals, getServices } from "../../../lib/clinic-data";
 import { canSendMessages } from "../../../lib/permissions";
 import { supabase } from "../../../lib/supabase";
-import { Clinic, MessageLog, PatientWithAppointments, ProfessionalWithRelations, ServiceWithRelations } from "../../../types/clinic";
+import { MessageLog, PatientWithAppointments, ProfessionalWithRelations, ServiceWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
 
 type Filter = "all" | "future" | "past" | "new" | "service" | "professional";
 
 export function MessagesPage() {
   const { role } = useAuth();
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const { activeClinic: clinic, activeRole, loading: clinicLoading } = useActiveClinic();
   const [patients, setPatients] = useState<PatientWithAppointments[]>([]);
   const [services, setServices] = useState<ServiceWithRelations[]>([]);
   const [professionals, setProfessionals] = useState<ProfessionalWithRelations[]>([]);
@@ -27,19 +29,17 @@ export function MessagesPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
-  const allowed = canSendMessages(role);
+  const allowed = canSendMessages(activeRole ?? role);
 
   async function load() {
+    if (!clinic) return;
     setError("");
     try {
-      const loadedClinic = await getDefaultClinic();
-      setClinic(loadedClinic);
-      if (!loadedClinic) return;
       const [loadedPatients, serviceResult, professionalResult, loadedLogs] = await Promise.all([
-        getPatients(loadedClinic.id),
-        getServices(loadedClinic.id),
-        getProfessionals(loadedClinic.id),
-        getMessageLogs(loadedClinic.id).catch(() => [])
+        getPatients(clinic.id),
+        getServices(clinic.id),
+        getProfessionals(clinic.id),
+        getMessageLogs(clinic.id).catch(() => [])
       ]);
       setPatients(loadedPatients);
       setServices(serviceResult.data);
@@ -51,8 +51,8 @@ export function MessagesPage() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    if (clinic) load();
+  }, [clinic?.id]);
 
   const recipients = useMemo(() => {
     const now = Date.now();
@@ -134,9 +134,10 @@ export function MessagesPage() {
     >
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
+      {!clinic && !clinicLoading && <NoActiveClinicState />}
       {!allowed && <Message tone="warning">Tu rol no permite enviar mensajes.</Message>}
 
-      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+      {clinic && <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <SectionCard className="p-5">
           <div className="flex items-start gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-lg bg-teal-50 text-clinic-brand"><Mail size={20} /></span>
@@ -204,7 +205,7 @@ export function MessagesPage() {
             </div>
           </SectionCard>
         </section>
-      </section>
+      </section>}
 
       {confirming && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4">
