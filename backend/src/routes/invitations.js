@@ -119,6 +119,7 @@ async function getInvitationHandler(req, res, next) {
     if (error) throw error;
     if (!invitation) return res.status(404).json({ error: "INVITATION_NOT_FOUND" });
     if (invitation.status === "accepted") return res.status(410).json({ error: "INVITATION_ALREADY_USED" });
+    if (invitation.status === "cancelled") return res.status(410).json({ error: "INVITATION_CANCELLED" });
     if (invitation.expires_at && new Date(invitation.expires_at).getTime() <= Date.now()) {
       return res.status(410).json({ error: "INVITATION_EXPIRED" });
     }
@@ -130,6 +131,7 @@ async function getInvitationHandler(req, res, next) {
       clinicName: invitation.clinics?.name ?? "Medin",
       role: invitation.role,
       fullName: invitation.full_name,
+      email: invitation.email,
       emailHasAccount: Boolean(existingUser),
       expiresAt: invitation.expires_at
     });
@@ -156,12 +158,22 @@ async function acceptInvitationHandler(req, res, next) {
     if (lookupError) throw lookupError;
     if (!lookup) return res.status(404).json({ error: "INVITATION_NOT_FOUND" });
     if (lookup.status === "accepted") return res.status(410).json({ error: "INVITATION_ALREADY_USED" });
+    if (lookup.status === "cancelled") return res.status(410).json({ error: "INVITATION_CANCELLED" });
     if (lookup.expires_at && new Date(lookup.expires_at).getTime() <= Date.now()) {
       return res.status(410).json({ error: "INVITATION_EXPIRED" });
     }
 
     const existingUser = await findAuthUserByEmail(lookup.email);
-    if (!existingUser && !payload.password) {
+
+    // Una invitacion de clinica nunca debe poder tocar una cuenta existente
+    // sin que su dueno este autenticado: el token por si solo no alcanza.
+    if (existingUser) {
+      const sessionUser = await tryAuthenticateUser(req);
+      if (!sessionUser) return res.status(401).json({ error: "LOGIN_REQUIRED" });
+      if (sessionUser.email?.toLowerCase() !== lookup.email.toLowerCase()) {
+        return res.status(403).json({ error: "EMAIL_MISMATCH" });
+      }
+    } else if (!payload.password) {
       return res.status(400).json({ error: "PASSWORD_REQUIRED" });
     }
 
@@ -181,11 +193,16 @@ async function acceptInvitationHandler(req, res, next) {
       ? { user: existingUser, created: false }
       : await createAuthUser({ email: invitation.email, password: payload.password, fullName: invitation.full_name, role: invitation.role });
 
-    await upsertProfile({
-      userId: userResult.user.id,
-      fullName: invitation.full_name,
-      role: invitation.role
-    });
+    if (!existingUser) {
+      // Solo se fija el profile global para una identidad nueva: aceptar una
+      // invitacion de clinica nunca debe poder pisar full_name/role de una
+      // cuenta que ya existia (eso degrado platform_admin a receptionist).
+      await upsertProfile({
+        userId: userResult.user.id,
+        fullName: invitation.full_name,
+        role: invitation.role
+      });
+    }
 
     const { error: memberError } = await supabase
       .from("clinic_members")
@@ -265,6 +282,15 @@ async function authenticateUser(req) {
     authError.code = "UNAUTHORIZED";
     throw authError;
   }
+  return data.user;
+}
+
+async function tryAuthenticateUser(req) {
+  const header = req.get("authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  if (!token) return null;
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) return null;
   return data.user;
 }
 

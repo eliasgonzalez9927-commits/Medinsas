@@ -6,6 +6,7 @@ export type InvitationDetails = {
   clinicName: string;
   role: UserRole;
   fullName: string;
+  email: string;
   emailHasAccount: boolean;
   expiresAt: string;
 };
@@ -24,6 +25,12 @@ async function authHeader() {
   const token = data.session?.access_token;
   if (!token) throw new Error("UNAUTHORIZED");
   return { Authorization: `Bearer ${token}` };
+}
+
+async function optionalAuthHeader(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export async function createInvitation(payload: CreateInvitationPayload) {
@@ -46,9 +53,10 @@ export async function getInvitation(token: string): Promise<InvitationDetails> {
 }
 
 export async function acceptInvitation(token: string, password?: string) {
+  const headers = await optionalAuthHeader();
   const response = await fetch(`/api/invitations/${encodeURIComponent(token)}/accept`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(password ? { password } : {})
   });
   const body = await response.json().catch(() => ({}));
