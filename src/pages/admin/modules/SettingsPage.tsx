@@ -457,6 +457,7 @@ function HourRow({ disabled, hour, onSave }: { disabled: boolean; hour: ClinicHo
 
 function UsersPanel({ disabled, invitations, locations, members, onCancelInvitation, onInvite, onRefresh, professionals }: { disabled: boolean; invitations: UserInvitation[]; locations: Location[]; members: ClinicMemberWithProfile[]; onCancelInvitation: (id: string) => void; onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void; onRefresh: () => void; professionals: ProfessionalWithRelations[] }) {
   const [form, setForm] = useState({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
+  const pendingInvitations = invitations.filter((invitation) => invitation.status === "pending");
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onInvite({ ...form, location_id: form.location_id || null, professional_id: form.professional_id || null });
@@ -475,29 +476,39 @@ function UsersPanel({ disabled, invitations, locations, members, onCancelInvitat
           <Button disabled={disabled} type="submit" variant="primary">Enviar invitacion</Button>
         </form>
       </SectionCard>
-      <SectionCard className="overflow-hidden">
-        <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
-          <h2 className="font-semibold">Usuarios y permisos</h2>
-          <Button onClick={onRefresh}>Actualizar</Button>
-        </div>
-        <div className="divide-y divide-clinic-line">
-          {members.map((member) => <MemberRow key={member.id} disabled={disabled} member={member} onRefresh={onRefresh} />)}
-          {invitations.map((invitation) => (
-            <article key={invitation.id} className={`grid gap-3 px-5 py-4 md:grid-cols-[1fr_130px_120px_120px] md:items-center ${invitation.status === "cancelled" ? "bg-clinic-surface" : "bg-amber-50/40"}`}>
-              <div><p className="font-semibold">{invitation.full_name}</p><p className="text-sm text-clinic-muted">{invitation.email}</p></div>
-              <span className="text-sm font-medium">{roleLabels[invitation.role] ?? invitation.role}</span>
-              <span className={`rounded-lg px-3 py-2 text-center text-xs font-semibold ${invitation.status === "cancelled" ? "bg-white text-clinic-muted" : "bg-white text-amber-700"}`}>
-                {invitation.status === "cancelled" ? "Cancelada" : invitation.status}
-              </span>
-              {invitation.status === "pending" ? (
+      <div className="grid gap-6">
+        <SectionCard className="overflow-hidden">
+          <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
+            <div>
+              <h2 className="font-semibold">Usuarios del equipo</h2>
+              <p className="text-xs text-clinic-muted">Personas con acceso a la clínica y permisos asignados.</p>
+            </div>
+            <Button onClick={onRefresh}>Actualizar</Button>
+          </div>
+          <div className="divide-y divide-clinic-line">
+            {members.map((member) => <MemberRow key={member.id} disabled={disabled} member={member} onRefresh={onRefresh} />)}
+          </div>
+        </SectionCard>
+        <SectionCard className="overflow-hidden">
+          <div className="border-b border-clinic-line px-5 py-4">
+            <h2 className="font-semibold">Invitaciones pendientes</h2>
+            <p className="text-xs text-clinic-muted">Invitaciones enviadas que todavía no fueron aceptadas.</p>
+          </div>
+          <div className="divide-y divide-clinic-line">
+            {pendingInvitations.length === 0 && (
+              <p className="px-5 py-4 text-sm text-clinic-muted">No hay invitaciones pendientes.</p>
+            )}
+            {pendingInvitations.map((invitation) => (
+              <article key={invitation.id} className="grid gap-3 bg-amber-50/40 px-5 py-4 md:grid-cols-[1fr_130px_120px_140px] md:items-center">
+                <div><p className="font-semibold">{invitation.full_name}</p><p className="text-sm text-clinic-muted">{invitation.email}</p></div>
+                <span className="text-sm font-medium">{roleLabels[invitation.role] ?? invitation.role}</span>
+                <span className="rounded-lg bg-white px-3 py-2 text-center text-xs font-semibold text-amber-700">Pendiente</span>
                 <Button disabled={disabled} onClick={() => onCancelInvitation(invitation.id)}>Cancelar invitación</Button>
-              ) : (
-                <span />
-              )}
-            </article>
-          ))}
-        </div>
-      </SectionCard>
+              </article>
+            ))}
+          </div>
+        </SectionCard>
+      </div>
     </section>
   );
 }
@@ -508,12 +519,15 @@ function MemberRow({ disabled, member, onRefresh }: { disabled: boolean; member:
     onRefresh();
   }
   return (
-    <article className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_140px_120px] md:items-center">
+    <article className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_140px_100px_120px] md:items-center">
       <div>
         <p className="font-semibold text-clinic-ink">{member.profiles?.full_name ?? member.user_id}</p>
         <p className="text-sm text-clinic-muted">{member.locations?.name ?? "Sin sede"} · {member.professionals ? `${member.professionals.name} ${member.professionals.last_name}` : "Sin profesional asociado"}</p>
       </div>
       <span className="text-sm font-medium">{roleLabels[member.role] ?? member.role}</span>
+      <span className={`rounded-lg px-3 py-2 text-center text-xs font-semibold ${member.active ? "bg-emerald-50 text-emerald-700" : "bg-clinic-surface text-clinic-muted"}`}>
+        {member.active ? "Activo" : "Inactivo"}
+      </span>
       <Button disabled={disabled} onClick={toggle}>{member.active ? "Desactivar" : "Activar"}</Button>
     </article>
   );
