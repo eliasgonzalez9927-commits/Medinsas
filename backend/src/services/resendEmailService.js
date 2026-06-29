@@ -298,6 +298,62 @@ async function markDelivery(id, status, { providerMessageId = null, errorMessage
   return { id, status, error: errorMessage, providerMessageId };
 }
 
+const INVITATION_ROLE_LABELS = {
+  clinic_admin: "Administrador de clínica",
+  receptionist: "Recepción",
+  professional: "Profesional"
+};
+
+export async function sendInvitationEmail({ to, fullName, clinicName, role, invitationUrl, expiresAt }) {
+  const roleLabel = INVITATION_ROLE_LABELS[role] ?? role;
+  const subject = "Te invitaron a Medin";
+  const text = [
+    `Hola ${fullName},`,
+    "",
+    `Te invitaron a formar parte de ${clinicName} en Medin.`,
+    "",
+    `Tu rol asignado es: ${roleLabel}.`,
+    "",
+    "Desde tu cuenta vas a poder acceder a las herramientas habilitadas para tu perfil y colaborar en la gestión de turnos, pacientes y servicios de la clínica.",
+    "",
+    "Para comenzar, aceptá la invitación y creá tu acceso.",
+    "",
+    `Aceptar invitación: ${invitationUrl}`,
+    "",
+    "Si no esperabas esta invitación, podés ignorar este mensaje."
+  ].join("\n");
+  const preheader = "Accedé a la cuenta de tu clínica y empezá a gestionar turnos, pacientes y servicios.";
+  const expiresLabel = formatAppointmentDate(expiresAt);
+  const html = `<!doctype html>
+<html lang="es-AR">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Te invitaron a Medin</title></head>
+  <body style="margin:0;padding:0;background:#F6FAF9;font-family:Inter,Arial,sans-serif;color:#0D3642;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(preheader)}</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F6FAF9;margin:0;padding:32px 16px;"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;">
+      <tr><td style="padding:0 0 20px 0;"><div style="font-size:28px;line-height:1;font-weight:700;color:#0D3642;"><span style="display:inline-block;width:34px;height:34px;border:3px solid #8FD2C6;border-top-color:#0D3642;border-radius:50%;vertical-align:middle;margin-right:10px;text-align:center;line-height:28px;color:#8FD2C6;font-weight:700;">+</span>Medin</div><div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:#5CAFA4;margin-top:10px;">Healthcare Technology</div></td></tr>
+      <tr><td style="background:#FFFFFF;border:1px solid #DCE9E6;border-radius:24px;padding:34px 32px;box-shadow:0 18px 42px rgba(13,54,66,0.08);">
+        <h1 style="margin:0 0 14px 0;font-size:28px;line-height:1.2;color:#0D3642;">Te invitaron a Medin</h1>
+        <p style="margin:0 0 18px 0;font-size:16px;line-height:1.65;color:#526578;">Hola ${escapeHtml(fullName)},</p>
+        <p style="margin:0 0 18px 0;font-size:16px;line-height:1.65;color:#526578;">Te invitaron a formar parte de <strong>${escapeHtml(clinicName)}</strong> en Medin.</p>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F6FAF9;border:1px solid #DCE9E6;border-radius:18px;margin:0 0 22px 0;"><tr><td style="padding:18px 20px;font-size:14px;line-height:1.7;color:#0D3642;">Clínica: ${escapeHtml(clinicName)}<br>Rol asignado: ${escapeHtml(roleLabel)}<br>Vencimiento de la invitación: ${escapeHtml(expiresLabel)}</td></tr></table>
+        <p style="margin:0 0 24px 0;font-size:16px;line-height:1.65;color:#526578;">Desde tu cuenta vas a poder acceder a las herramientas habilitadas para tu perfil y colaborar en la gestión de turnos, pacientes y servicios de la clínica.</p>
+        <p style="margin:0 0 26px 0;font-size:16px;line-height:1.65;color:#526578;">Para comenzar, aceptá la invitación y creá tu acceso.</p>
+        <div><a href="${escapeHtml(invitationUrl)}" style="display:inline-block;background:#0D3642;color:#FFFFFF;text-decoration:none;border-radius:14px;padding:14px 22px;font-size:15px;font-weight:700;">Aceptar invitación</a></div>
+        <p style="margin:26px 0 0 0;font-size:13px;line-height:1.6;color:#718092;">Si no esperabas esta invitación, podés ignorar este mensaje.</p>
+      </td></tr>
+      <tr><td style="padding:22px 8px 0 8px;text-align:center;font-size:12px;line-height:1.6;color:#7A8A98;">Este es un email transaccional de Medin.</td></tr>
+    </table></td></tr></table>
+  </body>
+</html>`;
+  return sendTransactionalEmail({
+    to,
+    subject,
+    text,
+    html,
+    metadata: { eventType: "clinic_user_invitation" }
+  });
+}
+
 function renderTemplate(template, variables) {
   return Object.entries(variables).reduce((content, [key, value]) => {
     return content.split(`{{${key}}}`).join(value == null ? "" : String(value));

@@ -8,7 +8,6 @@ import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import { useAuth } from "../../../contexts/AuthContext";
 import {
   createLocation,
-  createUserInvitation,
   getClinicHours,
   getClinicMembers,
   getLocations,
@@ -19,6 +18,7 @@ import {
   updateLocation,
   upsertClinicHour
 } from "../../../lib/clinic-data";
+import { createInvitation } from "../../../lib/invitations";
 import { getClinicNotificationSettings, updateClinicNotificationSettings } from "../../../lib/notifications";
 import { canManageClinic, canManageUsers } from "../../../lib/permissions";
 import { supabase } from "../../../lib/supabase";
@@ -61,7 +61,9 @@ const tabs: Array<{ id: SettingsTab; label: string; to: string }> = [
   { id: "integrations", label: "Integraciones", to: "/admin/configuracion#integraciones" }
 ];
 
-const roles: UserRole[] = ["platform_admin", "clinic_admin", "receptionist", "professional"];
+// La invitacion a clinica nunca debe poder otorgar platform_admin: el backend
+// (POST /api/invitations) rechaza ese rol por diseno de seguridad.
+const invitableRoles: UserRole[] = ["clinic_admin", "receptionist", "professional"];
 const roleLabels: Record<string, string> = {
   platform_admin: "Platform admin",
   clinic_admin: "Admin clinica",
@@ -194,35 +196,28 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
   }) {
     if (!clinic || !permissions.manageUsers) return;
     setSaving(true);
+    setError("");
     try {
-      const invitation = await createUserInvitation({
-        clinic_id: clinic.id,
-        invited_by: user?.id ?? null,
-        ...data
+      await createInvitation({
+        clinicId: clinic.id,
+        email: data.email,
+        fullName: data.full_name,
+        role: data.role as "clinic_admin" | "receptionist" | "professional",
+        locationId: data.location_id ?? null,
+        professionalId: data.professional_id ?? null
       });
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (sessionData.session) {
-        await fetch("/api/messages/send", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${sessionData.session.access_token}`
-          },
-          body: JSON.stringify({
-            clinicId: clinic.id,
-            recipients: [{ email: data.email }],
-            subject: "Te invitaron a Medin",
-            text: `Hola ${data.full_name}, te invitaron a Medin como ${roleLabels[data.role] ?? data.role}.`,
-            template: "user_invitation",
-            related_entity_type: "user_invitation",
-            related_entity_id: invitation.id
-          })
-        }).catch(() => undefined);
-      }
-      setNotice("Invitacion registrada. Si Resend esta configurado, se enviara el email.");
+      setNotice("Invitación enviada. El usuario va a recibir un email con el link para aceptarla.");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos invitar al usuario.");
+      const code = err instanceof Error ? err.message : "";
+      const message = code === "ALREADY_PENDING"
+        ? "Ya hay una invitación pendiente para ese email en esta clínica."
+        : code === "FORBIDDEN_CLINIC"
+          ? "Tu rol no permite invitar usuarios a esta clínica."
+          : code === "INVALID_PAYLOAD"
+            ? "Revisá los datos del formulario, hay un campo inválido."
+            : "No pudimos invitar al usuario.";
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -450,7 +445,7 @@ function UsersPanel({ disabled, invitations, locations, members, onInvite, onRef
         <form onSubmit={submit} className="mt-5 grid gap-4">
           <Input label="Email" type="email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} required />
           <Input label="Nombre" value={form.full_name} onChange={(value) => setForm({ ...form, full_name: value })} required />
-          <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value })} options={roles.map((item) => ({ value: item, label: roleLabels[item] }))} />
+          <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value })} options={invitableRoles.map((item) => ({ value: item, label: roleLabels[item] }))} />
           <Select label="Sede opcional" value={form.location_id} onChange={(value) => setForm({ ...form, location_id: value })} options={[{ value: "", label: "Sin sede asignada" }, ...locations.map((item) => ({ value: item.id, label: item.name }))]} />
           <Select label="Profesional asociado" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} options={[{ value: "", label: "Sin profesional" }, ...professionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))]} />
           <Button disabled={disabled} type="submit" variant="primary">Enviar invitacion</Button>

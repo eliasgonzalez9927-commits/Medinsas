@@ -225,29 +225,6 @@ export async function updateClinicMember(
   }
 }
 
-export async function createUserInvitation(data: {
-  clinic_id: string;
-  email: string;
-  full_name: string;
-  role: string;
-  location_id?: string | null;
-  professional_id?: string | null;
-  invited_by?: string | null;
-}) {
-  try {
-    const { data: created, error } = await supabase
-      .from("user_invitations")
-      .insert(data)
-      .select("*")
-      .single();
-    if (error) throw error;
-    return created as UserInvitation;
-  } catch (error) {
-    console.error("Failed to create user invitation", error);
-    throw new FriendlyDataError("No pudimos crear la invitacion.");
-  }
-}
-
 export async function getUserInvitations(clinicId: string): Promise<UserInvitation[]> {
   try {
     const { data, error } = await supabase

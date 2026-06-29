@@ -3,6 +3,7 @@ import { useActiveClinic } from "./contexts/ActiveClinicContext";
 import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ADMIN_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-roles";
+import { AcceptInvitation } from "./pages/auth/AcceptInvitation";
 import { Login } from "./pages/auth/Login";
 import { Register } from "./pages/auth/Register";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
@@ -45,6 +46,7 @@ export function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/aceptar-invitacion" element={<AcceptInvitation />} />
       <Route path="/clinica-demo" element={<ClinicLanding />} />
       <Route path="/reservar/:clinicSlug" element={<PublicBookingPage />} />
       <Route path="/reservar/:clinicSlug/:filter" element={<PublicBookingPage />} />
