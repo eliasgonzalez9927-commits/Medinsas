@@ -18,7 +18,7 @@ import {
   updateLocation,
   upsertClinicHour
 } from "../../../lib/clinic-data";
-import { createInvitation } from "../../../lib/invitations";
+import { cancelInvitation, createInvitation } from "../../../lib/invitations";
 import { getClinicNotificationSettings, updateClinicNotificationSettings } from "../../../lib/notifications";
 import { canManageClinic, canManageUsers } from "../../../lib/permissions";
 import { supabase } from "../../../lib/supabase";
@@ -223,6 +223,29 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
     }
   }
 
+  async function cancelUserInvitation(id: string) {
+    if (!permissions.manageUsers) return;
+    setSaving(true);
+    setError("");
+    try {
+      await cancelInvitation(id);
+      setNotice("Invitación cancelada. Ya podés enviar una nueva invitación si hace falta.");
+      await load();
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "";
+      const message = code === "INVITATION_ALREADY_ACCEPTED"
+        ? "Esa invitación ya fue aceptada, no se puede cancelar."
+        : code === "FORBIDDEN"
+          ? "Tu rol no permite cancelar invitaciones de esta clínica."
+          : code === "INVITATION_NOT_FOUND"
+            ? "No encontramos esa invitación."
+            : "No pudimos cancelar la invitación.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <AdminPageShell
       description="Centro de administracion para datos de clinica, sedes, usuarios, notificaciones e integraciones."
@@ -268,6 +291,7 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
               invitations={invitations}
               locations={locations}
               members={members}
+              onCancelInvitation={cancelUserInvitation}
               onInvite={inviteUser}
               onRefresh={load}
               professionals={professionals}
@@ -431,7 +455,7 @@ function HourRow({ disabled, hour, onSave }: { disabled: boolean; hour: ClinicHo
   );
 }
 
-function UsersPanel({ disabled, invitations, locations, members, onInvite, onRefresh, professionals }: { disabled: boolean; invitations: UserInvitation[]; locations: Location[]; members: ClinicMemberWithProfile[]; onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void; onRefresh: () => void; professionals: ProfessionalWithRelations[] }) {
+function UsersPanel({ disabled, invitations, locations, members, onCancelInvitation, onInvite, onRefresh, professionals }: { disabled: boolean; invitations: UserInvitation[]; locations: Location[]; members: ClinicMemberWithProfile[]; onCancelInvitation: (id: string) => void; onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void; onRefresh: () => void; professionals: ProfessionalWithRelations[] }) {
   const [form, setForm] = useState({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -459,10 +483,17 @@ function UsersPanel({ disabled, invitations, locations, members, onInvite, onRef
         <div className="divide-y divide-clinic-line">
           {members.map((member) => <MemberRow key={member.id} disabled={disabled} member={member} onRefresh={onRefresh} />)}
           {invitations.map((invitation) => (
-            <article key={invitation.id} className="grid gap-3 bg-amber-50/40 px-5 py-4 md:grid-cols-[1fr_130px_120px] md:items-center">
+            <article key={invitation.id} className={`grid gap-3 px-5 py-4 md:grid-cols-[1fr_130px_120px_120px] md:items-center ${invitation.status === "cancelled" ? "bg-clinic-surface" : "bg-amber-50/40"}`}>
               <div><p className="font-semibold">{invitation.full_name}</p><p className="text-sm text-clinic-muted">{invitation.email}</p></div>
               <span className="text-sm font-medium">{roleLabels[invitation.role] ?? invitation.role}</span>
-              <span className="rounded-lg bg-white px-3 py-2 text-center text-xs font-semibold text-amber-700">{invitation.status}</span>
+              <span className={`rounded-lg px-3 py-2 text-center text-xs font-semibold ${invitation.status === "cancelled" ? "bg-white text-clinic-muted" : "bg-white text-amber-700"}`}>
+                {invitation.status === "cancelled" ? "Cancelada" : invitation.status}
+              </span>
+              {invitation.status === "pending" ? (
+                <Button disabled={disabled} onClick={() => onCancelInvitation(invitation.id)}>Cancelar invitación</Button>
+              ) : (
+                <span />
+              )}
             </article>
           ))}
         </div>

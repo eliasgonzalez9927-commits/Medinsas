@@ -207,6 +207,48 @@ async function acceptInvitationHandler(req, res, next) {
   }
 }
 
+invitationsRouter.post("/api/invitations/:id/cancel", cancelInvitationHandler);
+invitationsRouter.post("/invitations/:id/cancel", cancelInvitationHandler);
+
+async function cancelInvitationHandler(req, res, next) {
+  try {
+    const user = await authenticateUser(req);
+    const id = String(req.params.id ?? "");
+
+    const { data: invitation, error: lookupError } = await supabase
+      .from("user_invitations")
+      .select("id, clinic_id, status")
+      .eq("id", id)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (!invitation) return res.status(404).json({ error: "INVITATION_NOT_FOUND" });
+
+    const allowed = await canManageClinic(user.id, invitation.clinic_id);
+    if (!allowed) return res.status(403).json({ error: "FORBIDDEN" });
+
+    if (invitation.status === "accepted") {
+      return res.status(409).json({ error: "INVITATION_ALREADY_ACCEPTED" });
+    }
+    if (invitation.status === "cancelled") {
+      return res.status(200).json({ ok: true, invitation });
+    }
+
+    const { data: cancelled, error: updateError } = await supabase
+      .from("user_invitations")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("status", "pending")
+      .select("id, email, role, status, expires_at")
+      .maybeSingle();
+    if (updateError) throw updateError;
+    if (!cancelled) return res.status(409).json({ error: "INVITATION_ALREADY_ACCEPTED" });
+
+    res.status(200).json({ ok: true, invitation: cancelled });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function authenticateUser(req) {
   const header = req.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";

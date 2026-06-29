@@ -55,3 +55,14 @@ export async function acceptInvitation(token: string, password?: string) {
   if (!response.ok) throw new Error(body.error || "INVITATION_ACCEPT_FAILED");
   return body as { ok: true; redirectTo: string };
 }
+
+export async function cancelInvitation(id: string) {
+  const headers = await authHeader();
+  const response = await fetch(`/api/invitations/${encodeURIComponent(id)}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers }
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || "INVITATION_CANCEL_FAILED");
+  return body as { ok: true; invitation: { id: string; email: string; role: string; status: string; expires_at: string | null } };
+}
