@@ -29,7 +29,13 @@ export function NotificationsPage() {
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
   const [processNotice, setProcessNotice] = useState("");
+  // El procesamiento de emails es global (todas las clinicas), no depende
+  // de tener una clinica activa seleccionada: no gatear por `clinic`.
   const canProcessEmails = (activeRole ?? role) === "platform_admin";
+  const pendingEmailCount = useMemo(
+    () => events.reduce((count, event) => count + (event.notification_deliveries ?? []).filter((delivery) => delivery.channel === "email" && delivery.status === "pending").length, 0),
+    [events]
+  );
 
   async function load() {
     if (!clinic) return;
@@ -117,11 +123,16 @@ export function NotificationsPage() {
       {processNotice && <Message tone="success">{processNotice}</Message>}
       {!clinic && !clinicLoading && <NoActiveClinicState />}
 
-      {clinic && canProcessEmails && (
+      {canProcessEmails && (
         <SectionCard className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold text-clinic-ink">Entregas de email pendientes</h2>
-            <p className="mt-1 text-sm text-clinic-muted">Envia por Resend las notificaciones transaccionales con estado pendiente.</p>
+            <p className="mt-1 text-sm text-clinic-muted">
+              Envia por Resend las notificaciones transaccionales con estado pendiente, de todas las clinicas.
+            </p>
+            {pendingEmailCount === 0 && (
+              <p className="mt-1 text-xs font-medium text-clinic-muted">No hay emails pendientes en esta clínica.</p>
+            )}
           </div>
           <Button
             variant="primary"
@@ -169,7 +180,7 @@ export function NotificationsPage() {
       {clinic && <SectionCard className="overflow-hidden">
         <div className="border-b border-clinic-line px-5 py-4">
           <h2 className="font-semibold text-clinic-ink">Eventos registrados</h2>
-          <p className="mt-1 text-sm text-clinic-muted">WhatsApp queda preparado como entrega futura; no se envía automáticamente todavía.</p>
+          <p className="mt-1 text-sm text-clinic-muted">WhatsApp queda preparado como entrega futura; hoy solo se procesan emails pendientes.</p>
         </div>
         {loading ? (
           <div className="px-5 py-10 text-center text-sm text-clinic-muted">Cargando notificaciones...</div>
@@ -178,17 +189,17 @@ export function NotificationsPage() {
         ) : (
           <div className="divide-y divide-clinic-line">
             {visibleEvents.map((event) => (
-              <article key={event.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[220px_1fr_220px_150px] lg:items-center">
-                <div className="flex items-start gap-3">
+              <article key={event.id} className="grid gap-3 px-5 py-4 lg:grid-cols-[180px_minmax(0,1fr)_170px_120px] lg:items-start">
+                <div className="flex min-w-0 items-start gap-3">
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-teal-50 text-clinic-brand">
                     <Bell size={17} />
                   </span>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-clinic-muted">{event.event_type}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-clinic-muted">{event.event_type}</p>
                     <p className="mt-1 text-sm text-clinic-muted">{formatDate(event.created_at)}</p>
                   </div>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="font-semibold text-clinic-ink">{event.title}</p>
                   {event.message && <p className="mt-1 text-sm text-clinic-muted">{event.message}</p>}
                   <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium text-clinic-muted">
@@ -203,11 +214,13 @@ export function NotificationsPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-sm text-clinic-muted">
-                  <CalendarDays size={16} />
-                  <span>{event.appointments?.starts_at ? formatDate(event.appointments.starts_at) : "Sin turno asociado"}</span>
+                <div className="flex min-w-0 items-center gap-2 text-sm text-clinic-muted">
+                  <CalendarDays size={16} className="shrink-0" />
+                  <span className="truncate">{event.appointments?.starts_at ? formatDate(event.appointments.starts_at) : "Sin turno asociado"}</span>
                 </div>
-                <StatusPill status={event.status} />
+                <div>
+                  <StatusPill status={event.status} />
+                </div>
               </article>
             ))}
           </div>
@@ -255,10 +268,14 @@ function DeliveryPill({ delivery }: { delivery: NotificationDelivery }) {
         ? "border-slate-200 bg-slate-50 text-slate-600"
         : "border-amber-200 bg-amber-50 text-amber-700";
 
+  const statusText = delivery.channel === "whatsapp" && delivery.status === "pending"
+    ? "Pendiente futuro"
+    : statusLabel[delivery.status] ?? delivery.status;
+
   return (
     <span title={delivery.error_message ?? delivery.recipient_email ?? undefined} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`}>
       <Icon size={13} />
-      {channelLabel[delivery.channel] ?? delivery.channel}: {statusLabel[delivery.status] ?? delivery.status}
+      {channelLabel[delivery.channel] ?? delivery.channel}: {statusText}
     </span>
   );
 }
