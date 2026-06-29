@@ -32,10 +32,6 @@ export function NotificationsPage() {
   // El procesamiento de emails es global (todas las clinicas), no depende
   // de tener una clinica activa seleccionada: no gatear por `clinic`.
   const canProcessEmails = (activeRole ?? role) === "platform_admin";
-  const pendingEmailCount = useMemo(
-    () => events.reduce((count, event) => count + (event.notification_deliveries ?? []).filter((delivery) => delivery.channel === "email" && delivery.status === "pending").length, 0),
-    [events]
-  );
 
   async function load() {
     if (!clinic) return;
@@ -55,12 +51,27 @@ export function NotificationsPage() {
     else if (!clinicLoading) setLoading(false);
   }, [clinic?.id, clinicLoading]);
 
+  // Estas cards miden el estado del EVENTO (notification_events.status), no
+  // el estado de la entrega de email. Un evento puede seguir "pending" aunque
+  // su email ya se haya enviado: nada actualiza notification_events.status al
+  // procesar un delivery individual. Para el estado real de los emails, ver
+  // emailDeliveryMetrics mas abajo.
   const metrics = useMemo(() => ({
     all: events.length,
     pending: events.filter((event) => event.status === "pending").length,
     processed: events.filter((event) => event.status === "processed").length,
     failed: events.filter((event) => event.status === "failed").length
   }), [events]);
+
+  const emailDeliveryMetrics = useMemo(() => {
+    const emailDeliveries = events.flatMap((event) => event.notification_deliveries ?? []).filter((delivery) => delivery.channel === "email");
+    return {
+      pending: emailDeliveries.filter((delivery) => delivery.status === "pending").length,
+      sent: emailDeliveries.filter((delivery) => delivery.status === "sent").length,
+      failed: emailDeliveries.filter((delivery) => delivery.status === "failed").length,
+      skipped: emailDeliveries.filter((delivery) => delivery.status === "skipped").length
+    };
+  }, [events]);
 
   const visibleEvents = useMemo(() => {
     const filtered = filter === "all" ? events : events.filter((event) => event.status === filter);
@@ -130,7 +141,12 @@ export function NotificationsPage() {
             <p className="mt-1 text-sm text-clinic-muted">
               Envia por Resend las notificaciones transaccionales con estado pendiente, de todas las clinicas.
             </p>
-            {pendingEmailCount === 0 && (
+            <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold text-clinic-muted">
+              <span>Emails pendientes: {emailDeliveryMetrics.pending}</span>
+              <span className="text-emerald-700">Emails enviados: {emailDeliveryMetrics.sent}</span>
+              {emailDeliveryMetrics.failed > 0 && <span className="text-red-700">Emails fallidos: {emailDeliveryMetrics.failed}</span>}
+            </div>
+            {emailDeliveryMetrics.pending === 0 && (
               <p className="mt-1 text-xs font-medium text-clinic-muted">No hay emails pendientes en esta clínica.</p>
             )}
           </div>
@@ -150,11 +166,12 @@ export function NotificationsPage() {
           <button
             key={item}
             onClick={() => changeFilter(item)}
+            title="Estado del evento interno, no del email: un evento puede seguir 'pendiente' aunque su email ya se haya enviado."
             className={`rounded-xl border p-4 text-left shadow-sm transition ${
               filter === item ? "border-clinic-brand bg-teal-50 text-clinic-brand" : "border-clinic-line bg-white text-clinic-ink hover:bg-clinic-surface"
             }`}
           >
-            <p className="text-sm font-medium">{filterLabels[item]}</p>
+            <p className="text-sm font-medium">Eventos: {filterLabels[item]}</p>
             <p className="mt-2 text-2xl font-semibold">{metrics[item]}</p>
           </button>
         ))}
