@@ -1,11 +1,19 @@
 import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CirclePlus } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { supabase } from "../../lib/supabase";
 
+function getLinkError(): string {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  return hashParams.get("error_code") ?? hashParams.get("error") ?? "";
+}
+
 export function ResetPassword() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const linkError = getLinkError();
+  const requestEmail = searchParams.get("email") ?? "";
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -48,40 +56,57 @@ export function ResetPassword() {
           </div>
         </Link>
 
-        <h1 className="text-lg font-semibold text-clinic-ink">Crear nueva contraseña</h1>
-        <p className="mt-2 text-sm leading-6 text-clinic-muted">
-          Ingresá una nueva contraseña para recuperar el acceso a tu cuenta.
-        </p>
+        {linkError ? (
+          <>
+            <h1 className="text-lg font-semibold text-clinic-ink">Este link ya no es válido</h1>
+            <p className="mt-2 text-sm leading-6 text-clinic-muted">
+              El link para restablecer tu contraseña venció o ya fue utilizado. Pedí uno nuevo para continuar.
+            </p>
+            <Link
+              to={requestEmail ? `/recuperar-contrasena?email=${encodeURIComponent(requestEmail)}` : "/recuperar-contrasena"}
+              className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-lg bg-clinic-brand px-4 text-sm font-semibold text-white"
+            >
+              Pedir un nuevo link
+            </Link>
+          </>
+        ) : (
+          <>
+            <h1 className="text-lg font-semibold text-clinic-ink">Crear nueva contraseña</h1>
+            <p className="mt-2 text-sm leading-6 text-clinic-muted">
+              Ingresá una nueva contraseña para recuperar el acceso a tu cuenta.
+            </p>
 
-        {error && <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+            {error && <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
-        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-          <label className="block">
-            <span className="text-sm font-medium text-clinic-ink">Nueva contraseña</span>
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-2 h-11 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-clinic-ink">Confirmar contraseña</span>
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              className="mt-2 h-11 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
-            />
-          </label>
-          <Button type="submit" variant="primary" disabled={submitting} className="w-full">
-            {submitting ? "Actualizando..." : "Actualizar contraseña"}
-          </Button>
-        </form>
+            <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+              <label className="block">
+                <span className="text-sm font-medium text-clinic-ink">Nueva contraseña</span>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="mt-2 h-11 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-clinic-ink">Confirmar contraseña</span>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  className="mt-2 h-11 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+                />
+              </label>
+              <Button type="submit" variant="primary" disabled={submitting} className="w-full">
+                {submitting ? "Actualizando..." : "Actualizar contraseña"}
+              </Button>
+            </form>
+          </>
+        )}
       </div>
     </main>
   );
