@@ -11,8 +11,11 @@ function getLinkError(): string {
   return hashParams.get("error_code") ?? hashParams.get("error") ?? "";
 }
 
-function hadRecoveryHash(): boolean {
-  return window.location.hash.includes("type=recovery");
+function hasRecoveryEvidence(): boolean {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const hasRecoveryType = hashParams.get("type") === "recovery";
+  const hasSupabaseAuthHash = hashParams.has("access_token") || hashParams.has("refresh_token");
+  return hasRecoveryType || hasSupabaseAuthHash;
 }
 
 export function ResetPassword() {
@@ -31,7 +34,7 @@ export function ResetPassword() {
       return;
     }
 
-    const recoveryHashPresent = hadRecoveryHash();
+    const recoveryEvidence = hasRecoveryEvidence();
 
     const {
       data: { subscription }
@@ -42,14 +45,16 @@ export function ResetPassword() {
     });
 
     // Red de seguridad por timing: si el evento PASSWORD_RECOVERY ya se
-    // disparo antes de que este listener se suscriba, getSession() confirma
-    // la sesion. Solo la habilitamos como "form" si el hash realmente traia
-    // un token de recovery: una sesion normal preexistente (alguien ya
-    // logueado que entra directo a esta ruta) nunca debe destrabar el form.
+    // disparo antes de que este listener se suscriba (o Supabase no emite
+    // el evento en este caso puntual), getSession() confirma la sesion.
+    // Solo habilitamos "form" si ademas el hash trae evidencia real de
+    // recovery (access_token/refresh_token/type=recovery): una sesion
+    // normal preexistente (alguien ya logueado que entra directo a esta
+    // ruta, sin hash) nunca debe destrabar el form.
     supabase.auth.getSession().then(({ data }) => {
       setScreenState((current) => {
         if (current !== "checking") return current;
-        return data.session && recoveryHashPresent ? "form" : "missing";
+        return data.session && recoveryEvidence ? "form" : "missing";
       });
     });
 
