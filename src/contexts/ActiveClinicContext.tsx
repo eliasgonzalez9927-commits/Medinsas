@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./AuthContext";
 import { supabase } from "../lib/supabase";
 import { Clinic } from "../types/clinic";
@@ -34,6 +34,13 @@ export function ActiveClinicProvider({ children }: { children: ReactNode }) {
     clinicMemberships.some((membership) => membership.role === "platform_admin");
   const storageKey = user ? `medin.activeClinicId.${user.id}` : "";
 
+  // Ref estable para clinicMemberships: evita que refreshClinics se re-cree
+  // cada vez que AuthContext produce un nuevo array con la misma data.
+  const clinicMembershipsRef = useRef(clinicMemberships);
+  useEffect(() => {
+    clinicMembershipsRef.current = clinicMemberships;
+  }, [clinicMemberships]);
+
   const activeClinic = useMemo(
     () => availableClinics.find((clinic) => clinic.id === activeClinicId) ?? null,
     [activeClinicId, availableClinics]
@@ -64,7 +71,7 @@ export function ActiveClinicProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError("");
     try {
-      const allowedClinicIds = clinicMemberships.map((membership) => membership.clinic_id);
+      const allowedClinicIds = clinicMembershipsRef.current.map((membership) => membership.clinic_id);
       let clinics: Clinic[] = [];
 
       if (isPlatformAdmin) {
@@ -98,7 +105,7 @@ export function ActiveClinicProvider({ children }: { children: ReactNode }) {
 
       setActiveClinicIdState(nextClinicId);
       if (nextClinicId && storageKey) window.localStorage.setItem(storageKey, nextClinicId);
-      if (!nextClinicId && !isPlatformAdmin && clinicMemberships.length === 0) {
+      if (!nextClinicId && !isPlatformAdmin && clinicMembershipsRef.current.length === 0) {
         setError("No tenés una clínica asignada.");
       }
     } catch (err) {
@@ -109,7 +116,7 @@ export function ActiveClinicProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [authLoading, clinicMemberships, isPlatformAdmin, storageKey, user]);
+  }, [authLoading, isPlatformAdmin, storageKey, user]);
 
   useEffect(() => {
     refreshClinics();

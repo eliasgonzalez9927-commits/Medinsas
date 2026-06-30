@@ -94,7 +94,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription }
-    } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+      // INITIAL_SESSION ya está cubierto por el getSession() de arriba;
+      // procesarlo aquí generaría un segundo fetchAuthSnapshot redundante
+      // que produce una nueva referencia de clinicMemberships → cascade en
+      // ActiveClinicContext (setLoading → "Cargando sesión…" innecesario).
+      if (event === "INITIAL_SESSION") return;
       setSession(nextSession);
       if (nextSession?.user) {
         applySnapshot(await fetchAuthSnapshot(nextSession.user.id));
