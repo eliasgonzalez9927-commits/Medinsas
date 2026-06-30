@@ -130,39 +130,38 @@ export function AcceptInvitation() {
               </div>
             </div>
 
-            <h1 className="text-lg font-semibold text-clinic-ink">Hola {invitation.fullName}</h1>
+            {!invitation.emailHasAccount && (
+              <h1 className="text-lg font-semibold text-clinic-ink">Crear mi acceso</h1>
+            )}
 
-            {invitation.emailHasAccount ? (
+            {invitation.emailHasAccount && !hasSession && (
               <>
-                {!hasSession && (
-                  <>
-                    <p className="mt-2 text-sm leading-6 text-clinic-muted">
-                      Esta invitación se asociará a tu cuenta existente. Iniciá sesión para continuar.
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-clinic-muted">
-                      ¿No recordás tu contraseña?{" "}
-                      <Link
-                        to={`/recuperar-contrasena?email=${encodeURIComponent(invitation.email)}`}
-                        className="font-semibold text-clinic-brand"
-                      >
-                        Restablecer contraseña
-                      </Link>
-                    </p>
-                  </>
-                )}
-                {emailMismatch && (
-                  <p className="mt-2 text-sm leading-6 text-clinic-muted">
-                    Esta invitación corresponde a otra cuenta. Cerrá sesión e ingresá con el email invitado.
-                  </p>
-                )}
-                {canAcceptExistingAccount && (
-                  <p className="mt-2 text-sm leading-6 text-clinic-muted">
-                    Confirmá para asociar tu cuenta a esta clínica con el rol indicado.
-                  </p>
-                )}
+                <h1 className="text-lg font-semibold text-clinic-ink">Esta cuenta ya existe</h1>
+                <p className="mt-2 text-sm leading-6 text-clinic-muted">
+                  El email invitado ya tiene una cuenta en Medin. Para aceptar la invitación, iniciá sesión con ese email.
+                </p>
+                <p className="mt-3 rounded-lg border border-clinic-line bg-clinic-surface px-4 py-2 text-sm font-semibold text-clinic-ink">
+                  {invitation.email}
+                </p>
               </>
-            ) : (
-              <p className="mt-2 text-sm leading-6 text-clinic-muted">Creá tu acceso a Medin.</p>
+            )}
+
+            {emailMismatch && (
+              <>
+                <h1 className="text-lg font-semibold text-clinic-ink">Hola {invitation.fullName}</h1>
+                <p className="mt-2 text-sm leading-6 text-clinic-muted">
+                  Esta invitación corresponde a otra cuenta. Cerrá sesión e ingresá con el email invitado.
+                </p>
+              </>
+            )}
+
+            {canAcceptExistingAccount && (
+              <>
+                <h1 className="text-lg font-semibold text-clinic-ink">Hola {invitation.fullName}</h1>
+                <p className="mt-2 text-sm leading-6 text-clinic-muted">
+                  Confirmá para asociar tu cuenta a esta clínica con el rol indicado.
+                </p>
+              </>
             )}
 
             {error && <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
@@ -173,12 +172,20 @@ export function AcceptInvitation() {
                   to="/login"
                   className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-lg bg-clinic-brand px-4 text-sm font-semibold text-white"
                 >
-                  Ir a iniciar sesión
+                  Iniciar sesión
                 </Link>
                 {!hasSession && (
-                  <p className="mt-3 text-xs text-clinic-muted">
-                    Después de iniciar sesión, volvé a abrir este mismo link desde el email para aceptar la invitación.
-                  </p>
+                  <>
+                    <Link
+                      to={`/recuperar-contrasena?email=${encodeURIComponent(invitation.email)}`}
+                      className="mt-3 inline-flex h-11 w-full items-center justify-center rounded-lg border border-clinic-line text-sm font-semibold text-clinic-brand"
+                    >
+                      No recuerdo mi contraseña
+                    </Link>
+                    <p className="mt-3 text-xs text-clinic-muted">
+                      Después de cambiar tu contraseña, volvé a abrir el link de invitación para aceptarla.
+                    </p>
+                  </>
                 )}
               </>
             ) : (

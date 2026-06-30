@@ -50,6 +50,9 @@ export function ForgotPassword() {
             <p className="text-sm text-clinic-muted">
               Si el email existe en Medin, te enviaremos un link para restablecer tu contraseña.
             </p>
+            <p className="text-sm text-clinic-muted">
+              Después de cambiar tu contraseña, volvé a abrir el link de invitación que recibiste por email.
+            </p>
             <Link to="/login" className="mt-3 text-sm font-semibold text-clinic-brand">
               Volver al login
             </Link>

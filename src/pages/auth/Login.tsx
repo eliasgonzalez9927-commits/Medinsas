@@ -108,6 +108,9 @@ export function Login() {
             <p className="mt-9 max-w-[470px] text-base leading-7 text-slate-500">
               Los accesos del equipo son creados por administración.
             </p>
+            <p className="mt-2 max-w-[470px] text-base leading-7 text-slate-500">
+              ¿Te invitaron a Medin? Abrí el link de invitación que recibiste por email.
+            </p>
           </div>
         </section>
 
