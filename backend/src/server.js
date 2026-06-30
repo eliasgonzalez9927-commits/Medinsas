@@ -2,6 +2,7 @@ import express from "express";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
 import { logger } from "./lib/logger.js";
+import { clinicMembersRouter } from "./routes/clinicMembers.js";
 import { invitationsRouter } from "./routes/invitations.js";
 import { mercadoPagoPaymentsRouter } from "./routes/mercadoPagoPayments.js";
 import { messagesRouter } from "./routes/messages.js";
@@ -49,6 +50,7 @@ app.use(notificationsRouter);
 app.use(superadminRouter);
 app.use(mercadoPagoPaymentsRouter);
 app.use(invitationsRouter);
+app.use(clinicMembersRouter);
 
 app.use((error, _req, res, _next) => {
   logger.error({ err: error }, "Unhandled request error");

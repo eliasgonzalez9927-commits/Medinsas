@@ -18,7 +18,7 @@ import {
   updateLocation,
   upsertClinicHour
 } from "../../../lib/clinic-data";
-import { cancelInvitation, createInvitation } from "../../../lib/invitations";
+import { cancelInvitation, changeClinicMemberRole, createInvitation } from "../../../lib/invitations";
 import { getClinicNotificationSettings, updateClinicNotificationSettings } from "../../../lib/notifications";
 import { canManageClinic, canManageUsers } from "../../../lib/permissions";
 import { supabase } from "../../../lib/supabase";
@@ -67,9 +67,21 @@ const invitableRoles: UserRole[] = ["clinic_admin", "receptionist", "professiona
 const roleLabels: Record<string, string> = {
   platform_admin: "Platform admin",
   clinic_admin: "Admin clinica",
+  admin: "Administrador",
   receptionist: "Recepcion",
   professional: "Profesional"
 };
+
+// Roles asignables desde "Cambiar rol" en Usuarios y permisos. platform_admin
+// queda excluido por diseno: el backend (PATCH /api/clinic-members/:id/role)
+// rechaza ese rol explicitamente.
+const assignableRoles: Array<"clinic_admin" | "admin" | "receptionist" | "professional"> = [
+  "clinic_admin",
+  "admin",
+  "receptionist",
+  "professional"
+];
+const ADMIN_MEMBER_ROLES = ["clinic_admin", "admin"];
 
 const days = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
 
@@ -246,6 +258,33 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
     }
   }
 
+  async function changeMemberRole(id: string, role: "clinic_admin" | "admin" | "receptionist" | "professional") {
+    if (!permissions.manageUsers) return;
+    setSaving(true);
+    setError("");
+    try {
+      await changeClinicMemberRole(id, role);
+      setNotice("Rol actualizado correctamente.");
+      await load();
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "";
+      const message = code === "FORBIDDEN"
+        ? "No tenés permisos para cambiar roles."
+        : code === "INVALID_PAYLOAD"
+          ? "No se puede asignar platform admin desde esta pantalla."
+          : code === "SELF_DEMOTION_FORBIDDEN"
+            ? "No podés quitarte tu propio rol administrativo."
+            : code === "CLINIC_WITHOUT_ADMIN"
+              ? "La clínica debe conservar al menos un administrador activo."
+              : code === "MEMBER_NOT_FOUND"
+                ? "No encontramos ese usuario."
+                : "No pudimos actualizar el rol.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <AdminPageShell
       description="Centro de administracion para datos de clinica, sedes, usuarios, notificaciones e integraciones."
@@ -287,11 +326,14 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
           {activeTab === "hours" && <HoursPanel disabled={!permissions.manageClinic || saving} hours={hours} clinicId={clinic.id} onSave={saveHour} />}
           {activeTab === "users" && (
             <UsersPanel
+              canManageUsers={permissions.manageUsers}
+              currentUserId={user?.id ?? ""}
               disabled={!permissions.manageUsers || saving}
               invitations={invitations}
               locations={locations}
               members={members}
               onCancelInvitation={cancelUserInvitation}
+              onChangeRole={changeMemberRole}
               onInvite={inviteUser}
               onRefresh={load}
               professionals={professionals}
@@ -455,7 +497,7 @@ function HourRow({ disabled, hour, onSave }: { disabled: boolean; hour: ClinicHo
   );
 }
 
-function UsersPanel({ disabled, invitations, locations, members, onCancelInvitation, onInvite, onRefresh, professionals }: { disabled: boolean; invitations: UserInvitation[]; locations: Location[]; members: ClinicMemberWithProfile[]; onCancelInvitation: (id: string) => void; onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void; onRefresh: () => void; professionals: ProfessionalWithRelations[] }) {
+function UsersPanel({ canManageUsers, currentUserId, disabled, invitations, locations, members, onCancelInvitation, onChangeRole, onInvite, onRefresh, professionals }: { canManageUsers: boolean; currentUserId: string; disabled: boolean; invitations: UserInvitation[]; locations: Location[]; members: ClinicMemberWithProfile[]; onCancelInvitation: (id: string) => void; onChangeRole: (id: string, role: "clinic_admin" | "admin" | "receptionist" | "professional") => void; onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void; onRefresh: () => void; professionals: ProfessionalWithRelations[] }) {
   const [form, setForm] = useState({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
   const pendingInvitations = invitations.filter((invitation) => invitation.status === "pending");
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -486,7 +528,17 @@ function UsersPanel({ disabled, invitations, locations, members, onCancelInvitat
             <Button onClick={onRefresh}>Actualizar</Button>
           </div>
           <div className="divide-y divide-clinic-line">
-            {members.map((member) => <MemberRow key={member.id} disabled={disabled} member={member} onRefresh={onRefresh} />)}
+            {members.map((member) => (
+              <MemberRow
+                key={member.id}
+                canManageUsers={canManageUsers}
+                currentUserId={currentUserId}
+                disabled={disabled}
+                member={member}
+                onChangeRole={onChangeRole}
+                onRefresh={onRefresh}
+              />
+            ))}
           </div>
         </SectionCard>
         <SectionCard className="overflow-hidden">
@@ -513,13 +565,14 @@ function UsersPanel({ disabled, invitations, locations, members, onCancelInvitat
   );
 }
 
-function MemberRow({ disabled, member, onRefresh }: { disabled: boolean; member: ClinicMemberWithProfile; onRefresh: () => void }) {
+function MemberRow({ canManageUsers, currentUserId, disabled, member, onChangeRole, onRefresh }: { canManageUsers: boolean; currentUserId: string; disabled: boolean; member: ClinicMemberWithProfile; onChangeRole: (id: string, role: "clinic_admin" | "admin" | "receptionist" | "professional") => void; onRefresh: () => void }) {
+  const [roleModalOpen, setRoleModalOpen] = useState(false);
   async function toggle() {
     await updateClinicMember(member.id, { active: !member.active });
     onRefresh();
   }
   return (
-    <article className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_140px_100px_120px] md:items-center">
+    <article className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_140px_100px_120px_120px] md:items-center">
       <div>
         <p className="font-semibold text-clinic-ink">{member.profiles?.full_name ?? member.user_id}</p>
         <p className="text-sm text-clinic-muted">{member.locations?.name ?? "Sin sede"} · {member.professionals ? `${member.professionals.name} ${member.professionals.last_name}` : "Sin profesional asociado"}</p>
@@ -529,7 +582,73 @@ function MemberRow({ disabled, member, onRefresh }: { disabled: boolean; member:
         {member.active ? "Activo" : "Inactivo"}
       </span>
       <Button disabled={disabled} onClick={toggle}>{member.active ? "Desactivar" : "Activar"}</Button>
+      {canManageUsers && (
+        <Button disabled={disabled} onClick={() => setRoleModalOpen(true)}>Cambiar rol</Button>
+      )}
+      {roleModalOpen && (
+        <ChangeRoleModal
+          isSelf={member.user_id === currentUserId}
+          member={member}
+          onClose={() => setRoleModalOpen(false)}
+          onConfirm={(role) => {
+            setRoleModalOpen(false);
+            onChangeRole(member.id, role);
+          }}
+        />
+      )}
     </article>
+  );
+}
+
+function ChangeRoleModal({ isSelf, member, onClose, onConfirm }: { isSelf: boolean; member: ClinicMemberWithProfile; onClose: () => void; onConfirm: (role: "clinic_admin" | "admin" | "receptionist" | "professional") => void }) {
+  const [role, setRole] = useState<"clinic_admin" | "admin" | "receptionist" | "professional">(
+    (assignableRoles.includes(member.role as typeof assignableRoles[number]) ? member.role : "receptionist") as "clinic_admin" | "admin" | "receptionist" | "professional"
+  );
+  const wasAdmin = ADMIN_MEMBER_ROLES.includes(member.role);
+  const staysAdmin = ADMIN_MEMBER_ROLES.includes(role);
+  const blockedBySelfDemotion = isSelf && wasAdmin && !staysAdmin;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <h2 className="text-lg font-semibold text-clinic-ink">Cambiar rol</h2>
+        <div className="mt-4 grid gap-3 text-sm">
+          <div>
+            <span className="text-clinic-muted">Usuario</span>
+            <p className="font-medium text-clinic-ink">{member.profiles?.full_name ?? member.user_id}</p>
+          </div>
+          <div>
+            <span className="text-clinic-muted">Rol actual</span>
+            <p className="font-medium text-clinic-ink">{roleLabels[member.role] ?? member.role}</p>
+          </div>
+          <Select
+            label="Nuevo rol"
+            value={role}
+            onChange={(value) => setRole(value as typeof role)}
+            options={assignableRoles.map((item) => ({ value: item, label: roleLabels[item] }))}
+          />
+          {!wasAdmin && staysAdmin && (
+            <Message tone="warning">Vas a otorgarle permisos administrativos completos a este usuario.</Message>
+          )}
+          {wasAdmin && !staysAdmin && !blockedBySelfDemotion && (
+            <Message tone="warning">Vas a quitarle el rol administrativo a este usuario.</Message>
+          )}
+          {blockedBySelfDemotion && (
+            <Message tone="error">No podés quitarte tu propio rol administrativo.</Message>
+          )}
+        </div>
+        <div className="mt-5 flex justify-end gap-3">
+          <Button onClick={onClose}>Cancelar</Button>
+          <Button
+            disabled={blockedBySelfDemotion || role === member.role}
+            onClick={() => onConfirm(role)}
+            variant="primary"
+          >
+            Guardar cambio
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

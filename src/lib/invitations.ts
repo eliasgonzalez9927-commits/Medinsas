@@ -74,3 +74,18 @@ export async function cancelInvitation(id: string) {
   if (!response.ok) throw new Error(body.error || "INVITATION_CANCEL_FAILED");
   return body as { ok: true; invitation: { id: string; email: string; role: string; status: string; expires_at: string | null } };
 }
+
+export async function changeClinicMemberRole(
+  id: string,
+  role: "clinic_admin" | "admin" | "receptionist" | "professional"
+) {
+  const headers = await authHeader();
+  const response = await fetch(`/api/clinic-members/${encodeURIComponent(id)}/role`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ role })
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || "ROLE_CHANGE_FAILED");
+  return body as { ok: true; member: Record<string, unknown> };
+}
