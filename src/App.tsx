@@ -71,8 +71,6 @@ export function App() {
         <Route path="/admin/profesionales" element={<ProfessionalsPage />} />
         <Route path="/admin/profesionales/:id" element={<ProfessionalProfilePage />} />
         <Route path="/admin/medicos" element={<ProfessionalsPage />} />
-        <Route path="/admin/disponibilidad" element={<AvailabilityPage />} />
-        <Route path="/admin/horarios" element={<AvailabilityPage />} />
         <Route path="/admin/pacientes" element={<PatientsPage />} />
         <Route path="/admin/servicios" element={<ServicesPage />} />
         <Route path="/admin/tratamientos" element={<ServicesPage />} />
@@ -83,13 +81,16 @@ export function App() {
       </Route>
       {/*
         Rutas administrativas sensibles: configuracion, usuarios y permisos,
-        pagos/facturacion, datos fiscales, reportes y notificaciones de
-        clinica. receptionist y professional quedan fuera por diseno (P0
-        RBAC) -- ninguna de estas pantallas tiene un caso de uso operativo
-        legitimo para esos roles, y los datos ya estan ademas bloqueados por
-        RLS (migraciones 021/023/024/025).
+        pagos/facturacion, datos fiscales, reportes, notificaciones de
+        clinica y disponibilidad/horarios. receptionist y professional
+        quedan fuera por diseno (P0 RBAC) -- ninguna de estas pantallas
+        tiene un caso de uso operativo legitimo para esos roles, y los
+        datos ya estan ademas bloqueados por RLS (migraciones 021/023/
+        024/025/026).
       */}
       <Route element={<ProtectedRoute roles={CLINIC_ADMIN_ROLES} />}>
+        <Route path="/admin/disponibilidad" element={<AvailabilityPage />} />
+        <Route path="/admin/horarios" element={<AvailabilityPage />} />
         <Route path="/admin/onboarding" element={<OnboardingPage />} />
         <Route path="/admin/mi-plan" element={<MyPlanPage />} />
         <Route path="/admin/importaciones" element={<ImportsPage />} />

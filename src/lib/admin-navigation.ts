@@ -59,7 +59,7 @@ export const ADMIN_MODULES: AdminModuleDefinition[] = [
   { key: "professionals", label: "Profesionales", path: "/admin/profesionales", icon: Stethoscope, group: "clinical_management", status: "active", moduleFlag: "profesionales" },
   { key: "services", label: "Servicios", path: "/admin/servicios", icon: WalletCards, group: "clinical_management", status: "active", moduleFlag: "servicios" },
   { key: "requests", label: "Solicitudes", path: "/admin/solicitudes", icon: ClipboardCheck, group: "operations", status: "active", moduleFlag: "agenda" },
-  { key: "availability", label: "Disponibilidad", path: "/admin/disponibilidad", icon: SlidersHorizontal, group: "operations", status: "active", moduleFlag: "disponibilidad" },
+  { key: "availability", label: "Disponibilidad", path: "/admin/disponibilidad", icon: SlidersHorizontal, group: "operations", status: "active", moduleFlag: "disponibilidad", allowedRoles: CLINIC_ADMIN_ROLES },
   { key: "online_booking", label: "Reservas online", path: "/admin/booking", icon: CalendarDays, group: "operations", status: "active", moduleFlag: "reservas_online" },
   { key: "onboarding", label: "Onboarding", path: "/admin/onboarding", icon: ClipboardCheck, group: "operations", status: "beta", allowedRoles: CLINIC_ADMIN_ROLES },
 
