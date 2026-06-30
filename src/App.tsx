@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useActiveClinic } from "./contexts/ActiveClinicContext";
 import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { ADMIN_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-roles";
+import { ADMIN_ROLES, CLINIC_ADMIN_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-roles";
 import { AcceptInvitation } from "./pages/auth/AcceptInvitation";
 import { ForgotPassword } from "./pages/auth/ForgotPassword";
 import { Login } from "./pages/auth/Login";
@@ -66,8 +66,6 @@ export function App() {
       </Route>
       <Route element={<ProtectedRoute roles={ADMIN_ROLES} />}>
         <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/admin/onboarding" element={<OnboardingPage />} />
-        <Route path="/admin/mi-plan" element={<MyPlanPage />} />
         <Route path="/admin/agenda" element={<AgendaPage />} />
         <Route path="/admin/solicitudes" element={<AppointmentRequestsPage />} />
         <Route path="/admin/profesionales" element={<ProfessionalsPage />} />
@@ -76,15 +74,27 @@ export function App() {
         <Route path="/admin/disponibilidad" element={<AvailabilityPage />} />
         <Route path="/admin/horarios" element={<AvailabilityPage />} />
         <Route path="/admin/pacientes" element={<PatientsPage />} />
-        <Route path="/admin/importaciones" element={<ImportsPage />} />
         <Route path="/admin/servicios" element={<ServicesPage />} />
         <Route path="/admin/tratamientos" element={<ServicesPage />} />
         <Route path="/admin/booking" element={<OnlineBookingPage />} />
         <Route path="/admin/reservas-online" element={<OnlineBookingPage />} />
         <Route path="/admin/whatsapp" element={<ComingSoonPage title="WhatsApp" description="Próximamente vas a poder usar automatizaciones, confirmaciones y recordatorios mediante una integración oficial de WhatsApp." />} />
+        <Route path="/admin/mensajes" element={<MessagesPage />} />
+      </Route>
+      {/*
+        Rutas administrativas sensibles: configuracion, usuarios y permisos,
+        pagos/facturacion, datos fiscales, reportes y notificaciones de
+        clinica. receptionist y professional quedan fuera por diseno (P0
+        RBAC) -- ninguna de estas pantallas tiene un caso de uso operativo
+        legitimo para esos roles, y los datos ya estan ademas bloqueados por
+        RLS (migraciones 021/023/024/025).
+      */}
+      <Route element={<ProtectedRoute roles={CLINIC_ADMIN_ROLES} />}>
+        <Route path="/admin/onboarding" element={<OnboardingPage />} />
+        <Route path="/admin/mi-plan" element={<MyPlanPage />} />
+        <Route path="/admin/importaciones" element={<ImportsPage />} />
         <Route path="/admin/notificaciones" element={<NotificationsPage />} />
         <Route path="/admin/notificaciones/configuracion" element={<SettingsNotificationsPage />} />
-        <Route path="/admin/mensajes" element={<MessagesPage />} />
         <Route path="/admin/pagos" element={<PaymentsPage />} />
         <Route path="/admin/pagos/configuracion" element={<PaymentSettingsPage />} />
         <Route path="/admin/pagos/:id" element={<PaymentDetailPage />} />

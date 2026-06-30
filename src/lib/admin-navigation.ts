@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { ClinicModuleKey } from "./modules";
 import type { UserRole } from "../types/database";
+import { CLINIC_ADMIN_ROLES } from "./auth-roles";
 
 export type AdminNavigationGroup =
   | "summary"
@@ -60,22 +61,22 @@ export const ADMIN_MODULES: AdminModuleDefinition[] = [
   { key: "requests", label: "Solicitudes", path: "/admin/solicitudes", icon: ClipboardCheck, group: "operations", status: "active", moduleFlag: "agenda" },
   { key: "availability", label: "Disponibilidad", path: "/admin/disponibilidad", icon: SlidersHorizontal, group: "operations", status: "active", moduleFlag: "disponibilidad" },
   { key: "online_booking", label: "Reservas online", path: "/admin/booking", icon: CalendarDays, group: "operations", status: "active", moduleFlag: "reservas_online" },
-  { key: "onboarding", label: "Onboarding", path: "/admin/onboarding", icon: ClipboardCheck, group: "operations", status: "beta" },
+  { key: "onboarding", label: "Onboarding", path: "/admin/onboarding", icon: ClipboardCheck, group: "operations", status: "beta", allowedRoles: CLINIC_ADMIN_ROLES },
 
-  { key: "payments", label: "Pagos", path: "/admin/pagos", icon: WalletCards, group: "administration", status: "active", moduleFlag: ["pagos", "mercado_pago"] },
-  { key: "financing", label: "Financiación", path: "/admin/financiacion", icon: Banknote, group: "administration", status: "coming_soon", moduleFlag: "financiacion", description: "Opciones de financiación y simulaciones para tratamientos." },
-  { key: "billing", label: "Facturación", path: "/admin/facturacion", icon: ReceiptText, group: "administration", status: "coming_soon", moduleFlag: "facturacion", description: "Comprobantes internos e integración fiscal cuando esté lista." },
+  { key: "payments", label: "Pagos", path: "/admin/pagos", icon: WalletCards, group: "administration", status: "active", moduleFlag: ["pagos", "mercado_pago"], allowedRoles: CLINIC_ADMIN_ROLES },
+  { key: "financing", label: "Financiación", path: "/admin/financiacion", icon: Banknote, group: "administration", status: "coming_soon", moduleFlag: "financiacion", description: "Opciones de financiación y simulaciones para tratamientos.", allowedRoles: CLINIC_ADMIN_ROLES },
+  { key: "billing", label: "Facturación", path: "/admin/facturacion", icon: ReceiptText, group: "administration", status: "coming_soon", moduleFlag: "facturacion", description: "Comprobantes internos e integración fiscal cuando esté lista.", allowedRoles: CLINIC_ADMIN_ROLES },
 
-  { key: "notifications", label: "Notificaciones", path: "/admin/notificaciones", icon: Bell, group: "communication", status: "active" },
+  { key: "notifications", label: "Notificaciones", path: "/admin/notificaciones", icon: Bell, group: "communication", status: "active", allowedRoles: CLINIC_ADMIN_ROLES },
   { key: "messages", label: "Mensajes", path: "/admin/mensajes", icon: MessageCircle, group: "communication", status: "beta", moduleFlag: "mensajes" },
   { key: "whatsapp", label: "WhatsApp", path: "/admin/whatsapp", icon: MessageCircle, group: "communication", status: "coming_soon", moduleFlag: "whatsapp", description: "Automatizaciones y conversaciones por WhatsApp con integración oficial." },
 
-  { key: "reports", label: "Reportes", path: "/admin/reportes", icon: PieChart, group: "administration", status: "beta", moduleFlag: "reportes" },
-  { key: "my_plan", label: "Mi plan", path: "/admin/mi-plan", icon: ReceiptText, group: "administration", status: "active" },
-  { key: "settings", label: "Configuración", path: "/admin/configuracion", icon: Settings, group: "administration", status: "active" },
+  { key: "reports", label: "Reportes", path: "/admin/reportes", icon: PieChart, group: "administration", status: "beta", moduleFlag: "reportes", allowedRoles: CLINIC_ADMIN_ROLES },
+  { key: "my_plan", label: "Mi plan", path: "/admin/mi-plan", icon: ReceiptText, group: "administration", status: "active", allowedRoles: CLINIC_ADMIN_ROLES },
+  { key: "settings", label: "Configuración", path: "/admin/configuracion", icon: Settings, group: "administration", status: "active", allowedRoles: CLINIC_ADMIN_ROLES },
 
   { key: "superadmin", label: "Superadmin", path: "/superadmin", icon: ShieldCheck, group: "platform", status: "active", allowedRoles: ["platform_admin"] },
-  { key: "prescriptions", label: "Recetarios", path: "/admin/recetarios", icon: FilePenLine, group: "administration", status: "coming_soon", moduleFlag: "recetarios", description: "Recetarios internos, indicaciones y futuras integraciones reguladas." },
+  { key: "prescriptions", label: "Recetarios", path: "/admin/recetarios", icon: FilePenLine, group: "administration", status: "coming_soon", moduleFlag: "recetarios", description: "Recetarios internos, indicaciones y futuras integraciones reguladas.", allowedRoles: CLINIC_ADMIN_ROLES },
   { key: "clinical_records", label: "Historia clínica", path: "/admin/historia-clinica", icon: FilePenLine, group: "administration", status: "hidden", moduleFlag: "historia_clinica" },
   { key: "imports", label: "Importaciones", path: "/admin/importaciones", icon: ClipboardList, group: "administration", status: "hidden", moduleFlag: "importaciones" }
 ];
