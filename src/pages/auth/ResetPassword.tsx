@@ -1,23 +1,60 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CirclePlus } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { supabase } from "../../lib/supabase";
+
+type ScreenState = "checking" | "form" | "expired" | "missing";
 
 function getLinkError(): string {
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   return hashParams.get("error_code") ?? hashParams.get("error") ?? "";
 }
 
+function hadRecoveryHash(): boolean {
+  return window.location.hash.includes("type=recovery");
+}
+
 export function ResetPassword() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const linkError = getLinkError();
   const requestEmail = searchParams.get("email") ?? "";
+  const [screenState, setScreenState] = useState<ScreenState>("checking");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (getLinkError()) {
+      setScreenState("expired");
+      return;
+    }
+
+    const recoveryHashPresent = hadRecoveryHash();
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setScreenState("form");
+      }
+    });
+
+    // Red de seguridad por timing: si el evento PASSWORD_RECOVERY ya se
+    // disparo antes de que este listener se suscriba, getSession() confirma
+    // la sesion. Solo la habilitamos como "form" si el hash realmente traia
+    // un token de recovery: una sesion normal preexistente (alguien ya
+    // logueado que entra directo a esta ruta) nunca debe destrabar el form.
+    supabase.auth.getSession().then(({ data }) => {
+      setScreenState((current) => {
+        if (current !== "checking") return current;
+        return data.session && recoveryHashPresent ? "form" : "missing";
+      });
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,7 +93,11 @@ export function ResetPassword() {
           </div>
         </Link>
 
-        {linkError ? (
+        {screenState === "checking" && (
+          <p className="text-sm text-clinic-muted">Verificando link...</p>
+        )}
+
+        {screenState === "expired" && (
           <>
             <h1 className="text-lg font-semibold text-clinic-ink">Este link ya no es válido</h1>
             <p className="mt-2 text-sm leading-6 text-clinic-muted">
@@ -69,7 +110,24 @@ export function ResetPassword() {
               Pedir un nuevo link
             </Link>
           </>
-        ) : (
+        )}
+
+        {screenState === "missing" && (
+          <>
+            <h1 className="text-lg font-semibold text-clinic-ink">Necesitás un link de recuperación</h1>
+            <p className="mt-2 text-sm leading-6 text-clinic-muted">
+              Para crear una nueva contraseña, abrí el link que te enviamos por email o pedí uno nuevo.
+            </p>
+            <Link
+              to={requestEmail ? `/recuperar-contrasena?email=${encodeURIComponent(requestEmail)}` : "/recuperar-contrasena"}
+              className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-lg bg-clinic-brand px-4 text-sm font-semibold text-white"
+            >
+              Pedir un nuevo link
+            </Link>
+          </>
+        )}
+
+        {screenState === "form" && (
           <>
             <h1 className="text-lg font-semibold text-clinic-ink">Crear nueva contraseña</h1>
             <p className="mt-2 text-sm leading-6 text-clinic-muted">
