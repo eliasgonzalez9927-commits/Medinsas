@@ -4,8 +4,10 @@ import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ADMIN_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-roles";
 import { AcceptInvitation } from "./pages/auth/AcceptInvitation";
+import { ForgotPassword } from "./pages/auth/ForgotPassword";
 import { Login } from "./pages/auth/Login";
 import { Register } from "./pages/auth/Register";
+import { ResetPassword } from "./pages/auth/ResetPassword";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { AgendaPage } from "./pages/admin/modules/AgendaPage";
 import { AppointmentRequestsPage } from "./pages/admin/modules/AppointmentRequestsPage";
@@ -47,6 +49,8 @@ export function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/aceptar-invitacion" element={<AcceptInvitation />} />
+      <Route path="/recuperar-contrasena" element={<ForgotPassword />} />
+      <Route path="/restablecer-contrasena" element={<ResetPassword />} />
       <Route path="/clinica-demo" element={<ClinicLanding />} />
       <Route path="/reservar/:clinicSlug" element={<PublicBookingPage />} />
       <Route path="/reservar/:clinicSlug/:filter" element={<PublicBookingPage />} />

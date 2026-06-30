@@ -135,9 +135,20 @@ export function AcceptInvitation() {
             {invitation.emailHasAccount ? (
               <>
                 {!hasSession && (
-                  <p className="mt-2 text-sm leading-6 text-clinic-muted">
-                    Esta invitación se asociará a tu cuenta existente. Iniciá sesión para continuar.
-                  </p>
+                  <>
+                    <p className="mt-2 text-sm leading-6 text-clinic-muted">
+                      Esta invitación se asociará a tu cuenta existente. Iniciá sesión para continuar.
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-clinic-muted">
+                      ¿No recordás tu contraseña?{" "}
+                      <Link
+                        to={`/recuperar-contrasena?email=${encodeURIComponent(invitation.email)}`}
+                        className="font-semibold text-clinic-brand"
+                      >
+                        Restablecer contraseña
+                      </Link>
+                    </p>
+                  </>
                 )}
                 {emailMismatch && (
                   <p className="mt-2 text-sm leading-6 text-clinic-muted">

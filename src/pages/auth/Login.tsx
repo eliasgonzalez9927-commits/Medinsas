@@ -1,12 +1,14 @@
 import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { getPostLoginPath } from "../../lib/auth-roles";
 
 export function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signIn } = useAuth();
+  const notice = (location.state as { notice?: string } | null)?.notice ?? "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -53,6 +55,12 @@ export function Login() {
               </p>
             </div>
 
+            {notice && (
+              <div className="mt-8 max-w-[470px] rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-700">
+                {notice}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="mt-10 max-w-[470px] space-y-6">
               <label className="block">
                 <span className="text-sm font-semibold text-[#0D3642]">Email</span>
@@ -76,6 +84,10 @@ export function Login() {
                   placeholder="••••••••"
                 />
               </label>
+
+              <Link to="/recuperar-contrasena" className="block text-sm font-semibold text-[#0D766E]">
+                ¿Olvidaste tu contraseña?
+              </Link>
 
               {error && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-clinic-danger">
