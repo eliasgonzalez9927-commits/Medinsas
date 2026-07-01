@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Download, Edit3, FileUp, Search, UserPlus } from "lucide-react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { Download, Edit3, FileUp, Search, UserPlus, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
@@ -51,6 +51,7 @@ export function PatientsPage() {
   const [error, setError] = useState("");
   const [range, setRange] = useState<DateRangeValue>(() => resolveDateRange("this_month"));
   const [temporalFilter, setTemporalFilter] = useState<"all" | "created" | "last_appointment" | "next_appointment" | "inactive">("all");
+  const [detailPatient, setDetailPatient] = useState<PatientWithAppointments | null>(null);
 
   async function load(search = query) {
     if (!clinic) return;
@@ -114,6 +115,15 @@ export function PatientsPage() {
     setNotice("");
   }
 
+  function openDetail(patient: PatientWithAppointments) {
+    setDetailPatient(patient);
+  }
+
+  function openEditFromDetail(patient: PatientWithAppointments) {
+    setDetailPatient(null);
+    openEdit(patient);
+  }
+
   function openEdit(patient: PatientWithAppointments) {
     setForm({
       id: patient.id,
@@ -164,6 +174,7 @@ export function PatientsPage() {
   }
 
   return (
+    <>
     <AdminPageShell
       actionLabel="Crear paciente"
       description="Base operativa de pacientes con busqueda, datos administrativos e historial de turnos."
@@ -251,7 +262,11 @@ export function PatientsPage() {
             {visiblePatients.map((patient) => {
               const nextAppointment = getNextAppointment(patient);
               return (
-                <article key={patient.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1fr_170px_170px_1fr_130px] lg:items-center">
+                <article
+                  key={patient.id}
+                  onClick={() => openDetail(patient)}
+                  className="grid cursor-pointer gap-4 px-5 py-4 transition-colors hover:bg-clinic-surface lg:grid-cols-[1fr_170px_170px_1fr_auto] lg:items-center"
+                >
                   <div>
                     <p className="font-semibold text-clinic-ink">
                       {patient.first_name} {patient.last_name}
@@ -268,9 +283,11 @@ export function PatientsPage() {
                       {(patient.appointments?.length ?? 0)} turnos registrados
                     </p>
                   </div>
-                  <Button icon={<Edit3 size={16} />} onClick={() => openEdit(patient)}>
-                    Editar
-                  </Button>
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <Button icon={<Edit3 size={16} />} onClick={() => openEdit(patient)}>
+                      Editar
+                    </Button>
+                  </div>
                 </article>
               );
             })}
@@ -278,6 +295,14 @@ export function PatientsPage() {
         </SectionCard>
       ))}
     </AdminPageShell>
+    {detailPatient && (
+      <PatientDetailDrawer
+        patient={detailPatient}
+        onClose={() => setDetailPatient(null)}
+        onEdit={openEditFromDetail}
+      />
+    )}
+    </>
   );
 }
 
@@ -337,6 +362,204 @@ function Message({ tone, children }: { tone: "success" | "error"; children: stri
       ? "border-emerald-200 bg-emerald-50 text-emerald-800"
       : "border-red-200 bg-red-50 text-red-700";
   return <div className={`rounded-lg border px-4 py-3 text-sm ${className}`}>{children}</div>;
+}
+
+function PatientDetailDrawer({
+  patient,
+  onClose,
+  onEdit
+}: {
+  patient: PatientWithAppointments;
+  onClose: () => void;
+  onEdit: (patient: PatientWithAppointments) => void;
+}) {
+  const recentAppointments = [...(patient.appointments ?? [])]
+    .sort((a, b) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime())
+    .slice(0, 6);
+
+  const totalAppointments = patient.appointments?.length ?? 0;
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-[1px]"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Detalle de ${patient.first_name} ${patient.last_name}`}
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-white shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-clinic-line px-6 py-5">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-clinic-brand">
+              Paciente
+            </p>
+            <h2 className="mt-0.5 text-xl font-semibold text-clinic-ink">
+              {patient.first_name} {patient.last_name}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg text-clinic-muted transition hover:bg-clinic-surface hover:text-clinic-ink"
+            aria-label="Cerrar"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+          <DrawerSection title="Datos personales">
+            <DrawerField label="DNI / Documento" value={patient.document_number ?? "—"} />
+            <DrawerField
+              label="Fecha de nacimiento"
+              value={
+                patient.birth_date
+                  ? new Intl.DateTimeFormat("es-AR", {
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                      timeZone: "UTC"
+                    }).format(new Date(patient.birth_date + "T00:00:00Z"))
+                  : "—"
+              }
+            />
+          </DrawerSection>
+
+          <DrawerSection title="Contacto">
+            <DrawerField label="Teléfono" value={patient.phone} />
+            <DrawerField label="Email" value={patient.email ?? "—"} />
+          </DrawerSection>
+
+          {patient.insurance && (
+            <DrawerSection title="Cobertura médica">
+              <DrawerField label="Obra social" value={patient.insurance} />
+            </DrawerSection>
+          )}
+
+          <DrawerSection title="Comunicación">
+            <div className="flex gap-6 text-sm">
+              <span className={patient.email_opt_in !== false ? "text-emerald-700" : "text-clinic-muted"}>
+                {patient.email_opt_in !== false ? "✓" : "✗"} Email
+              </span>
+              <span className={patient.whatsapp_opt_in !== false ? "text-emerald-700" : "text-clinic-muted"}>
+                {patient.whatsapp_opt_in !== false ? "✓" : "✗"} WhatsApp
+              </span>
+            </div>
+            {patient.communication_notes && (
+              <p className="mt-1.5 text-sm text-clinic-muted leading-relaxed">{patient.communication_notes}</p>
+            )}
+          </DrawerSection>
+
+          {patient.notes && (
+            <DrawerSection title="Notas internas">
+              <p className="text-sm text-clinic-ink leading-relaxed whitespace-pre-wrap">{patient.notes}</p>
+            </DrawerSection>
+          )}
+
+          <DrawerSection
+            title={`Turnos${totalAppointments > 0 ? ` · ${totalAppointments} total${totalAppointments !== 1 ? "es" : ""}` : ""}`}
+          >
+            {recentAppointments.length === 0 ? (
+              <p className="text-sm text-clinic-muted">Sin turnos registrados.</p>
+            ) : (
+              <div className="space-y-2">
+                {recentAppointments.map((apt) => (
+                  <div
+                    key={apt.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-clinic-line bg-clinic-surface px-3 py-2.5"
+                  >
+                    <span className="text-sm font-medium text-clinic-ink tabular-nums">
+                      {formatDateTime(apt.starts_at)}
+                    </span>
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${appointmentStatusClass(apt.status)}`}>
+                      {appointmentStatusLabel(apt.status)}
+                    </span>
+                  </div>
+                ))}
+                {totalAppointments > 6 && (
+                  <p className="text-xs text-clinic-muted text-right">
+                    Mostrando los 6 más recientes de {totalAppointments}.
+                  </p>
+                )}
+              </div>
+            )}
+          </DrawerSection>
+
+          <DrawerSection title="Registro">
+            <DrawerField label="Alta" value={formatDate(patient.created_at)} />
+            {patient.updated_at && (
+              <DrawerField label="Última actualización" value={formatDate(patient.updated_at)} />
+            )}
+          </DrawerSection>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-clinic-line px-6 py-4">
+          <Button variant="primary" icon={<Edit3 size={16} />} onClick={() => onEdit(patient)}>
+            Editar
+          </Button>
+          <Button onClick={onClose}>Cerrar</Button>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function DrawerSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+        {title}
+      </p>
+      <div className="space-y-1.5">{children}</div>
+    </div>
+  );
+}
+
+function DrawerField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-3 text-sm">
+      <span className="w-40 shrink-0 text-clinic-muted">{label}</span>
+      <span className="text-clinic-ink">{value}</span>
+    </div>
+  );
+}
+
+function appointmentStatusLabel(status: string | null) {
+  const labels: Record<string, string> = {
+    pending: "Pendiente",
+    confirmed: "Confirmado",
+    attended: "Asistió",
+    cancelled: "Cancelado",
+    rescheduled: "Reprogramado",
+    completed: "Completado",
+    no_show: "No asistió"
+  };
+  return labels[status ?? ""] ?? status ?? "—";
+}
+
+function appointmentStatusClass(status: string | null) {
+  const classes: Record<string, string> = {
+    pending: "bg-amber-50 text-amber-700",
+    confirmed: "bg-blue-50 text-blue-700",
+    attended: "bg-emerald-50 text-emerald-700",
+    cancelled: "bg-red-50 text-red-600",
+    rescheduled: "bg-slate-100 text-slate-600",
+    completed: "bg-[#e6f4f1] text-[#0D766E]",
+    no_show: "bg-orange-50 text-orange-700"
+  };
+  return classes[status ?? ""] ?? "bg-slate-100 text-slate-600";
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric"
+  }).format(new Date(value));
 }
 
 function csvLine(values: string[]) {
