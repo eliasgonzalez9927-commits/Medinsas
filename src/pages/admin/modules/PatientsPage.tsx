@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { Download, Edit3, FileUp, Search, UserPlus, X } from "lucide-react";
+import { Download, Edit3, Eye, FileUp, Search, UserPlus, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
@@ -283,7 +283,13 @@ export function PatientsPage() {
                       {(patient.appointments?.length ?? 0)} turnos registrados
                     </p>
                   </div>
-                  <div onClick={(e) => e.stopPropagation()}>
+                  <div
+                    className="flex items-center gap-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Button icon={<Eye size={16} />} onClick={() => openDetail(patient)}>
+                      Ver
+                    </Button>
                     <Button icon={<Edit3 size={16} />} onClick={() => openEdit(patient)}>
                       Editar
                     </Button>
