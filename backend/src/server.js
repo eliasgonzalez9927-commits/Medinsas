@@ -44,7 +44,12 @@ app.get("/health/env", (_req, res) => {
   });
 });
 
-app.use(whatsappWebhookRouter);
+if (config.WHATSAPP_ENABLED) {
+  app.use(whatsappWebhookRouter);
+  logger.info("WhatsApp webhook router mounted (WHATSAPP_ENABLED=true)");
+} else {
+  logger.info("WhatsApp webhook disabled (WHATSAPP_ENABLED != true) — router not mounted");
+}
 app.use(messagesRouter);
 app.use(notificationsRouter);
 app.use(superadminRouter);
