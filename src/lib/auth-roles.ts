@@ -9,6 +9,10 @@ export const STAFF_ROLES: UserRole[] = [...ADMIN_ROLES, ...PROFESSIONAL_ROLES];
 // professional quedan fuera: son roles operativos, no administrativos.
 export const CLINIC_ADMIN_ROLES: UserRole[] = ["platform_admin", "clinic_admin", "admin"];
 
+// Roles con acceso al módulo Registro clínico.
+// receptionist excluida: no tiene acceso a contenido clínico según RLS (027).
+export const CLINICAL_ROLES: UserRole[] = ["platform_admin", "clinic_admin", "admin", "professional", "doctor"];
+
 export const roleLabels: Record<UserRole, string> = {
   platform_admin: "Administrador plataforma",
   clinic_admin: "Administrador clinica",

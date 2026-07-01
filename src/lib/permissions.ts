@@ -1,4 +1,5 @@
 import { UserRole } from "../types/database";
+import { CLINICAL_ROLES } from "./auth-roles";
 
 type PermissionKey =
   | "canManageClinic"
@@ -87,4 +88,8 @@ export function canViewReports(role?: UserRole | null) {
 
 export function canSendMessages(role?: UserRole | null) {
   return getPermissions(role).canSendMessages;
+}
+
+export function canViewClinicalRecords(role?: UserRole | null) {
+  return Boolean(role && CLINICAL_ROLES.includes(role));
 }

@@ -732,3 +732,34 @@ export type HealthPlan = {
   code: string | null;
   active: boolean;
 };
+
+// ---------------------------------------------------------------------------
+// Registro clínico V1
+// ---------------------------------------------------------------------------
+
+export type ClinicalEvolutionStatus = "draft" | "closed";
+
+export type ClinicalEvolution = {
+  id: string;
+  clinic_id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  professional_id: string | null;
+  reason: string | null;
+  current_condition: string | null;
+  physical_exam: string | null;
+  diagnosis: string | null;
+  plan: string | null;
+  observations: string | null;
+  status: ClinicalEvolutionStatus;
+  closed_at: string | null;
+  closed_by: string | null;
+  created_at: string;
+  created_by: string | null;
+  updated_at: string;
+  updated_by: string | null;
+};
+
+export type ClinicalEvolutionWithProfessional = ClinicalEvolution & {
+  professional: { id: string; name: string; last_name: string } | null;
+};

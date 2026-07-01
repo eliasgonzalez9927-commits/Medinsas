@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useActiveClinic } from "./contexts/ActiveClinicContext";
 import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { ADMIN_ROLES, CLINIC_ADMIN_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-roles";
+import { ADMIN_ROLES, CLINIC_ADMIN_ROLES, CLINICAL_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-roles";
 import { AcceptInvitation } from "./pages/auth/AcceptInvitation";
 import { ForgotPassword } from "./pages/auth/ForgotPassword";
 import { Login } from "./pages/auth/Login";
@@ -32,6 +32,7 @@ import { PublicBookingPage } from "./pages/booking/PublicBookingPage";
 import { ClinicLanding } from "./pages/landing/ClinicLanding";
 import { PatientBooking } from "./pages/patient/PatientBooking";
 import { PublicAppointmentPage } from "./pages/patient/PublicAppointmentPage";
+import { ClinicalRecordPage } from "./pages/admin/modules/ClinicalRecordPage";
 import { SuperadminClinicDetailPage, SuperadminClinicsPage, SuperadminDashboard } from "./pages/superadmin/SuperadminPages";
 import { SuperadminPlansPage, SuperadminSubscriptionsPage } from "./pages/superadmin/SaasBillingPages";
 
@@ -113,6 +114,11 @@ export function App() {
         <Route path="/admin/configuracion/notificaciones" element={<SettingsNotificationsPage />} />
         <Route path="/admin/configuracion/coberturas" element={<CoverageSettingsPage />} />
       </Route>
+      {/* Registro clínico — accesible para roles clínicos (sin receptionist) */}
+      <Route element={<ProtectedRoute roles={CLINICAL_ROLES} />}>
+        <Route path="/admin/registro-clinico/:patientId" element={<ClinicalRecordPage />} />
+      </Route>
+
       <Route element={<ProtectedRoute roles={["platform_admin"]} />}>
         <Route path="/superadmin" element={<SuperadminDashboard />} />
         <Route path="/superadmin/planes" element={<SuperadminPlansPage />} />

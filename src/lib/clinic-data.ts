@@ -33,6 +33,7 @@ import {
   PaymentEvent,
   PaymentSettings,
   PaymentWithRelations,
+  ClinicalEvolutionWithProfessional,
   Professional,
   ProfessionalInput,
   ProfessionalWithRelations,
@@ -1078,6 +1079,32 @@ async function logAppointmentEvent(
     metadata
   });
   if (error) console.error("Failed to log appointment event", error);
+}
+
+// ---------------------------------------------------------------------------
+// Registro clínico V1
+// ---------------------------------------------------------------------------
+
+export async function getClinicalEvolutionsByPatient(
+  clinicId: string,
+  patientId: string
+): Promise<ClinicalEvolutionWithProfessional[]> {
+  try {
+    const { data, error } = await supabase
+      .from("clinical_evolutions")
+      .select("*, professionals(id, name, last_name)")
+      .eq("clinic_id", clinicId)
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row: any) => ({
+      ...row,
+      professional: row.professionals ?? null
+    })) as ClinicalEvolutionWithProfessional[];
+  } catch (error) {
+    console.error("Failed to load clinical evolutions", error);
+    throw new FriendlyDataError("No pudimos cargar el registro clínico.");
+  }
 }
 
 function mapPatient(row: any): PatientWithAppointments {

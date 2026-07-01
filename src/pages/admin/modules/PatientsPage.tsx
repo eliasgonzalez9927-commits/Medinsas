@@ -1,11 +1,12 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { Download, Edit3, Eye, FileUp, Search, UserPlus, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { ClipboardList, Download, Edit3, Eye, FileUp, Search, UserPlus, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { Button } from "../../../components/ui/Button";
 import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
+import { canViewClinicalRecords } from "../../../lib/permissions";
 import {
   createPatient,
   getPatients,
@@ -40,7 +41,8 @@ const emptyForm: PatientForm = {
 };
 
 export function PatientsPage() {
-  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
+  const { activeClinic: clinic, loading: clinicLoading, activeRole } = useActiveClinic();
+  const navigate = useNavigate();
   const [patients, setPatients] = useState<PatientWithAppointments[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -122,6 +124,11 @@ export function PatientsPage() {
   function openEditFromDetail(patient: PatientWithAppointments) {
     setDetailPatient(null);
     openEdit(patient);
+  }
+
+  function openClinicalRecord(patient: PatientWithAppointments) {
+    setDetailPatient(null);
+    navigate(`/admin/registro-clinico/${patient.id}`);
   }
 
   function openEdit(patient: PatientWithAppointments) {
@@ -306,6 +313,7 @@ export function PatientsPage() {
         patient={detailPatient}
         onClose={() => setDetailPatient(null)}
         onEdit={openEditFromDetail}
+        onViewClinicalRecord={canViewClinicalRecords(activeRole) ? openClinicalRecord : undefined}
       />
     )}
     </>
@@ -373,11 +381,13 @@ function Message({ tone, children }: { tone: "success" | "error"; children: stri
 function PatientDetailDrawer({
   patient,
   onClose,
-  onEdit
+  onEdit,
+  onViewClinicalRecord
 }: {
   patient: PatientWithAppointments;
   onClose: () => void;
   onEdit: (patient: PatientWithAppointments) => void;
+  onViewClinicalRecord?: (patient: PatientWithAppointments) => void;
 }) {
   const recentAppointments = [...(patient.appointments ?? [])]
     .sort((a, b) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime())
@@ -504,9 +514,16 @@ function PatientDetailDrawer({
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-clinic-line px-6 py-4">
-          <Button variant="primary" icon={<Edit3 size={16} />} onClick={() => onEdit(patient)}>
-            Editar
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="primary" icon={<Edit3 size={16} />} onClick={() => onEdit(patient)}>
+              Editar
+            </Button>
+            {onViewClinicalRecord && (
+              <Button icon={<ClipboardList size={16} />} onClick={() => onViewClinicalRecord(patient)}>
+                Registro clínico
+              </Button>
+            )}
+          </div>
           <Button onClick={onClose}>Cerrar</Button>
         </div>
       </aside>
