@@ -169,6 +169,7 @@ export function PatientsPage() {
       description="Base operativa de pacientes con busqueda, datos administrativos e historial de turnos."
       eyebrow="Gestion de pacientes"
       onAction={openCreate}
+      onRefresh={() => load("")}
       title="Pacientes"
     >
       {notice && <Message tone="success">{notice}</Message>}

@@ -203,6 +203,7 @@ export function ServicesPage() {
       description="Configura tratamientos, duracion, precio, profesionales asignados y reglas comerciales."
       eyebrow="Catalogo clinico"
       onAction={openCreate}
+      onRefresh={load}
       title="Servicios y tratamientos"
     >
       {notice && <Message tone="success">{notice}</Message>}

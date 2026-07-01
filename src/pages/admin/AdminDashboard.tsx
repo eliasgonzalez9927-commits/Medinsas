@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 import { Link, useNavigate } from "react-router-dom";
 import {
   CalendarCheck2,
@@ -71,6 +72,30 @@ export function AdminDashboard() {
     }
   }
 
+  // Soft refresh: recarga el dashboard sin spinner bloqueante.
+  async function softLoadDashboard() {
+    if (!clinic) return;
+    try {
+      const [loadedAppointments, loadedPatients, professionalResult, serviceResult] = await Promise.all([
+        getAppointments(clinic.id, { dateFrom: range.dateFrom, dateTo: range.dateTo, timezone: clinic.timezone ?? undefined }),
+        getPatients(clinic.id),
+        getProfessionals(clinic.id),
+        getServices(clinic.id)
+      ]);
+      setAppointments(loadedAppointments);
+      setPatients(loadedPatients);
+      setProfessionals(professionalResult.data);
+      setServices(serviceResult.data);
+    } catch {
+      // Fallo silencioso: mantiene datos existentes.
+    }
+  }
+
+  const { lastRefreshedAt, isRefreshing, isOnline, refresh } = useAutoRefresh(softLoadDashboard, {
+    intervalMs: 60_000,
+    pauseWhenHidden: true,
+  });
+
   useEffect(() => {
     if (clinic) loadDashboard();
   }, [clinic?.id, range.dateFrom, range.dateTo]);
@@ -104,7 +129,13 @@ export function AdminDashboard() {
     : "Sin próximos turnos";
 
   return (
-    <AdminLayout onCreateAppointment={() => navigate("/admin/agenda")} onRefresh={loadDashboard}>
+    <AdminLayout
+      onCreateAppointment={() => navigate("/admin/agenda")}
+      onRefresh={refresh}
+      lastRefreshedAt={lastRefreshedAt}
+      isRefreshing={isRefreshing}
+      isOnline={isOnline}
+    >
       <main className="mx-auto flex max-w-[1360px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <section className="flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
           <div>

@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
@@ -40,6 +40,7 @@ import {
   ServiceWithRelations
 } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
+import { useAutoRefresh } from "../../../hooks/useAutoRefresh";
 
 type AppointmentForm = {
   patient_id: string;
@@ -117,6 +118,18 @@ export function AgendaPage() {
     appointment_type: "in_person",
     reason: "",
     notes: ""
+  });
+
+  // Soft refresh: recarga solo turnos sin bloquear la UI (no setLoading).
+  // Usada por el hook de auto-refresh; loadBase() sigue siendo el hard load inicial.
+  const softRefresh = useCallback(async () => {
+    await loadAppointments();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clinic?.id, range.dateFrom, range.dateTo, professionalId, serviceId, status]);
+
+  const { lastRefreshedAt, isRefreshing, isOnline, refresh } = useAutoRefresh(softRefresh, {
+    intervalMs: 30_000,
+    pauseWhenHidden: true,
   });
 
   async function loadBase() {
@@ -572,7 +585,10 @@ export function AgendaPage() {
       eyebrow="Agenda clinica"
       onCreateAppointment={openCreate}
       onAction={openCreate}
-      onRefresh={refreshAgenda}
+      onRefresh={refresh}
+      lastRefreshedAt={lastRefreshedAt}
+      isRefreshing={isRefreshing}
+      isOnline={isOnline}
       title="Agenda"
     >
       {notice && <Message tone="success">{notice}</Message>}
@@ -738,7 +754,7 @@ export function AgendaPage() {
             <Button onClick={() => setAgendaPreset("this_week")}>Semana</Button>
             <Button onClick={() => setAgendaPreset("this_month")}>Mes</Button>
             <Button onClick={() => setAgendaPreset("custom")}>Rango</Button>
-            <Button icon={<RefreshCw size={16} />} onClick={refreshAgenda}>Actualizar</Button>
+            <Button icon={<RefreshCw size={16} />} onClick={refresh}>Actualizar</Button>
             <Button icon={<Plus size={16} />} onClick={openCreate} variant="primary">Nuevo turno</Button>
             {canCreateOverbooking(role) && <Button onClick={openOverbooking}>Sobreturno</Button>}
           </div>

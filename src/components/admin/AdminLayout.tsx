@@ -12,11 +12,17 @@ import { Button } from "../ui/Button";
 export function AdminLayout({
   children,
   onRefresh,
-  onCreateAppointment
+  onCreateAppointment,
+  lastRefreshedAt,
+  isOnline,
+  isRefreshing
 }: {
   children: ReactNode;
   onRefresh: () => void;
   onCreateAppointment: () => void;
+  lastRefreshedAt?: Date;
+  isOnline?: boolean;
+  isRefreshing?: boolean;
 }) {
   const { profile, role, signOut, user } = useAuth();
   const {
@@ -33,6 +39,12 @@ export function AdminLayout({
   const [globalSearch, setGlobalSearch] = useState("");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [lastRefreshAt, setLastRefreshAt] = useState<Date>(() => new Date());
+  // Ticker forces label re-render every 30s without touching data.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
   const displayName = profile?.full_name ?? user?.email ?? "Equipo clínico";
   const displayRole = activeRole ? roleLabels[activeRole] : role ? roleLabels[role] : "Usuario";
   const canSwitchClinic = availableClinics.length > 1 || role === "platform_admin";
@@ -70,6 +82,10 @@ export function AdminLayout({
     setMobileNavOpen(false);
     navigate(`/admin/agenda?search=${encodeURIComponent(query)}`);
   }
+
+  const effectiveLastRefreshedAt = lastRefreshedAt ?? lastRefreshAt;
+  const effectiveIsOnline = isOnline ?? true;
+  const effectiveIsRefreshing = isRefreshing ?? false;
 
   function handleRefresh() {
     setLastRefreshAt(new Date());
@@ -234,7 +250,9 @@ export function AdminLayout({
             </form>
 
             <div className="ml-auto flex items-center gap-2">
-              <p className="hidden whitespace-nowrap text-xs text-clinic-muted xl:block">Última actualización: {formatRefreshLabel(lastRefreshAt)}</p>
+              <p className={`hidden whitespace-nowrap text-xs xl:block ${!effectiveIsOnline ? "text-amber-600" : effectiveIsRefreshing ? "text-clinic-brand" : "text-clinic-muted"}`}>
+                {formatRefreshStatus(effectiveLastRefreshedAt, effectiveIsOnline, effectiveIsRefreshing)}
+              </p>
               <div className="hidden min-w-0 text-right xl:block"><p className="truncate text-sm font-semibold text-clinic-ink">{clinic?.name ?? "Medin"}</p><p className="text-xs text-clinic-muted">{displayRole}</p></div>
               <Button className="hidden sm:inline-flex" onClick={handleRefresh} variant="secondary">Actualizar</Button>
               <Button onClick={onCreateAppointment} variant="primary">Nuevo turno</Button>
@@ -282,9 +300,15 @@ function clinicStatusLabel(status?: string | null) {
   return labels[status ?? ""] ?? "Activa";
 }
 
-function formatRefreshLabel(value: Date) {
-  const minutes = Math.max(0, Math.floor((Date.now() - value.getTime()) / 60000));
-  if (minutes < 1) return "recién";
-  if (minutes === 1) return "hace 1 minuto";
-  return `hace ${minutes} minutos`;
+function formatRefreshStatus(date: Date, isOnline: boolean, isRefreshing: boolean) {
+  if (isRefreshing) return "Actualizando...";
+  if (!isOnline) {
+    const minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+    return minutes >= 2 ? `Sin conexión · datos de hace ${minutes} min` : "Sin conexión";
+  }
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 60) return "Actualizado recién";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 10) return `Actualizado hace ${minutes} min`;
+  return "Datos desactualizados · actualizá manualmente";
 }
