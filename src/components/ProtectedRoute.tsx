@@ -9,7 +9,8 @@ export function ProtectedRoute({ roles }: { roles?: UserRole[] }) {
   const location = useLocation();
   const effectiveRole = activeRole ?? role;
 
-  if (loading || (user && clinicLoading)) {
+  // 1. Auth todavía no resolvió (primer arranque antes de getSession).
+  if (loading) {
     return (
       <main className="grid min-h-screen place-items-center bg-clinic-surface">
         <div className="rounded-lg border border-clinic-line bg-white px-6 py-4 shadow-soft">
@@ -19,7 +20,23 @@ export function ProtectedRoute({ roles }: { roles?: UserRole[] }) {
     );
   }
 
+  // 2. Sin sesión → login.
   if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
+
+  // 3. Primera carga real: usuario conocido pero el contexto de clínica aún
+  //    no resolvió ni una vez (effectiveRole todavía null + clinicLoading).
+  //    No bloquear en refrescos de fondo donde effectiveRole ya está disponible.
+  if (!effectiveRole && clinicLoading) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-clinic-surface">
+        <div className="rounded-lg border border-clinic-line bg-white px-6 py-4 shadow-soft">
+          Cargando sesion...
+        </div>
+      </main>
+    );
+  }
+
+  // 4. Verificar permisos de ruta cuando ya hay suficiente contexto.
   if (roles && (!effectiveRole || !roles.includes(effectiveRole))) {
     return (
       <main className="grid min-h-screen place-items-center bg-clinic-surface px-4">
