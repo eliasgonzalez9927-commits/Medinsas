@@ -763,3 +763,24 @@ export type ClinicalEvolution = {
 export type ClinicalEvolutionWithProfessional = ClinicalEvolution & {
   professional: { id: string; name: string; last_name: string } | null;
 };
+
+export type ClinicalEvolutionDraftInput = {
+  clinic_id: string;
+  patient_id: string;
+  professional_id: string | null;
+  reason: string;
+  current_condition: string;
+  physical_exam: string;
+  diagnosis: string;
+  plan: string;
+  observations: string;
+};
+
+export type ClinicalEvolutionDraftUpdate = {
+  reason: string;
+  current_condition: string;
+  physical_exam: string;
+  diagnosis: string;
+  plan: string;
+  observations: string;
+};

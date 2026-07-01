@@ -34,6 +34,8 @@ import {
   PaymentSettings,
   PaymentWithRelations,
   ClinicalEvolutionWithProfessional,
+  ClinicalEvolutionDraftInput,
+  ClinicalEvolutionDraftUpdate,
   Professional,
   ProfessionalInput,
   ProfessionalWithRelations,
@@ -1084,6 +1086,72 @@ async function logAppointmentEvent(
 // ---------------------------------------------------------------------------
 // Registro clínico V1
 // ---------------------------------------------------------------------------
+
+export async function createClinicalEvolutionDraft(
+  input: ClinicalEvolutionDraftInput
+): Promise<ClinicalEvolutionWithProfessional> {
+  try {
+    const { data, error } = await supabase
+      .from("clinical_evolutions")
+      .insert({
+        clinic_id: input.clinic_id,
+        patient_id: input.patient_id,
+        professional_id: input.professional_id,
+        appointment_id: null,
+        reason: input.reason,
+        current_condition: input.current_condition,
+        physical_exam: input.physical_exam,
+        diagnosis: input.diagnosis,
+        plan: input.plan,
+        observations: input.observations,
+        status: "draft"
+      })
+      .select("*, professionals(id, name, last_name)")
+      .single();
+    if (error) throw error;
+    return { ...data, professional: (data as any).professionals ?? null } as ClinicalEvolutionWithProfessional;
+  } catch (error) {
+    console.error("Failed to create clinical evolution", error);
+    if (error instanceof Error && error.message.includes("row-level security")) {
+      throw new FriendlyDataError("No tenés permisos para modificar registros clínicos.");
+    }
+    throw new FriendlyDataError("No pudimos guardar el borrador. Intentá de nuevo.");
+  }
+}
+
+export async function updateClinicalEvolutionDraft(
+  id: string,
+  clinicId: string,
+  patientId: string,
+  input: ClinicalEvolutionDraftUpdate
+): Promise<ClinicalEvolutionWithProfessional> {
+  try {
+    const { data, error } = await supabase
+      .from("clinical_evolutions")
+      .update({
+        reason: input.reason,
+        current_condition: input.current_condition,
+        physical_exam: input.physical_exam,
+        diagnosis: input.diagnosis,
+        plan: input.plan,
+        observations: input.observations
+      })
+      .eq("id", id)
+      .eq("clinic_id", clinicId)
+      .eq("patient_id", patientId)
+      .eq("status", "draft")
+      .select("*, professionals(id, name, last_name)")
+      .single();
+    if (error) throw error;
+    return { ...data, professional: (data as any).professionals ?? null } as ClinicalEvolutionWithProfessional;
+  } catch (error) {
+    console.error("Failed to update clinical evolution", error);
+    if (error instanceof Error && error.message.includes("row-level security")) {
+      throw new FriendlyDataError("No tenés permisos para modificar registros clínicos.");
+    }
+    throw new FriendlyDataError("No pudimos actualizar el borrador. Intentá de nuevo.");
+  }
+}
 
 export async function getClinicalEvolutionsByPatient(
   clinicId: string,
