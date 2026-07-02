@@ -52,6 +52,23 @@ async function createInvitationHandler(req, res, next) {
     if (existingError) throw existingError;
     if (existingPending) return res.status(409).json({ error: "ALREADY_PENDING" });
 
+    if (payload.role === "professional" && !payload.professionalId) {
+      return res.status(400).json({ error: "PROFESSIONAL_REQUIRED" });
+    }
+
+    if (payload.professionalId) {
+      const { data: professional, error: profError } = await supabase
+        .from("professionals")
+        .select("id, clinic_id")
+        .eq("id", payload.professionalId)
+        .maybeSingle();
+      if (profError) throw profError;
+      if (!professional) return res.status(400).json({ error: "PROFESSIONAL_NOT_FOUND" });
+      if (professional.clinic_id !== payload.clinicId) {
+        return res.status(400).json({ error: "PROFESSIONAL_CLINIC_MISMATCH" });
+      }
+    }
+
     const rawToken = crypto.randomBytes(32).toString("base64url");
     const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + INVITATION_TTL_MS).toISOString();

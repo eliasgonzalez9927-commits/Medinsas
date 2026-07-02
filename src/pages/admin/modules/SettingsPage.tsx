@@ -228,7 +228,13 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
           ? "Tu rol no permite invitar usuarios a esta clínica."
           : code === "INVALID_PAYLOAD"
             ? "Revisá los datos del formulario, hay un campo inválido."
-            : "No pudimos invitar al usuario.";
+            : code === "PROFESSIONAL_REQUIRED"
+              ? "Para invitar un usuario profesional, es obligatorio seleccionar un profesional de la clínica."
+              : code === "PROFESSIONAL_NOT_FOUND"
+                ? "El profesional seleccionado no existe."
+                : code === "PROFESSIONAL_CLINIC_MISMATCH"
+                  ? "El profesional seleccionado no pertenece a esta clínica."
+                  : "No pudimos invitar al usuario.";
       setError(message);
     } finally {
       setSaving(false);
@@ -526,8 +532,16 @@ function HourRow({ disabled, hour, onSave }: { disabled: boolean; hour: ClinicHo
 function UsersPanel({ canManageUsers, currentUserId, disabled, invitations, locations, members, onCancelInvitation, onChangeRole, onUpdateProfessional, onInvite, onRefresh, professionals }: { canManageUsers: boolean; currentUserId: string; disabled: boolean; invitations: UserInvitation[]; locations: Location[]; members: ClinicMemberWithProfile[]; onCancelInvitation: (id: string) => void; onChangeRole: (id: string, role: "clinic_admin" | "admin" | "receptionist" | "professional") => void; onUpdateProfessional: (id: string, professionalId: string | null) => void; onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void; onRefresh: () => void; professionals: ProfessionalWithRelations[] }) {
   const [form, setForm] = useState({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
   const pendingInvitations = invitations.filter((invitation) => invitation.status === "pending");
+
+  const requiresProfessional = form.role === "professional";
+  const activeProfessionals = professionals.filter((p) => p.active);
+  const noProfessionalsAvailable = requiresProfessional && activeProfessionals.length === 0;
+  const missingProfessional = requiresProfessional && !form.professional_id;
+  const inviteBlocked = disabled || noProfessionalsAvailable || missingProfessional;
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (inviteBlocked) return;
     onInvite({ ...form, location_id: form.location_id || null, professional_id: form.professional_id || null });
     setForm({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
   }
@@ -538,10 +552,26 @@ function UsersPanel({ canManageUsers, currentUserId, disabled, invitations, loca
         <form onSubmit={submit} className="mt-5 grid gap-4">
           <Input label="Email" type="email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} required />
           <Input label="Nombre" value={form.full_name} onChange={(value) => setForm({ ...form, full_name: value })} required />
-          <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value })} options={invitableRoles.map((item) => ({ value: item, label: roleLabels[item] }))} />
+          <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value, professional_id: "" })} options={invitableRoles.map((item) => ({ value: item, label: roleLabels[item] }))} />
           <Select label="Sede opcional" value={form.location_id} onChange={(value) => setForm({ ...form, location_id: value })} options={[{ value: "", label: "Sin sede asignada" }, ...locations.map((item) => ({ value: item.id, label: item.name }))]} />
-          <Select label="Profesional asociado" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} options={[{ value: "", label: "Sin profesional" }, ...professionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))]} />
-          <Button disabled={disabled} type="submit" variant="primary">Enviar invitacion</Button>
+          <div className="grid gap-1.5">
+            <Select
+              label={requiresProfessional ? "Profesional asociado (obligatorio)" : "Profesional asociado"}
+              value={form.professional_id}
+              onChange={(value) => setForm({ ...form, professional_id: value })}
+              options={[
+                { value: "", label: requiresProfessional ? "Seleccioná un profesional…" : "Sin profesional" },
+                ...activeProfessionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))
+              ]}
+            />
+            {noProfessionalsAvailable && (
+              <Message tone="warning">No hay profesionales cargados. Creá un profesional antes de invitar un usuario con rol Profesional.</Message>
+            )}
+            {requiresProfessional && !noProfessionalsAvailable && missingProfessional && (
+              <p className="text-xs font-medium text-amber-700">Para invitar un usuario profesional, primero vinculalo a un profesional de la clínica.</p>
+            )}
+          </div>
+          <Button disabled={inviteBlocked} type="submit" variant="primary">Enviar invitacion</Button>
         </form>
       </SectionCard>
       <div className="grid gap-6">
@@ -606,14 +636,25 @@ function MemberRow({ canManageUsers, currentUserId, disabled, member, profession
     onRefresh();
   }
 
+  const profName = member.professionals
+    ? `Dr/a. ${member.professionals.name} ${member.professionals.last_name}`
+    : null;
+  const accountName = member.profiles?.full_name ?? member.user_id;
+  const locationLabel = member.locations?.name ?? "Sin sede";
+
+  const primaryName = isProfRole && profName ? profName : accountName;
+  const subtitle = isProfRole
+    ? profName
+      ? `Cuenta: ${accountName} · ${locationLabel}`
+      : `Sin profesional asociado · ${locationLabel}`
+    : locationLabel;
+
   return (
     <article className="px-5 py-4">
       <div className="grid gap-3 md:grid-cols-[1fr_140px_100px_120px_120px] md:items-center">
         <div>
-          <p className="font-semibold text-clinic-ink">{member.profiles?.full_name ?? member.user_id}</p>
-          <p className="text-sm text-clinic-muted">
-            {member.locations?.name ?? "Sin sede"} · {member.professionals ? `${member.professionals.name} ${member.professionals.last_name}` : "Sin profesional asociado"}
-          </p>
+          <p className="font-semibold text-clinic-ink">{primaryName}</p>
+          <p className="text-sm text-clinic-muted">{subtitle}</p>
         </div>
         <span className="text-sm font-medium">{roleLabels[member.role] ?? member.role}</span>
         <span className={`rounded-lg px-3 py-2 text-center text-xs font-semibold ${member.active ? "bg-emerald-50 text-emerald-700" : "bg-clinic-surface text-clinic-muted"}`}>
