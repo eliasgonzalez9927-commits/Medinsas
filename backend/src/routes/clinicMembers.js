@@ -14,6 +14,9 @@ const updateRoleSchema = z.object({
 clinicMembersRouter.patch("/api/clinic-members/:id/role", updateRoleHandler);
 clinicMembersRouter.patch("/clinic-members/:id/role", updateRoleHandler);
 
+clinicMembersRouter.patch("/api/clinic-members/:id/professional", updateProfessionalHandler);
+clinicMembersRouter.patch("/clinic-members/:id/professional", updateProfessionalHandler);
+
 async function updateRoleHandler(req, res, next) {
   try {
     const user = await authenticateUser(req);
@@ -53,6 +56,55 @@ async function updateRoleHandler(req, res, next) {
     const { data: updated, error: updateError } = await supabase
       .from("clinic_members")
       .update({ role: payload.role, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (updateError) throw updateError;
+
+    res.status(200).json({ ok: true, member: updated });
+  } catch (error) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: "INVALID_PAYLOAD" });
+    next(error);
+  }
+}
+
+const updateProfessionalSchema = z.object({
+  professionalId: z.string().uuid().nullable()
+});
+
+async function updateProfessionalHandler(req, res, next) {
+  try {
+    const user = await authenticateUser(req);
+    const id = String(req.params.id ?? "");
+    const payload = updateProfessionalSchema.parse(req.body ?? {});
+
+    const { data: target, error: targetError } = await supabase
+      .from("clinic_members")
+      .select("id, clinic_id, user_id, role, active")
+      .eq("id", id)
+      .maybeSingle();
+    if (targetError) throw targetError;
+    if (!target) return res.status(404).json({ error: "MEMBER_NOT_FOUND" });
+
+    const allowed = await canManageClinic(user.id, target.clinic_id);
+    if (!allowed) return res.status(403).json({ error: "FORBIDDEN" });
+
+    if (payload.professionalId !== null) {
+      const { data: professional, error: profError } = await supabase
+        .from("professionals")
+        .select("id, clinic_id")
+        .eq("id", payload.professionalId)
+        .maybeSingle();
+      if (profError) throw profError;
+      if (!professional) return res.status(400).json({ error: "PROFESSIONAL_NOT_FOUND" });
+      if (professional.clinic_id !== target.clinic_id) {
+        return res.status(400).json({ error: "PROFESSIONAL_CLINIC_MISMATCH" });
+      }
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from("clinic_members")
+      .update({ professional_id: payload.professionalId, updated_at: new Date().toISOString() })
       .eq("id", id)
       .select("*")
       .single();

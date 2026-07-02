@@ -18,7 +18,7 @@ import {
   updateLocation,
   upsertClinicHour
 } from "../../../lib/clinic-data";
-import { cancelInvitation, changeClinicMemberRole, createInvitation } from "../../../lib/invitations";
+import { cancelInvitation, changeClinicMemberRole, createInvitation, updateClinicMemberProfessional } from "../../../lib/invitations";
 import { getClinicNotificationSettings, updateClinicNotificationSettings } from "../../../lib/notifications";
 import { canManageClinic, canManageUsers } from "../../../lib/permissions";
 import { supabase } from "../../../lib/supabase";
@@ -285,6 +285,31 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
     }
   }
 
+  async function updateMemberProfessional(id: string, professionalId: string | null) {
+    if (!permissions.manageUsers) return;
+    setSaving(true);
+    setError("");
+    try {
+      await updateClinicMemberProfessional(id, professionalId);
+      setNotice("Profesional asociado actualizado.");
+      await load();
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "";
+      const message = code === "FORBIDDEN"
+        ? "No tenés permisos para editar esta vinculación."
+        : code === "MEMBER_NOT_FOUND"
+          ? "No encontramos ese usuario."
+          : code === "PROFESSIONAL_NOT_FOUND"
+            ? "El profesional seleccionado no existe."
+            : code === "PROFESSIONAL_CLINIC_MISMATCH"
+              ? "El profesional no pertenece a esta clínica."
+              : "No pudimos actualizar el profesional asociado.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <AdminPageShell
       description="Centro de administracion para datos de clinica, sedes, usuarios, notificaciones e integraciones."
@@ -334,6 +359,7 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
               members={members}
               onCancelInvitation={cancelUserInvitation}
               onChangeRole={changeMemberRole}
+              onUpdateProfessional={updateMemberProfessional}
               onInvite={inviteUser}
               onRefresh={load}
               professionals={professionals}
@@ -497,7 +523,7 @@ function HourRow({ disabled, hour, onSave }: { disabled: boolean; hour: ClinicHo
   );
 }
 
-function UsersPanel({ canManageUsers, currentUserId, disabled, invitations, locations, members, onCancelInvitation, onChangeRole, onInvite, onRefresh, professionals }: { canManageUsers: boolean; currentUserId: string; disabled: boolean; invitations: UserInvitation[]; locations: Location[]; members: ClinicMemberWithProfile[]; onCancelInvitation: (id: string) => void; onChangeRole: (id: string, role: "clinic_admin" | "admin" | "receptionist" | "professional") => void; onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void; onRefresh: () => void; professionals: ProfessionalWithRelations[] }) {
+function UsersPanel({ canManageUsers, currentUserId, disabled, invitations, locations, members, onCancelInvitation, onChangeRole, onUpdateProfessional, onInvite, onRefresh, professionals }: { canManageUsers: boolean; currentUserId: string; disabled: boolean; invitations: UserInvitation[]; locations: Location[]; members: ClinicMemberWithProfile[]; onCancelInvitation: (id: string) => void; onChangeRole: (id: string, role: "clinic_admin" | "admin" | "receptionist" | "professional") => void; onUpdateProfessional: (id: string, professionalId: string | null) => void; onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void; onRefresh: () => void; professionals: ProfessionalWithRelations[] }) {
   const [form, setForm] = useState({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
   const pendingInvitations = invitations.filter((invitation) => invitation.status === "pending");
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -535,7 +561,9 @@ function UsersPanel({ canManageUsers, currentUserId, disabled, invitations, loca
                 currentUserId={currentUserId}
                 disabled={disabled}
                 member={member}
+                professionals={professionals}
                 onChangeRole={onChangeRole}
+                onUpdateProfessional={onUpdateProfessional}
                 onRefresh={onRefresh}
               />
             ))}
@@ -565,25 +593,48 @@ function UsersPanel({ canManageUsers, currentUserId, disabled, invitations, loca
   );
 }
 
-function MemberRow({ canManageUsers, currentUserId, disabled, member, onChangeRole, onRefresh }: { canManageUsers: boolean; currentUserId: string; disabled: boolean; member: ClinicMemberWithProfile; onChangeRole: (id: string, role: "clinic_admin" | "admin" | "receptionist" | "professional") => void; onRefresh: () => void }) {
+const PROFESSIONAL_ROLES_SET = new Set(["professional", "doctor"]);
+
+function MemberRow({ canManageUsers, currentUserId, disabled, member, professionals, onChangeRole, onUpdateProfessional, onRefresh }: { canManageUsers: boolean; currentUserId: string; disabled: boolean; member: ClinicMemberWithProfile; professionals: ProfessionalWithRelations[]; onChangeRole: (id: string, role: "clinic_admin" | "admin" | "receptionist" | "professional") => void; onUpdateProfessional: (id: string, professionalId: string | null) => void; onRefresh: () => void }) {
   const [roleModalOpen, setRoleModalOpen] = useState(false);
+  const [professionalModalOpen, setProfessionalModalOpen] = useState(false);
+  const isProfRole = PROFESSIONAL_ROLES_SET.has(member.role);
+  const unlinked = isProfRole && !member.professional_id;
+
   async function toggle() {
     await updateClinicMember(member.id, { active: !member.active });
     onRefresh();
   }
+
   return (
-    <article className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_140px_100px_120px_120px] md:items-center">
-      <div>
-        <p className="font-semibold text-clinic-ink">{member.profiles?.full_name ?? member.user_id}</p>
-        <p className="text-sm text-clinic-muted">{member.locations?.name ?? "Sin sede"} · {member.professionals ? `${member.professionals.name} ${member.professionals.last_name}` : "Sin profesional asociado"}</p>
+    <article className="px-5 py-4">
+      <div className="grid gap-3 md:grid-cols-[1fr_140px_100px_120px_120px] md:items-center">
+        <div>
+          <p className="font-semibold text-clinic-ink">{member.profiles?.full_name ?? member.user_id}</p>
+          <p className="text-sm text-clinic-muted">
+            {member.locations?.name ?? "Sin sede"} · {member.professionals ? `${member.professionals.name} ${member.professionals.last_name}` : "Sin profesional asociado"}
+          </p>
+        </div>
+        <span className="text-sm font-medium">{roleLabels[member.role] ?? member.role}</span>
+        <span className={`rounded-lg px-3 py-2 text-center text-xs font-semibold ${member.active ? "bg-emerald-50 text-emerald-700" : "bg-clinic-surface text-clinic-muted"}`}>
+          {member.active ? "Activo" : "Inactivo"}
+        </span>
+        <Button disabled={disabled} onClick={toggle}>{member.active ? "Desactivar" : "Activar"}</Button>
+        {canManageUsers && (
+          <Button disabled={disabled} onClick={() => setRoleModalOpen(true)}>Cambiar rol</Button>
+        )}
       </div>
-      <span className="text-sm font-medium">{roleLabels[member.role] ?? member.role}</span>
-      <span className={`rounded-lg px-3 py-2 text-center text-xs font-semibold ${member.active ? "bg-emerald-50 text-emerald-700" : "bg-clinic-surface text-clinic-muted"}`}>
-        {member.active ? "Activo" : "Inactivo"}
-      </span>
-      <Button disabled={disabled} onClick={toggle}>{member.active ? "Desactivar" : "Activar"}</Button>
-      {canManageUsers && (
-        <Button disabled={disabled} onClick={() => setRoleModalOpen(true)}>Cambiar rol</Button>
+      {canManageUsers && isProfRole && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {unlinked && (
+            <p className="text-xs font-medium text-amber-700">
+              Este usuario profesional todavía no está vinculado a un profesional.
+            </p>
+          )}
+          <Button disabled={disabled} onClick={() => setProfessionalModalOpen(true)}>
+            {member.professional_id ? "Editar profesional asociado" : "Vincular profesional"}
+          </Button>
+        </div>
       )}
       {roleModalOpen && (
         <ChangeRoleModal
@@ -596,7 +647,59 @@ function MemberRow({ canManageUsers, currentUserId, disabled, member, onChangeRo
           }}
         />
       )}
+      {professionalModalOpen && (
+        <LinkProfessionalModal
+          member={member}
+          professionals={professionals}
+          onClose={() => setProfessionalModalOpen(false)}
+          onConfirm={(professionalId) => {
+            setProfessionalModalOpen(false);
+            onUpdateProfessional(member.id, professionalId);
+          }}
+        />
+      )}
     </article>
+  );
+}
+
+function LinkProfessionalModal({ member, professionals, onClose, onConfirm }: { member: ClinicMemberWithProfile; professionals: ProfessionalWithRelations[]; onClose: () => void; onConfirm: (professionalId: string | null) => void }) {
+  const [selectedId, setSelectedId] = useState<string>(member.professional_id ?? "");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <h2 className="text-lg font-semibold text-clinic-ink">Vincular profesional</h2>
+        <div className="mt-4 grid gap-3 text-sm">
+          <div>
+            <span className="text-clinic-muted">Usuario</span>
+            <p className="font-medium text-clinic-ink">{member.profiles?.full_name ?? member.user_id}</p>
+          </div>
+          <div>
+            <span className="text-clinic-muted">Rol</span>
+            <p className="font-medium text-clinic-ink">{roleLabels[member.role] ?? member.role}</p>
+          </div>
+          <Select
+            label="Profesional asociado"
+            value={selectedId}
+            onChange={setSelectedId}
+            options={[
+              { value: "", label: "Sin profesional asociado" },
+              ...professionals.filter((p) => p.active).map((p) => ({ value: p.id, label: `${p.name} ${p.last_name}` }))
+            ]}
+          />
+        </div>
+        <div className="mt-5 flex justify-end gap-3">
+          <Button onClick={onClose}>Cancelar</Button>
+          <Button
+            disabled={selectedId === (member.professional_id ?? "")}
+            onClick={() => onConfirm(selectedId || null)}
+            variant="primary"
+          >
+            Guardar cambio
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

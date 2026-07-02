@@ -75,6 +75,21 @@ export async function cancelInvitation(id: string) {
   return body as { ok: true; invitation: { id: string; email: string; role: string; status: string; expires_at: string | null } };
 }
 
+export async function updateClinicMemberProfessional(
+  id: string,
+  professionalId: string | null
+) {
+  const headers = await authHeader();
+  const response = await fetch(`/api/clinic-members/${encodeURIComponent(id)}/professional`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ professionalId })
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || "PROFESSIONAL_UPDATE_FAILED");
+  return body as { ok: true; member: Record<string, unknown> };
+}
+
 export async function changeClinicMemberRole(
   id: string,
   role: "clinic_admin" | "admin" | "receptionist" | "professional"
