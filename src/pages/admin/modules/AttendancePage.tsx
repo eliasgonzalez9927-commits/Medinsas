@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ClipboardList } from "lucide-react";
 import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import {
@@ -40,6 +40,7 @@ const EMPTY_FIELDS: ClinicalEvolutionDraftUpdate = {
 
 export function AttendancePage() {
   const { appointmentId } = useParams<{ appointmentId: string }>();
+  const navigate = useNavigate();
   const { activeClinicId, loading: clinicLoading, activeMembership, activeRole } = useActiveClinic();
   const canWrite = canWriteClinicalRecords(activeRole);
 
@@ -403,6 +404,27 @@ export function AttendancePage() {
               {closeError && !showCloseConfirm && (
                 <div className="mx-5 mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {closeError}
+                </div>
+              )}
+
+              {/* Closed state — next actions */}
+              {evolutionIsClosed && !evolutionBlocked && (
+                <div className="flex flex-wrap items-center gap-3 border-t border-clinic-line bg-[#f6faf9] px-5 py-4">
+                  <p className="w-full text-sm text-clinic-muted">
+                    Esta evolución quedó registrada en el Registro clínico del paciente y no puede modificarse.
+                  </p>
+                  <button
+                    onClick={() => navigate(`/admin/registro-clinico/${appointment.patient_id}`)}
+                    className="rounded-lg bg-clinic-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90"
+                  >
+                    Ver registro clínico
+                  </button>
+                  <Link
+                    to="/admin/agenda"
+                    className="rounded-lg border border-clinic-line px-4 py-2 text-sm font-medium text-clinic-ink transition-colors hover:bg-clinic-surface"
+                  >
+                    {(activeRole === "professional" || activeRole === "doctor") ? "Volver a Mi agenda" : "Volver a Agenda"}
+                  </Link>
                 </div>
               )}
 
