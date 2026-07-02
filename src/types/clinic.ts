@@ -138,6 +138,10 @@ export type Appointment = {
   payment_required?: boolean;
   created_at: string;
   updated_at?: string;
+  attention_started_at?: string | null;
+  attention_started_by?: string | null;
+  attention_finished_at?: string | null;
+  attention_finished_by?: string | null;
 };
 
 export type AppointmentPaymentStatus =

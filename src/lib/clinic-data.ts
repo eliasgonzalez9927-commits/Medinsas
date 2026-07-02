@@ -1242,6 +1242,51 @@ export async function closeClinicalEvolutionDraft(
   }
 }
 
+export async function startAttention(
+  appointmentId: string,
+  clinicId: string
+): Promise<{ id: string; attention_started_at: string; attention_started_by: string; attention_finished_at: string | null; attention_finished_by: string | null; updated_at: string }> {
+  try {
+    const { data, error } = await supabase.rpc("start_attention", {
+      p_appointment_id: appointmentId,
+      p_clinic_id: clinicId
+    });
+    if (error) throw error;
+    if (!data) throw new FriendlyDataError("No se pudo iniciar la atención.");
+    return data as any;
+  } catch (error) {
+    console.error("Failed to start attention", error);
+    if (error instanceof FriendlyDataError) throw error;
+    const msg = error instanceof Error ? error.message : "";
+    if (msg.includes("ALREADY_STARTED")) throw new FriendlyDataError("Esta atención ya fue iniciada.");
+    if (msg.includes("FORBIDDEN")) throw new FriendlyDataError("No tenés permisos para iniciar esta atención.");
+    throw new FriendlyDataError("No pudimos iniciar la atención. Intentá de nuevo.");
+  }
+}
+
+export async function finishAttention(
+  appointmentId: string,
+  clinicId: string
+): Promise<{ id: string; attention_started_at: string; attention_started_by: string; attention_finished_at: string; attention_finished_by: string; updated_at: string }> {
+  try {
+    const { data, error } = await supabase.rpc("finish_attention", {
+      p_appointment_id: appointmentId,
+      p_clinic_id: clinicId
+    });
+    if (error) throw error;
+    if (!data) throw new FriendlyDataError("No se pudo finalizar la atención.");
+    return data as any;
+  } catch (error) {
+    console.error("Failed to finish attention", error);
+    if (error instanceof FriendlyDataError) throw error;
+    const msg = error instanceof Error ? error.message : "";
+    if (msg.includes("NOT_STARTED")) throw new FriendlyDataError("La atención no fue iniciada todavía.");
+    if (msg.includes("ALREADY_FINISHED")) throw new FriendlyDataError("Esta atención ya fue finalizada.");
+    if (msg.includes("FORBIDDEN")) throw new FriendlyDataError("No tenés permisos para finalizar esta atención.");
+    throw new FriendlyDataError("No pudimos finalizar la atención. Intentá de nuevo.");
+  }
+}
+
 export async function getClinicalEvolutionsByPatient(
   clinicId: string,
   patientId: string
