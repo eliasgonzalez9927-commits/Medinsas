@@ -195,31 +195,15 @@ export function AttendancePage() {
           className="flex w-fit items-center gap-1.5 text-sm text-clinic-muted transition-colors hover:text-clinic-brand"
         >
           <ArrowLeft size={15} />
-          Volver a agenda
+          {(activeRole === "professional" || activeRole === "doctor") ? "Volver a Mi agenda" : "Volver a Agenda"}
         </Link>
 
         {/* Page header */}
         <section className="flex flex-col gap-1">
-          <p className="text-sm font-semibold text-clinic-brand">Atención médica</p>
-          <h1 className="text-3xl font-semibold tracking-normal text-clinic-ink">
-            {loading || !appointment
-              ? "Cargando…"
-              : appointment.patient
-                ? `${appointment.patient.first_name} ${appointment.patient.last_name}`
-                : "Paciente sin vincular"}
-          </h1>
-          {appointment?.patient && (
-            <p className="mt-1 text-sm text-clinic-muted">
-              {[
-                appointment.patient.document_number ? `DNI ${appointment.patient.document_number}` : null,
-                patientAge(appointment.patient.birth_date),
-                appointment.patient.insurance ? `Cobertura: ${appointment.patient.insurance}` : null,
-                appointment.patient.phone,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-          )}
+          <h1 className="text-3xl font-semibold tracking-normal text-clinic-ink">Atender paciente</h1>
+          <p className="mt-0.5 text-sm text-clinic-muted">
+            Completá la evolución clínica de esta atención. El registro previo del paciente queda disponible como contexto.
+          </p>
         </section>
 
         {/* Page-level error */}
@@ -232,6 +216,25 @@ export function AttendancePage() {
         {/* Appointment header card */}
         {!loading && appointment && (
           <SectionCard className="overflow-hidden">
+            {appointment.patient && (
+              <div className="border-b border-clinic-line px-5 py-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-clinic-muted">Paciente</p>
+                <p className="mt-0.5 text-sm font-semibold text-clinic-ink">
+                  {appointment.patient.first_name} {appointment.patient.last_name}
+                </p>
+                {(() => {
+                  const meta = [
+                    appointment.patient.document_number ? `DNI ${appointment.patient.document_number}` : null,
+                    patientAge(appointment.patient.birth_date),
+                    appointment.patient.insurance ? `Cobertura: ${appointment.patient.insurance}` : null,
+                    appointment.patient.phone,
+                  ].filter(Boolean);
+                  return meta.length > 0
+                    ? <p className="mt-0.5 text-xs text-clinic-muted">{meta.join(" · ")}</p>
+                    : null;
+                })()}
+              </div>
+            )}
             <div className="grid gap-4 px-5 py-4 sm:grid-cols-2 lg:grid-cols-4">
               <AppointmentMeta label="Fecha y hora" value={formatAppointmentDate(appointment.starts_at)} />
               <AppointmentMeta label="Profesional" value={appointment.professional ? `${appointment.professional.name} ${appointment.professional.last_name}` : "—"} />
@@ -271,7 +274,11 @@ export function AttendancePage() {
               <div className="flex items-start justify-between border-b border-clinic-line px-5 py-4">
                 <div>
                   <p className="font-semibold text-clinic-ink">
-                    {currentEvolution ? "Evolución de este turno" : "Nueva evolución"}
+                    {evolutionIsClosed
+                      ? "Evolución de esta atención"
+                      : currentEvolution
+                        ? "Borrador de esta atención"
+                        : "Nueva evolución de esta atención"}
                   </p>
                   <p className="mt-0.5 text-xs text-clinic-muted">
                     {evolutionBlocked
@@ -281,8 +288,8 @@ export function AttendancePage() {
                         : !canWrite
                           ? "Solo lectura — no tenés permisos para modificar registros clínicos."
                           : currentEvolution
-                            ? "Borrador · podés seguir editando hasta cerrar la evolución."
-                            : "Se guardará como borrador asociado a este turno."}
+                            ? "Borrador guardado. Podés seguir editando esta evolución hasta cerrarla."
+                            : "Se guardará como borrador. Podés seguir editando antes de cerrar la evolución."}
                   </p>
                 </div>
                 {currentEvolution && (
@@ -327,13 +334,13 @@ export function AttendancePage() {
                     disabled={saving}
                     className="flex items-center gap-2 rounded-lg bg-clinic-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {saving ? "Guardando…" : currentEvolution ? "Guardar cambios" : "Guardar borrador"}
+                    {saving ? "Guardando…" : "Guardar borrador"}
                   </button>
                   <Link
                     to="/admin/agenda"
                     className="rounded-lg border border-clinic-line px-4 py-2 text-sm font-medium text-clinic-ink transition-colors hover:bg-clinic-surface"
                   >
-                    Volver a agenda
+                    {(activeRole === "professional" || activeRole === "doctor") ? "Volver a Mi agenda" : "Volver a Agenda"}
                   </Link>
                 </div>
               )}
@@ -344,14 +351,17 @@ export function AttendancePage() {
         {/* Patient history */}
         {!loading && !pageError && (
           <section className="flex flex-col gap-3">
-            <p className="text-sm font-semibold text-clinic-ink">
-              Historial clínico previo
-              {history.length > 0 && (
-                <span className="ml-2 font-normal text-clinic-muted">
-                  ({history.length} evolución{history.length !== 1 ? "es" : ""})
-                </span>
-              )}
-            </p>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+              <p className="text-sm font-semibold text-clinic-ink">
+                Registro clínico previo
+                {history.length > 0 && (
+                  <span className="ml-2 font-normal text-clinic-muted">
+                    ({history.length} evolución{history.length !== 1 ? "es" : ""})
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-clinic-muted">Solo lectura — contexto de atenciones anteriores.</p>
+            </div>
 
             {history.length === 0 ? (
               <SectionCard className="flex items-center gap-3 px-5 py-8 text-sm text-clinic-muted">
