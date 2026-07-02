@@ -77,7 +77,7 @@ const today = new Date().toISOString().slice(0, 10);
 
 export function AgendaPage() {
   const { role, user } = useAuth();
-  const { activeClinic: clinic, loading: clinicLoading, activeRole } = useActiveClinic();
+  const { activeClinic: clinic, loading: clinicLoading, activeRole, activeMembership } = useActiveClinic();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
@@ -181,6 +181,21 @@ export function AgendaPage() {
   useEffect(() => {
     if (clinic) loadBase();
   }, [clinic?.id]);
+
+  const isProfessionalRole = activeRole === "professional" || activeRole === "doctor";
+  const linkedProfessionalId = activeMembership?.professional_id ?? null;
+
+  // Auto-filtrar agenda para usuarios con rol professional/doctor.
+  // Se ejecuta cuando el membership ya está disponible.
+  useEffect(() => {
+    if (!isProfessionalRole) return;
+    if (linkedProfessionalId) {
+      setProfessionalId(linkedProfessionalId);
+    } else {
+      // Sin vínculo: lista vacía (filtro imposible de satisfacer).
+      setProfessionalId("__unlinked__");
+    }
+  }, [isProfessionalRole, linkedProfessionalId]);
 
   useEffect(() => {
     setSearchQuery(searchParams.get("search") ?? "");
@@ -760,9 +775,14 @@ export function AgendaPage() {
           </div>
         </div>
         <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="today" onChange={(nextRange) => { setRange(nextRange); setSelectedDate(nextRange.dateFrom); }} />
+        {isProfessionalRole && !linkedProfessionalId && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+            Tu usuario profesional no está vinculado a un profesional de la clínica. Pedile al administrador que complete la vinculación desde Configuración → Usuarios y permisos.
+          </div>
+        )}
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_180px]">
-          <Select label="Profesional" value={professionalId} onChange={setProfessionalId}>
-            <option value="all">Todos</option>
+          <Select label="Profesional" value={professionalId} onChange={isProfessionalRole ? () => {} : setProfessionalId} disabled={isProfessionalRole}>
+            {!isProfessionalRole && <option value="all">Todos</option>}
             {professionals.map((professional) => (
               <option key={professional.id} value={professional.id}>
                 Dr/a. {professional.name} {professional.last_name}
@@ -983,12 +1003,14 @@ function Select({
   value,
   onChange,
   required = false,
+  disabled = false,
   children
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
+  disabled?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -998,7 +1020,8 @@ function Select({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         required={required}
-        className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+        disabled={disabled}
+        className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-clinic-surface disabled:text-clinic-muted"
       >
         {children}
       </select>

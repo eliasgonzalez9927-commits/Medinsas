@@ -45,7 +45,7 @@ async function fetchProfile(userId: string) {
 async function fetchClinicMemberships(userId: string) {
   const { data, error } = await supabase
     .from("clinic_members")
-    .select("id, clinic_id, user_id, role, active, created_at, updated_at")
+    .select("id, clinic_id, user_id, role, professional_id, active, created_at, updated_at")
     .eq("user_id", userId)
     .eq("active", true)
     .order("created_at", { ascending: true });
