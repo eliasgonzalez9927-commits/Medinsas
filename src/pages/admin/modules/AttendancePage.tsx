@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, ClipboardList } from "lucide-react";
 import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import {
+  closeClinicalEvolutionDraft,
   createClinicalEvolutionDraft,
   getAppointmentById,
   getClinicalEvolutionByAppointment,
@@ -52,6 +53,9 @@ export function AttendancePage() {
   const [fields, setFields] = useState<ClinicalEvolutionDraftUpdate>(EMPTY_FIELDS);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState("");
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
 
   const formRef = useRef<HTMLDivElement>(null);
@@ -178,6 +182,75 @@ export function AttendancePage() {
       setSaveError(err instanceof Error ? err.message : "No pudimos guardar el borrador.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleCloseEvolution() {
+    if (!activeClinicId || !appointmentId || !appointment) return;
+    setClosing(true);
+    setCloseError("");
+
+    try {
+      let idToClose: string;
+
+      if (!currentEvolution) {
+        // Sin borrador previo — crear primero y luego cerrar en secuencia
+        let latest: ClinicalEvolutionWithProfessional | null;
+        try {
+          latest = await getClinicalEvolutionByAppointment(appointmentId, activeClinicId);
+        } catch (checkErr: unknown) {
+          const msg = checkErr instanceof Error ? checkErr.message : "No pudimos verificar las evoluciones de este turno.";
+          setEvolutionError(msg);
+          setCloseError(msg);
+          return;
+        }
+
+        if (latest) {
+          // Otra sesión creó un borrador entre medio — adoptarlo
+          setCurrentEvolution(latest);
+          setFields({
+            reason: latest.reason ?? "",
+            current_condition: latest.current_condition ?? "",
+            physical_exam: latest.physical_exam ?? "",
+            diagnosis: latest.diagnosis ?? "",
+            plan: latest.plan ?? "",
+            observations: latest.observations ?? "",
+          });
+          setCloseError("Ya existe un borrador para este turno (creado por otra sesión). Revisá los campos y volvé a intentar cerrar.");
+          return;
+        }
+
+        const professionalId =
+          appointment.professional_id ??
+          activeMembership?.professional_id ??
+          null;
+
+        const created = await createClinicalEvolutionDraft({
+          clinic_id: activeClinicId,
+          patient_id: appointment.patient_id,
+          appointment_id: appointmentId,
+          professional_id: professionalId,
+          ...fields,
+        });
+        idToClose = created.id;
+        setCurrentEvolution(created);
+      } else {
+        idToClose = currentEvolution.id;
+      }
+
+      const closed = await closeClinicalEvolutionDraft(
+        idToClose,
+        activeClinicId,
+        appointment.patient_id,
+        fields
+      );
+      setCurrentEvolution(closed);
+      setShowCloseConfirm(false);
+      setSuccessMsg("Evolución cerrada.");
+    } catch (err: unknown) {
+      setCloseError(err instanceof Error ? err.message : "No pudimos cerrar la evolución.");
+    } finally {
+      setClosing(false);
     }
   }
 
@@ -326,15 +399,29 @@ export function AttendancePage() {
                 </div>
               )}
 
+              {/* Close error (when modal is not open) */}
+              {closeError && !showCloseConfirm && (
+                <div className="mx-5 mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {closeError}
+                </div>
+              )}
+
               {/* Actions */}
               {!formReadOnly && (
-                <div className="flex items-center gap-3 border-t border-clinic-line px-5 py-4">
+                <div className="flex flex-wrap items-center gap-3 border-t border-clinic-line px-5 py-4">
                   <button
                     onClick={handleSave}
-                    disabled={saving}
+                    disabled={saving || closing}
                     className="flex items-center gap-2 rounded-lg bg-clinic-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {saving ? "Guardando…" : "Guardar borrador"}
+                  </button>
+                  <button
+                    onClick={() => { setCloseError(""); setShowCloseConfirm(true); }}
+                    disabled={saving || closing}
+                    className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {currentEvolution ? "Cerrar evolución" : "Guardar y cerrar evolución"}
                   </button>
                   <Link
                     to="/admin/agenda"
@@ -380,6 +467,39 @@ export function AttendancePage() {
           </section>
         )}
       </main>
+
+      {/* Close evolution confirmation modal */}
+      {showCloseConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <p className="font-semibold text-clinic-ink">¿Cerrar esta evolución?</p>
+            <p className="mt-2 text-sm text-clinic-muted">
+              Al cerrar esta evolución, quedará registrada como cerrada y no podrá modificarse. Esta acción no puede deshacerse.
+            </p>
+            {closeError && (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {closeError}
+              </div>
+            )}
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => { setShowCloseConfirm(false); setCloseError(""); }}
+                disabled={closing}
+                className="rounded-lg border border-clinic-line px-4 py-2 text-sm font-medium text-clinic-ink transition-colors hover:bg-clinic-surface disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCloseEvolution}
+                disabled={closing}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {closing ? "Cerrando…" : "Cerrar evolución"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

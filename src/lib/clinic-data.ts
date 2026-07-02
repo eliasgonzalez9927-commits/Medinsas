@@ -1204,6 +1204,44 @@ export async function updateClinicalEvolutionDraft(
   }
 }
 
+export async function closeClinicalEvolutionDraft(
+  id: string,
+  clinicId: string,
+  patientId: string,
+  input: ClinicalEvolutionDraftUpdate
+): Promise<ClinicalEvolutionWithProfessional> {
+  try {
+    const { data, error } = await supabase
+      .from("clinical_evolutions")
+      .update({
+        reason: input.reason,
+        current_condition: input.current_condition,
+        physical_exam: input.physical_exam,
+        diagnosis: input.diagnosis,
+        plan: input.plan,
+        observations: input.observations,
+        status: "closed"
+        // closed_at y closed_by los completa el trigger automáticamente
+      })
+      .eq("id", id)
+      .eq("clinic_id", clinicId)
+      .eq("patient_id", patientId)
+      .eq("status", "draft")
+      .select("*, professionals(id, name, last_name)")
+      .single();
+    if (error) throw error;
+    if (!data) throw new FriendlyDataError("La evolución no pudo cerrarse. Es posible que ya estuviera cerrada.");
+    return { ...data, professional: (data as any).professionals ?? null } as ClinicalEvolutionWithProfessional;
+  } catch (error) {
+    console.error("Failed to close clinical evolution", error);
+    if (error instanceof FriendlyDataError) throw error;
+    if (error instanceof Error && error.message.includes("row-level security")) {
+      throw new FriendlyDataError("No tenés permisos para cerrar este registro clínico.");
+    }
+    throw new FriendlyDataError("No pudimos cerrar la evolución. Intentá de nuevo.");
+  }
+}
+
 export async function getClinicalEvolutionsByPatient(
   clinicId: string,
   patientId: string
