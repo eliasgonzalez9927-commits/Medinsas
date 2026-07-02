@@ -1,6 +1,6 @@
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ClipboardList, Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
+import { ChevronDown, ClipboardList, Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
@@ -39,6 +39,7 @@ import {
   ProfessionalWithRelations,
   ServiceWithRelations
 } from "../../../types/clinic";
+import { UserRole } from "../../../types/database";
 import { AdminPageShell } from "./AdminPageShell";
 import { useAutoRefresh } from "../../../hooks/useAutoRefresh";
 
@@ -74,6 +75,145 @@ type DateAvailability = {
 };
 
 const today = new Date().toISOString().slice(0, 10);
+
+type ActionItem = {
+  label: string;
+  icon?: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+};
+
+type AppointmentActionsMenuProps = {
+  appointment: AppointmentWithRelations;
+  activeRole: UserRole | null;
+  isProfessionalRole: boolean;
+  paymentLinks: Record<string, string>;
+  onGeneratePaymentLink: () => void;
+  onCopyPaymentLink: () => void;
+  onCopyWhatsApp: () => void;
+  onOpenWhatsApp: () => void;
+  onConfirm: () => void;
+  onCompleted: () => void;
+  onNoShow: () => void;
+  onCancel: () => void;
+  onAttend: () => void;
+};
+
+function AppointmentActionsMenu({
+  appointment,
+  activeRole,
+  isProfessionalRole,
+  paymentLinks,
+  onGeneratePaymentLink,
+  onCopyPaymentLink,
+  onCopyWhatsApp,
+  onOpenWhatsApp,
+  onConfirm,
+  onCompleted,
+  onNoShow,
+  onCancel,
+  onAttend,
+}: AppointmentActionsMenuProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onOutsideClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onOutsideClick);
+    return () => document.removeEventListener("mousedown", onOutsideClick);
+  }, [open]);
+
+  const isPlatformAdmin = activeRole === "platform_admin";
+  const isStatusActive = !["cancelled", "completed"].includes(appointment.status);
+  const canAttend = canWriteClinicalRecords(activeRole) && !["cancelled", "completed", "no_show"].includes(appointment.status);
+  const hasPhone = Boolean(appointment.patient?.phone);
+
+  const allActions: ActionItem[] = [
+    { label: "Generar link de pago", icon: <CreditCard size={14} />, onClick: onGeneratePaymentLink },
+    ...(paymentLinks[appointment.id]
+      ? [{ label: "Copiar link de pago", icon: <Copy size={14} />, onClick: onCopyPaymentLink }]
+      : []),
+    ...(appointment.status === "pending"
+      ? [{ label: "Confirmar", onClick: onConfirm }]
+      : []),
+    { label: "Copiar mensaje WhatsApp", icon: <Copy size={14} />, onClick: onCopyWhatsApp, disabled: !hasPhone },
+    { label: "Abrir WhatsApp", icon: <MessageCircle size={14} />, onClick: onOpenWhatsApp, disabled: !hasPhone },
+    ...(canAttend ? [{ label: "Atender", icon: <ClipboardList size={14} />, onClick: onAttend }] : []),
+    ...(isStatusActive
+      ? [
+          { label: "Marcar atendido", onClick: onCompleted },
+          { label: "No asistió", onClick: onNoShow },
+          { label: "Cancelar", onClick: onCancel },
+        ]
+      : []),
+  ];
+
+  let primaryActions: ActionItem[] = [];
+  let secondaryActions: ActionItem[] = allActions;
+
+  if (isProfessionalRole) {
+    primaryActions = canAttend
+      ? [{ label: "Atender", icon: <ClipboardList size={16} />, onClick: onAttend }]
+      : [];
+    secondaryActions = allActions.filter((a) => a.label !== "Atender");
+  } else if (!isPlatformAdmin) {
+    primaryActions = [
+      ...(appointment.status === "pending" ? [{ label: "Confirmar", onClick: onConfirm }] : []),
+      { label: "Abrir WhatsApp", icon: <MessageCircle size={16} />, onClick: onOpenWhatsApp, disabled: !hasPhone },
+    ];
+    secondaryActions = allActions.filter((a) => a.label !== "Confirmar" && a.label !== "Abrir WhatsApp");
+  }
+
+  function run(action: ActionItem) {
+    if (action.disabled) return;
+    action.onClick();
+    setOpen(false);
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {primaryActions.map((action) => (
+        <Button
+          key={action.label}
+          icon={action.icon}
+          onClick={action.onClick}
+          disabled={action.disabled}
+          variant={action.label === "Atender" ? "primary" : "secondary"}
+        >
+          {action.label}
+        </Button>
+      ))}
+      {secondaryActions.length > 0 && (
+        <div ref={ref} className="relative">
+          <Button onClick={() => setOpen((prev) => !prev)} aria-haspopup="true" aria-expanded={open}>
+            Más acciones <ChevronDown size={16} />
+          </Button>
+          {open && (
+            <div className="absolute right-0 top-full z-20 mt-1 min-w-[190px] rounded-xl border border-clinic-line bg-white py-1 shadow-[0_4px_16px_rgba(13,54,66,0.08)]">
+              {secondaryActions.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  disabled={action.disabled}
+                  onClick={() => run(action)}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium text-clinic-ink transition hover:bg-[#e6f4f1] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {action.icon}
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function AgendaPage() {
   const { role, user } = useAuth();
@@ -864,56 +1004,24 @@ export function AgendaPage() {
                   <AppointmentStatusBadge status={appointment.status} />
                   <PaymentStatusBadge status={appointment.payment_status ?? "unpaid"} />
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button icon={<CreditCard size={16} />} onClick={() => generatePaymentLink(appointment)}>
-                    Generar link
-                  </Button>
-                  {paymentLinks[appointment.id] && (
-                    <Button
-                      icon={<Copy size={16} />}
-                      onClick={() => {
-                        navigator.clipboard?.writeText(paymentLinks[appointment.id]);
-                        setNotice("Link copiado.");
-                      }}
-                    >
-                      Copiar link
-                    </Button>
-                  )}
-                  {appointment.status === "pending" && (
-                    <Button onClick={() => handleStatus(appointment.id, "confirm")}>Confirmar</Button>
-                  )}
-                  <Button
-                    icon={<Copy size={16} />}
-                    onClick={() => copyWhatsAppMessage(appointment)}
-                    title={appointment.patient?.phone ? "Copiar mensaje para WhatsApp" : "El paciente no tiene teléfono cargado."}
-                    disabled={!appointment.patient?.phone}
-                  >
-                    Copiar mensaje
-                  </Button>
-                  <Button
-                    icon={<MessageCircle size={16} />}
-                    onClick={() => openWhatsApp(appointment)}
-                    title={appointment.patient?.phone ? "Abrir WhatsApp" : "El paciente no tiene teléfono cargado."}
-                    disabled={!appointment.patient?.phone}
-                  >
-                    Abrir WhatsApp
-                  </Button>
-                  {canWriteClinicalRecords(activeRole) && !["cancelled", "completed", "no_show"].includes(appointment.status) && (
-                    <Button
-                      icon={<ClipboardList size={16} />}
-                      onClick={() => navigate(`/admin/atencion/${appointment.id}`)}
-                    >
-                      Atender
-                    </Button>
-                  )}
-                  {!["cancelled", "completed"].includes(appointment.status) && (
-                    <>
-                      <Button onClick={() => handleStatus(appointment.id, "completed")}>Atendido</Button>
-                      <Button onClick={() => handleStatus(appointment.id, "no_show")}>No asistio</Button>
-                      <Button onClick={() => handleStatus(appointment.id, "cancel")}>Cancelar</Button>
-                    </>
-                  )}
-                </div>
+                <AppointmentActionsMenu
+                  appointment={appointment}
+                  activeRole={activeRole}
+                  isProfessionalRole={isProfessionalRole}
+                  paymentLinks={paymentLinks}
+                  onGeneratePaymentLink={() => generatePaymentLink(appointment)}
+                  onCopyPaymentLink={() => {
+                    navigator.clipboard?.writeText(paymentLinks[appointment.id]);
+                    setNotice("Link copiado.");
+                  }}
+                  onCopyWhatsApp={() => copyWhatsAppMessage(appointment)}
+                  onOpenWhatsApp={() => openWhatsApp(appointment)}
+                  onConfirm={() => handleStatus(appointment.id, "confirm")}
+                  onCompleted={() => handleStatus(appointment.id, "completed")}
+                  onNoShow={() => handleStatus(appointment.id, "no_show")}
+                  onCancel={() => handleStatus(appointment.id, "cancel")}
+                  onAttend={() => navigate(`/admin/atencion/${appointment.id}`)}
+                />
               </article>
             ))}
           </div>
