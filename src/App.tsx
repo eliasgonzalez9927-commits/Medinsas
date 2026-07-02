@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useActiveClinic } from "./contexts/ActiveClinicContext";
 import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { ADMIN_ROLES, CLINIC_ADMIN_ROLES, CLINICAL_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-roles";
+import { ADMIN_ROLES, CLINIC_ADMIN_ROLES, CLINICAL_ROLES, PROFESSIONAL_ROLES, STAFF_ROLES, getPostLoginPath } from "./lib/auth-roles";
 import { AcceptInvitation } from "./pages/auth/AcceptInvitation";
 import { ForgotPassword } from "./pages/auth/ForgotPassword";
 import { Login } from "./pages/auth/Login";
@@ -73,7 +73,7 @@ export function App() {
         <Route path="/admin/profesionales" element={<ProfessionalsPage />} />
         <Route path="/admin/profesionales/:id" element={<ProfessionalProfilePage />} />
         <Route path="/admin/medicos" element={<ProfessionalsPage />} />
-        <Route path="/admin/pacientes" element={<PatientsPage />} />
+        {/* /admin/pacientes se mueve al bloque STAFF_ROLES debajo */}
         <Route path="/admin/servicios" element={<ServicesPage />} />
         <Route path="/admin/tratamientos" element={<ServicesPage />} />
         <Route path="/admin/booking" element={<OnlineBookingPage />} />
@@ -115,6 +115,11 @@ export function App() {
         <Route path="/admin/configuracion/notificaciones" element={<SettingsNotificationsPage />} />
         <Route path="/admin/configuracion/coberturas" element={<CoverageSettingsPage />} />
       </Route>
+      {/* Pacientes — accesible para todo el staff (admin + professional/doctor). receptionist ya incluida en ADMIN_ROLES. */}
+      <Route element={<ProtectedRoute roles={STAFF_ROLES} />}>
+        <Route path="/admin/pacientes" element={<PatientsPage />} />
+      </Route>
+
       {/* Registro clínico y panel de atención — accesibles para roles clínicos (sin receptionist) */}
       <Route element={<ProtectedRoute roles={CLINICAL_ROLES} />}>
         <Route path="/admin/registro-clinico/:patientId" element={<ClinicalRecordPage />} />
