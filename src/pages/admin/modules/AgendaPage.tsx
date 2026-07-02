@@ -1,6 +1,6 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
+import { ClipboardList, Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
@@ -27,7 +27,7 @@ import { supabase } from "../../../lib/supabase";
 import { DateRangeValue, resolveDateRange } from "../../../lib/date-range";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { useAuth } from "../../../contexts/AuthContext";
-import { canCreateOverbooking } from "../../../lib/permissions";
+import { canCreateOverbooking, canWriteClinicalRecords } from "../../../lib/permissions";
 import {
   AppointmentInput,
   AppointmentStatus,
@@ -77,7 +77,7 @@ const today = new Date().toISOString().slice(0, 10);
 
 export function AgendaPage() {
   const { role, user } = useAuth();
-  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
+  const { activeClinic: clinic, loading: clinicLoading, activeRole } = useActiveClinic();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
@@ -878,6 +878,14 @@ export function AgendaPage() {
                   >
                     Abrir WhatsApp
                   </Button>
+                  {canWriteClinicalRecords(activeRole) && !["cancelled", "completed", "no_show"].includes(appointment.status) && (
+                    <Button
+                      icon={<ClipboardList size={16} />}
+                      onClick={() => navigate(`/admin/atencion/${appointment.id}`)}
+                    >
+                      Atender
+                    </Button>
+                  )}
                   {!["cancelled", "completed"].includes(appointment.status) && (
                     <>
                       <Button onClick={() => handleStatus(appointment.id, "completed")}>Atendido</Button>

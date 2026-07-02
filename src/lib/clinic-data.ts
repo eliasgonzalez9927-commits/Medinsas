@@ -1087,6 +1087,57 @@ async function logAppointmentEvent(
 // Registro clínico V1
 // ---------------------------------------------------------------------------
 
+export async function getAppointmentById(
+  appointmentId: string,
+  clinicId: string
+): Promise<AppointmentWithRelations> {
+  try {
+    const { data, error } = await supabase
+      .from("appointments")
+      .select("*, patients(*), professionals(*), services(*), locations(*)")
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .single();
+    if (error) throw error;
+    return mapAppointment(data);
+  } catch (error) {
+    console.error("Failed to load appointment", error);
+    throw new FriendlyDataError("No pudimos cargar el turno.");
+  }
+}
+
+export async function getClinicalEvolutionByAppointment(
+  appointmentId: string,
+  clinicId: string
+): Promise<ClinicalEvolutionWithProfessional | null> {
+  // Fetch up to 2 rows. If more than one exists (data anomaly — no unique DB constraint
+  // in migration 027), throw a blocking error rather than silently picking one or returning
+  // null and risking a duplicate create. The UI must surface this as a hard block.
+  const { data, error } = await supabase
+    .from("clinical_evolutions")
+    .select("*, professionals(id, name, last_name)")
+    .eq("appointment_id", appointmentId)
+    .eq("clinic_id", clinicId)
+    .order("created_at", { ascending: false })
+    .limit(2);
+
+  if (error) {
+    console.error("getClinicalEvolutionByAppointment error", error);
+    throw new FriendlyDataError("No pudimos verificar las evoluciones de este turno.");
+  }
+
+  if (!data || data.length === 0) return null;
+
+  if (data.length > 1) {
+    throw new FriendlyDataError(
+      "Hay más de una evolución vinculada a este turno. Revisá el registro clínico antes de continuar."
+    );
+  }
+
+  const row = data[0];
+  return { ...row, professional: (row as any).professionals ?? null } as ClinicalEvolutionWithProfessional;
+}
+
 export async function createClinicalEvolutionDraft(
   input: ClinicalEvolutionDraftInput
 ): Promise<ClinicalEvolutionWithProfessional> {
@@ -1097,7 +1148,7 @@ export async function createClinicalEvolutionDraft(
         clinic_id: input.clinic_id,
         patient_id: input.patient_id,
         professional_id: input.professional_id,
-        appointment_id: null,
+        appointment_id: input.appointment_id ?? null,
         reason: input.reason,
         current_condition: input.current_condition,
         physical_exam: input.physical_exam,

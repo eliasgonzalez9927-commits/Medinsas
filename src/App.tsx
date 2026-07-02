@@ -33,6 +33,7 @@ import { ClinicLanding } from "./pages/landing/ClinicLanding";
 import { PatientBooking } from "./pages/patient/PatientBooking";
 import { PublicAppointmentPage } from "./pages/patient/PublicAppointmentPage";
 import { ClinicalRecordPage } from "./pages/admin/modules/ClinicalRecordPage";
+import { AttendancePage } from "./pages/admin/modules/AttendancePage";
 import { SuperadminClinicDetailPage, SuperadminClinicsPage, SuperadminDashboard } from "./pages/superadmin/SuperadminPages";
 import { SuperadminPlansPage, SuperadminSubscriptionsPage } from "./pages/superadmin/SaasBillingPages";
 
@@ -114,9 +115,10 @@ export function App() {
         <Route path="/admin/configuracion/notificaciones" element={<SettingsNotificationsPage />} />
         <Route path="/admin/configuracion/coberturas" element={<CoverageSettingsPage />} />
       </Route>
-      {/* Registro clínico — accesible para roles clínicos (sin receptionist) */}
+      {/* Registro clínico y panel de atención — accesibles para roles clínicos (sin receptionist) */}
       <Route element={<ProtectedRoute roles={CLINICAL_ROLES} />}>
         <Route path="/admin/registro-clinico/:patientId" element={<ClinicalRecordPage />} />
+        <Route path="/admin/atencion/:appointmentId" element={<AttendancePage />} />
       </Route>
 
       <Route element={<ProtectedRoute roles={["platform_admin"]} />}>

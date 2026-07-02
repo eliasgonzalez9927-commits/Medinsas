@@ -9,6 +9,7 @@ import {
   updateClinicalEvolutionDraft
 } from "../../../lib/clinic-data";
 import { canWriteClinicalRecords } from "../../../lib/permissions";
+import { ClinicalEvolutionField } from "../../../components/admin/ClinicalEvolutionField";
 import { ClinicalEvolutionWithProfessional, ClinicalEvolutionDraftUpdate, PatientWithAppointments } from "../../../types/clinic";
 import { AdminLayout } from "../../../components/admin/AdminLayout";
 import { SectionCard } from "../../../components/admin/SectionCard";
@@ -248,42 +249,12 @@ export function ClinicalRecordPage() {
 
               {/* Fields */}
               <div className="flex flex-col gap-5 px-5 py-5">
-                <EvolutionField
-                  label="Motivo de consulta"
-                  value={fields.reason}
-                  onChange={(v) => setFields((f) => ({ ...f, reason: v }))}
-                  rows={2}
-                />
-                <EvolutionField
-                  label="Enfermedad actual / anamnesis"
-                  value={fields.current_condition}
-                  onChange={(v) => setFields((f) => ({ ...f, current_condition: v }))}
-                  rows={3}
-                />
-                <EvolutionField
-                  label="Examen físico"
-                  value={fields.physical_exam}
-                  onChange={(v) => setFields((f) => ({ ...f, physical_exam: v }))}
-                  rows={3}
-                />
-                <EvolutionField
-                  label="Diagnóstico"
-                  value={fields.diagnosis}
-                  onChange={(v) => setFields((f) => ({ ...f, diagnosis: v }))}
-                  rows={2}
-                />
-                <EvolutionField
-                  label="Plan / indicaciones"
-                  value={fields.plan}
-                  onChange={(v) => setFields((f) => ({ ...f, plan: v }))}
-                  rows={3}
-                />
-                <EvolutionField
-                  label="Observaciones internas"
-                  value={fields.observations}
-                  onChange={(v) => setFields((f) => ({ ...f, observations: v }))}
-                  rows={2}
-                />
+                <ClinicalEvolutionField label="Motivo de consulta" value={fields.reason} onChange={(v) => setFields((f) => ({ ...f, reason: v }))} rows={2} />
+                <ClinicalEvolutionField label="Enfermedad actual / anamnesis" value={fields.current_condition} onChange={(v) => setFields((f) => ({ ...f, current_condition: v }))} rows={3} />
+                <ClinicalEvolutionField label="Examen físico" value={fields.physical_exam} onChange={(v) => setFields((f) => ({ ...f, physical_exam: v }))} rows={3} />
+                <ClinicalEvolutionField label="Diagnóstico" value={fields.diagnosis} onChange={(v) => setFields((f) => ({ ...f, diagnosis: v }))} rows={2} />
+                <ClinicalEvolutionField label="Plan / indicaciones" value={fields.plan} onChange={(v) => setFields((f) => ({ ...f, plan: v }))} rows={3} />
+                <ClinicalEvolutionField label="Observaciones internas" value={fields.observations} onChange={(v) => setFields((f) => ({ ...f, observations: v }))} rows={2} />
               </div>
 
               {/* Save error */}
@@ -450,35 +421,6 @@ function EvolutionStatusChip({ status }: { status: "draft" | "closed" }) {
     <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
       Borrador
     </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// EvolutionField
-// ---------------------------------------------------------------------------
-
-function EvolutionField({
-  label,
-  value,
-  onChange,
-  rows = 3
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  rows?: number;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-clinic-ink">{label}</label>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={rows}
-        className="w-full resize-y rounded-lg border border-clinic-line bg-white px-3 py-2.5 text-sm text-clinic-ink placeholder-clinic-muted shadow-sm transition-colors focus:border-clinic-brand focus:outline-none focus:ring-1 focus:ring-clinic-brand"
-        placeholder={`${label}…`}
-      />
-    </div>
   );
 }
 
