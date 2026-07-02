@@ -5,9 +5,11 @@ import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import {
   closeClinicalEvolutionDraft,
   createClinicalEvolutionDraft,
+  finishAttention,
   getAppointmentById,
   getClinicalEvolutionByAppointment,
   getClinicalEvolutionsByPatient,
+  startAttention,
   updateClinicalEvolutionDraft
 } from "../../../lib/clinic-data";
 import { canWriteClinicalRecords } from "../../../lib/permissions";
@@ -22,8 +24,12 @@ import {
 } from "../../../types/clinic";
 
 // ---------------------------------------------------------------------------
-// Types
+// Types / constants
 // ---------------------------------------------------------------------------
+
+function hasClinicalContent(fields: ClinicalEvolutionDraftUpdate): boolean {
+  return Object.values(fields).some((v) => (v ?? "").trim() !== "");
+}
 
 const EMPTY_FIELDS: ClinicalEvolutionDraftUpdate = {
   reason: "",
@@ -46,7 +52,7 @@ export function AttendancePage() {
 
   const [appointment, setAppointment] = useState<AppointmentWithRelations | null>(null);
   const [currentEvolution, setCurrentEvolution] = useState<ClinicalEvolutionWithProfessional | null>(null);
-  const [evolutionError, setEvolutionError] = useState("");  // blocks the evolution form when set
+  const [evolutionError, setEvolutionError] = useState("");
   const [history, setHistory] = useState<ClinicalEvolutionWithProfessional[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState("");
@@ -58,6 +64,14 @@ export function AttendancePage() {
   const [closeError, setCloseError] = useState("");
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+
+  // Attention state
+  const [startingAttention, setStartingAttention] = useState(false);
+  const [startAttentionError, setStartAttentionError] = useState("");
+  const [finishingAttention, setFinishingAttention] = useState(false);
+  const [finishAttentionError, setFinishAttentionError] = useState("");
+  const [showFinishConfirm, setShowFinishConfirm] = useState(false);
+  const [closeEvolutionOnFinish, setCloseEvolutionOnFinish] = useState(true);
 
   const formRef = useRef<HTMLDivElement>(null);
 
@@ -72,8 +86,6 @@ export function AttendancePage() {
         if (cancelled) return;
         setAppointment(appt);
 
-        // getClinicalEvolutionByAppointment throws if duplicates detected — catch it
-        // separately so a duplicate error blocks only the evolution form, not the full page.
         const [evolutionResult, allEvolutions] = await Promise.allSettled([
           getClinicalEvolutionByAppointment(appointmentId, activeClinicId),
           getClinicalEvolutionsByPatient(activeClinicId, appt.patient_id)
@@ -117,6 +129,146 @@ export function AttendancePage() {
     return () => { cancelled = true; };
   }, [activeClinicId, clinicLoading, appointmentId]);
 
+  // ---------------------------------------------------------------------------
+  // Attention handlers
+  // ---------------------------------------------------------------------------
+
+  async function handleStartAttention() {
+    if (!activeClinicId || !appointment) return;
+    setStartingAttention(true);
+    setStartAttentionError("");
+    setSuccessMsg("");
+    try {
+      const result = await startAttention(appointment.id, activeClinicId);
+      setAppointment((prev) => prev ? { ...prev, ...result } : prev);
+      setSuccessMsg("Atención iniciada.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "No pudimos iniciar la atención.";
+      // If already started by another session, refresh appointment to sync
+      if (msg.includes("ya fue iniciada") || msg.includes("ALREADY_STARTED")) {
+        try {
+          const refreshed = await getAppointmentById(appointment.id, activeClinicId);
+          setAppointment(refreshed);
+        } catch { /* ignore refresh errors */ }
+      }
+      setStartAttentionError(msg);
+    } finally {
+      setStartingAttention(false);
+    }
+  }
+
+  async function handleFinishAttention() {
+    if (!activeClinicId || !appointmentId || !appointment) return;
+    setFinishingAttention(true);
+    setFinishAttentionError("");
+
+    try {
+      // Step 1: Handle evolution based on checkbox
+      if (closeEvolutionOnFinish && !evolutionIsClosed && !evolutionBlocked && canWrite) {
+        if (!hasClinicalContent(fields) && currentEvolution) {
+          // Evolution exists but all content was cleared — refuse to close, don't finish
+          setFinishAttentionError("Para cerrar la evolución, completá al menos un campo clínico.");
+          return;
+        }
+
+        if (!hasClinicalContent(fields) && !currentEvolution) {
+          // No content and no evolution — skip close step, fall through to finishAttention
+        } else {
+        // Close evolution (create if needed, then close)
+        let idToClose: string;
+
+        if (!currentEvolution) {
+          let latest: ClinicalEvolutionWithProfessional | null = null;
+          try {
+            latest = await getClinicalEvolutionByAppointment(appointmentId, activeClinicId);
+          } catch { /* duplicate check error — proceed with create */ }
+
+          if (latest) {
+            setCurrentEvolution(latest);
+            setFields({
+              reason: latest.reason ?? "",
+              current_condition: latest.current_condition ?? "",
+              physical_exam: latest.physical_exam ?? "",
+              diagnosis: latest.diagnosis ?? "",
+              plan: latest.plan ?? "",
+              observations: latest.observations ?? "",
+            });
+            idToClose = latest.id;
+          } else {
+            const professionalId =
+              appointment.professional_id ?? activeMembership?.professional_id ?? null;
+            const created = await createClinicalEvolutionDraft({
+              clinic_id: activeClinicId,
+              patient_id: appointment.patient_id,
+              appointment_id: appointmentId,
+              professional_id: professionalId,
+              ...fields,
+            });
+            setCurrentEvolution(created);
+            idToClose = created.id;
+          }
+        } else {
+          idToClose = currentEvolution.id;
+        }
+
+        const closed = await closeClinicalEvolutionDraft(
+          idToClose,
+          activeClinicId,
+          appointment.patient_id,
+          fields
+        );
+        setCurrentEvolution(closed);
+        } // end else (has content)
+
+      } else if (!closeEvolutionOnFinish && !evolutionIsClosed && !evolutionBlocked && canWrite) {
+        // Save draft with latest changes
+        const hasContent = Object.values(fields).some((v) => (v ?? "").trim() !== "");
+        if (currentEvolution) {
+          const updated = await updateClinicalEvolutionDraft(
+            currentEvolution.id,
+            activeClinicId,
+            appointment.patient_id,
+            fields
+          );
+          setCurrentEvolution(updated);
+        } else if (hasContent) {
+          const professionalId =
+            appointment.professional_id ?? activeMembership?.professional_id ?? null;
+          const created = await createClinicalEvolutionDraft({
+            clinic_id: activeClinicId,
+            patient_id: appointment.patient_id,
+            appointment_id: appointmentId,
+            professional_id: professionalId,
+            ...fields,
+          });
+          setCurrentEvolution(created);
+        }
+      }
+
+      // Step 2: Finish attention
+      const result = await finishAttention(appointment.id, activeClinicId);
+      setAppointment((prev) => prev ? { ...prev, ...result } : prev);
+      setShowFinishConfirm(false);
+      setSuccessMsg("Atención finalizada.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "No pudimos finalizar la atención.";
+      // If already finished by another session, refresh appointment to sync
+      if (msg.includes("ya fue finalizada") || msg.includes("ALREADY_FINISHED")) {
+        try {
+          const refreshed = await getAppointmentById(appointment.id, activeClinicId);
+          setAppointment(refreshed);
+        } catch { /* ignore refresh errors */ }
+      }
+      setFinishAttentionError(msg);
+    } finally {
+      setFinishingAttention(false);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Evolution handlers
+  // ---------------------------------------------------------------------------
+
   async function handleSave() {
     if (!activeClinicId || !appointmentId || !appointment) return;
     setSaving(true);
@@ -125,7 +277,6 @@ export function AttendancePage() {
 
     try {
       if (currentEvolution) {
-        // Evolution already exists for this appointment — update it
         const updated = await updateClinicalEvolutionDraft(
           currentEvolution.id,
           activeClinicId,
@@ -135,13 +286,10 @@ export function AttendancePage() {
         setCurrentEvolution(updated);
         setSuccessMsg("Borrador actualizado.");
       } else {
-        // No local evolution — re-check DB before creating to guard against race conditions
-        // (e.g. two tabs or two users opening the same appointment simultaneously).
         let latestEvolution: ClinicalEvolutionWithProfessional | null;
         try {
           latestEvolution = await getClinicalEvolutionByAppointment(appointmentId, activeClinicId);
         } catch (checkErr: unknown) {
-          // Duplicate detected or DB error — block creation
           const msg = checkErr instanceof Error ? checkErr.message : "No pudimos verificar las evoluciones de este turno.";
           setEvolutionError(msg);
           setSaveError(msg);
@@ -149,7 +297,6 @@ export function AttendancePage() {
         }
 
         if (latestEvolution) {
-          // A concurrent session already created one — adopt it and update instead
           setCurrentEvolution(latestEvolution);
           setFields({
             reason: latestEvolution.reason ?? "",
@@ -163,7 +310,6 @@ export function AttendancePage() {
           return;
         }
 
-        // Confirmed: no evolution exists — safe to create
         const professionalId =
           appointment.professional_id ??
           activeMembership?.professional_id ??
@@ -195,7 +341,6 @@ export function AttendancePage() {
       let idToClose: string;
 
       if (!currentEvolution) {
-        // Sin borrador previo — crear primero y luego cerrar en secuencia
         let latest: ClinicalEvolutionWithProfessional | null;
         try {
           latest = await getClinicalEvolutionByAppointment(appointmentId, activeClinicId);
@@ -207,7 +352,6 @@ export function AttendancePage() {
         }
 
         if (latest) {
-          // Otra sesión creó un borrador entre medio — adoptarlo
           setCurrentEvolution(latest);
           setFields({
             reason: latest.reason ?? "",
@@ -255,9 +399,25 @@ export function AttendancePage() {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Derived state
+  // ---------------------------------------------------------------------------
+
   const evolutionIsClosed = currentEvolution?.status === "closed";
   const evolutionBlocked = Boolean(evolutionError);
   const formReadOnly = !canWrite || evolutionIsClosed || evolutionBlocked;
+
+  const attentionStartedAt = appointment?.attention_started_at ?? null;
+  const attentionFinishedAt = appointment?.attention_finished_at ?? null;
+  const attentionNotStarted = !loading && !!appointment && !attentionStartedAt;
+  const attentionInProgress = !loading && !!appointment && !!attentionStartedAt && !attentionFinishedAt;
+  const attentionFinished = !loading && !!appointment && !!attentionFinishedAt;
+
+  const isProfessional = activeRole === "professional" || activeRole === "doctor";
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
 
   return (
     <AdminLayout onCreateAppointment={() => undefined} onRefresh={() => undefined}>
@@ -269,7 +429,7 @@ export function AttendancePage() {
           className="flex w-fit items-center gap-1.5 text-sm text-clinic-muted transition-colors hover:text-clinic-brand"
         >
           <ArrowLeft size={15} />
-          {(activeRole === "professional" || activeRole === "doctor") ? "Volver a Mi agenda" : "Volver a Agenda"}
+          {isProfessional ? "Volver a Mi agenda" : "Volver a Agenda"}
         </Link>
 
         {/* Page header */}
@@ -321,6 +481,72 @@ export function AttendancePage() {
           </SectionCard>
         )}
 
+        {/* Attention status block */}
+        {!loading && appointment && (
+          <SectionCard className="overflow-hidden">
+            <div className="flex flex-wrap items-center gap-4 px-5 py-4">
+              <div className="flex flex-1 flex-col gap-1 min-w-0">
+                {attentionNotStarted && (
+                  <>
+                    <span className="inline-flex w-fit items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-500">
+                      Atención no iniciada
+                    </span>
+                    <p className="text-sm text-clinic-muted">
+                      Iniciá la atención para registrar el tiempo real de consulta.
+                    </p>
+                  </>
+                )}
+                {attentionInProgress && attentionStartedAt && (
+                  <>
+                    <span className="inline-flex w-fit items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                      Atención en curso
+                    </span>
+                    <p className="text-sm text-clinic-muted">
+                      Iniciada a las {formatTime(attentionStartedAt)}
+                    </p>
+                  </>
+                )}
+                {attentionFinished && attentionStartedAt && attentionFinishedAt && (
+                  <>
+                    <span className="inline-flex w-fit items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-500">
+                      Atención finalizada
+                    </span>
+                    <p className="text-sm text-clinic-muted">
+                      {formatAttentionSummary(attentionStartedAt, attentionFinishedAt)}
+                    </p>
+                  </>
+                )}
+              </div>
+
+              {attentionNotStarted && (
+                <button
+                  onClick={handleStartAttention}
+                  disabled={startingAttention}
+                  className="shrink-0 rounded-lg bg-clinic-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {startingAttention ? "Iniciando…" : "Iniciar atención"}
+                </button>
+              )}
+
+              {attentionInProgress && (
+                <button
+                  onClick={() => { setFinishAttentionError(""); setShowFinishConfirm(true); }}
+                  disabled={finishingAttention}
+                  className="shrink-0 rounded-lg border border-slate-300 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Finalizar atención
+                </button>
+              )}
+            </div>
+
+            {startAttentionError && (
+              <div className="mx-5 mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {startAttentionError}
+              </div>
+            )}
+          </SectionCard>
+        )}
+
         {/* Success toast */}
         {successMsg && (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
@@ -361,9 +587,11 @@ export function AttendancePage() {
                         ? "Esta evolución está cerrada y no puede modificarse."
                         : !canWrite
                           ? "Solo lectura — no tenés permisos para modificar registros clínicos."
-                          : currentEvolution
-                            ? "Borrador guardado. Podés seguir editando esta evolución hasta cerrarla."
-                            : "Se guardará como borrador. Podés seguir editando antes de cerrar la evolución."}
+                          : attentionNotStarted
+                            ? "Podés redactar el borrador antes de iniciar la atención."
+                            : currentEvolution
+                              ? "Borrador guardado. Podés seguir editando esta evolución hasta cerrarla."
+                              : "Se guardará como borrador. Podés seguir editando antes de cerrar la evolución."}
                   </p>
                 </div>
                 {currentEvolution && (
@@ -371,7 +599,7 @@ export function AttendancePage() {
                 )}
               </div>
 
-              {/* Blocking error — duplicate evolution detected */}
+              {/* Blocking error */}
               {evolutionBlocked && (
                 <div className="mx-5 mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {evolutionError}
@@ -423,24 +651,24 @@ export function AttendancePage() {
                     to="/admin/agenda"
                     className="rounded-lg border border-clinic-line px-4 py-2 text-sm font-medium text-clinic-ink transition-colors hover:bg-clinic-surface"
                   >
-                    {(activeRole === "professional" || activeRole === "doctor") ? "Volver a Mi agenda" : "Volver a Agenda"}
+                    {isProfessional ? "Volver a Mi agenda" : "Volver a Agenda"}
                   </Link>
                 </div>
               )}
 
-              {/* Actions */}
+              {/* Actions — show when evolution is editable */}
               {!formReadOnly && (
                 <div className="flex flex-wrap items-center gap-3 border-t border-clinic-line px-5 py-4">
                   <button
                     onClick={handleSave}
-                    disabled={saving || closing}
+                    disabled={saving || closing || finishingAttention}
                     className="flex items-center gap-2 rounded-lg bg-clinic-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {saving ? "Guardando…" : "Guardar borrador"}
                   </button>
                   <button
                     onClick={() => { setCloseError(""); setShowCloseConfirm(true); }}
-                    disabled={saving || closing}
+                    disabled={saving || closing || finishingAttention}
                     className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {currentEvolution ? "Cerrar evolución" : "Guardar y cerrar evolución"}
@@ -449,7 +677,7 @@ export function AttendancePage() {
                     to="/admin/agenda"
                     className="rounded-lg border border-clinic-line px-4 py-2 text-sm font-medium text-clinic-ink transition-colors hover:bg-clinic-surface"
                   >
-                    {(activeRole === "professional" || activeRole === "doctor") ? "Volver a Mi agenda" : "Volver a Agenda"}
+                    {isProfessional ? "Volver a Mi agenda" : "Volver a Agenda"}
                   </Link>
                 </div>
               )}
@@ -517,6 +745,68 @@ export function AttendancePage() {
                 className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {closing ? "Cerrando…" : "Cerrar evolución"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Finish attention confirmation modal */}
+      {showFinishConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <p className="font-semibold text-clinic-ink">Finalizar atención</p>
+            <p className="mt-2 text-sm text-clinic-muted">
+              Se registrará la hora de cierre de esta atención.
+            </p>
+
+            {/* Checkbox: close evolution too */}
+            {!evolutionBlocked && canWrite && !evolutionIsClosed && (() => {
+              const noContent = !hasClinicalContent(fields) && !currentEvolution;
+              const checkboxDisabled = noContent || finishingAttention;
+              return (
+                <div className="mt-4">
+                  <label className={`flex items-start gap-3 ${checkboxDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
+                    <input
+                      type="checkbox"
+                      checked={noContent ? false : closeEvolutionOnFinish}
+                      onChange={(e) => { if (!checkboxDisabled) setCloseEvolutionOnFinish(e.target.checked); }}
+                      disabled={checkboxDisabled}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-clinic-brand disabled:cursor-not-allowed"
+                    />
+                    <span className="text-sm text-clinic-ink">
+                      Cerrar también la evolución clínica
+                    </span>
+                  </label>
+                  {noContent && (
+                    <p className="mt-1.5 pl-7 text-xs text-clinic-muted">
+                      Completá al menos un campo clínico para cerrar la evolución.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {finishAttentionError && (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {finishAttentionError}
+              </div>
+            )}
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => { setShowFinishConfirm(false); setFinishAttentionError(""); }}
+                disabled={finishingAttention}
+                className="rounded-lg border border-clinic-line px-4 py-2 text-sm font-medium text-clinic-ink transition-colors hover:bg-clinic-surface disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleFinishAttention}
+                disabled={finishingAttention}
+                className="rounded-lg bg-clinic-brand px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {finishingAttention ? "Finalizando…" : "Finalizar atención"}
               </button>
             </div>
           </div>
@@ -616,6 +906,22 @@ function formatEvolutionDate(iso: string): string {
     year: "numeric",
     timeZone: "America/Argentina/Buenos_Aires"
   }).format(new Date(iso));
+}
+
+function formatTime(iso: string): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Argentina/Buenos_Aires",
+    hourCycle: "h23"
+  }).format(new Date(iso));
+}
+
+function formatAttentionSummary(startIso: string, endIso: string): string {
+  const start = formatTime(startIso);
+  const end = formatTime(endIso);
+  const mins = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000);
+  return `Atención finalizada · ${start}–${end} · ${mins} min`;
 }
 
 function truncate(text: string, maxLen: number): string {
