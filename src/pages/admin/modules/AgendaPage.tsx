@@ -98,6 +98,7 @@ type AppointmentActionsMenuProps = {
   onNoShow: () => void;
   onCancel: () => void;
   onAttend: () => void;
+  onViewClinicalRecord: () => void;
 };
 
 function AppointmentActionsMenu({
@@ -114,6 +115,7 @@ function AppointmentActionsMenu({
   onNoShow,
   onCancel,
   onAttend,
+  onViewClinicalRecord,
 }: AppointmentActionsMenuProps) {
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
@@ -180,13 +182,21 @@ function AppointmentActionsMenu({
   let primaryActions: ActionItem[] = [];
   let paymentGroup = paymentGroupAll;
   let statusGroup = statusGroupAll;
-  const destructiveGroup = destructiveGroupAll;
+  let destructiveGroup = destructiveGroupAll;
 
   if (isProfessionalRole) {
     primaryActions = canAttend
       ? [{ label: "Atender", icon: <ClipboardList size={16} />, onClick: onAttend }]
       : [];
-    statusGroup = statusGroupAll.filter((a) => a.label !== "Atender");
+    paymentGroup = [];
+    statusGroup = [
+      ...(appointment.patient?.id
+        ? [{ label: "Ver registro clínico", icon: <ClipboardList size={14} />, onClick: onViewClinicalRecord }]
+        : []),
+      { label: "Abrir WhatsApp", icon: <MessageCircle size={14} />, onClick: onOpenWhatsApp, disabled: !hasPhone },
+      { label: "Copiar mensaje WhatsApp", icon: <Copy size={14} />, onClick: onCopyWhatsApp, disabled: !hasPhone },
+    ];
+    destructiveGroup = [];
   } else if (!isPlatformAdmin) {
     primaryActions = [
       ...(appointment.status === "pending" ? [{ label: "Confirmar", onClick: onConfirm }] : []),
@@ -1025,8 +1035,8 @@ export function AgendaPage() {
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <Button icon={<Plus size={15} />} onClick={openCreate} variant="primary">Nuevo turno</Button>
-            {canCreateOverbooking(role) && <Button onClick={openOverbooking}>Sobreturno</Button>}
+            {!isProfessionalRole && <Button icon={<Plus size={15} />} onClick={openCreate} variant="primary">Nuevo turno</Button>}
+            {!isProfessionalRole && canCreateOverbooking(role) && <Button onClick={openOverbooking}>Sobreturno</Button>}
           </div>
         </div>
 
@@ -1105,9 +1115,11 @@ export function AgendaPage() {
       {clinic && <SectionCard className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
           <h2 className="font-semibold text-clinic-ink">{range.preset === "today" ? "Turnos del día" : "Turnos del período"}</h2>
-          <Button icon={<Plus size={16} />} onClick={openCreate}>
-            Nuevo
-          </Button>
+          {!isProfessionalRole && (
+            <Button icon={<Plus size={16} />} onClick={openCreate}>
+              Nuevo
+            </Button>
+          )}
         </div>
         {loading ? (
           <div className="px-5 py-10 text-center text-sm text-clinic-muted">Cargando turnos...</div>
@@ -1188,6 +1200,7 @@ export function AgendaPage() {
                     onNoShow={() => handleStatus(appointment.id, "no_show")}
                     onCancel={() => handleStatus(appointment.id, "cancel")}
                     onAttend={() => navigate(`/admin/atencion/${appointment.id}`)}
+                    onViewClinicalRecord={() => navigate(`/admin/registro-clinico/${appointment.patient?.id}`)}
                   />
                 </div>
               </article>

@@ -108,6 +108,10 @@ export function AdminLayout({
           {items.map((item) => {
             const Icon = item.icon;
             const badge = item.status === "beta" ? "Beta" : item.status === "coming_soon" ? "Próximamente" : null;
+            const displayLabel =
+              (activeRole === "professional" || activeRole === "doctor") && item.key === "agenda"
+                ? "Mi agenda"
+                : item.label;
             if (item.status === "coming_soon") {
               return (
                 <div
@@ -117,7 +121,7 @@ export function AdminLayout({
                   aria-disabled="true"
                 >
                   <Icon size={18} />
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  <span className="min-w-0 flex-1 truncate">{displayLabel}</span>
                   <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{badge}</span>
                 </div>
               );
@@ -143,7 +147,7 @@ export function AdminLayout({
                 }}
               >
                 <Icon size={18} />
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                <span className="min-w-0 flex-1 truncate">{displayLabel}</span>
                 {badge && <span className="rounded-full bg-[#e6f4f1] px-2 py-0.5 text-[10px] font-semibold text-clinic-brand">{badge}</span>}
               </NavLink>
             );
@@ -255,7 +259,9 @@ export function AdminLayout({
               </p>
               <div className="hidden min-w-0 text-right xl:block"><p className="truncate text-sm font-semibold text-clinic-ink">{clinic?.name ?? "Medin"}</p><p className="text-xs text-clinic-muted">{displayRole}</p></div>
               <Button className="hidden sm:inline-flex" onClick={handleRefresh} variant="secondary">Actualizar</Button>
-              <Button onClick={onCreateAppointment} variant="primary">Nuevo turno</Button>
+              {activeRole !== "professional" && activeRole !== "doctor" && (
+                <Button onClick={onCreateAppointment} variant="primary">Nuevo turno</Button>
+              )}
               <div className="relative">
                 <button
                   type="button"
