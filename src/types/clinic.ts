@@ -400,6 +400,10 @@ export type FiscalSettings = {
   updated_at: string;
 };
 
+export type PaymentKind = "deposit" | "payment" | "copay" | "adjustment";
+
+export type PaymentSource = "manual" | "mercado_pago" | "import";
+
 export type Payment = {
   id: string;
   clinic_id: string;
@@ -407,9 +411,12 @@ export type Payment = {
   appointment_id: string | null;
   invoice_id?: string | null;
   service_id?: string | null;
+  professional_id: string | null;
   amount: number;
   currency: string;
   method: string | null;
+  kind: PaymentKind;
+  source: PaymentSource;
   provider?: string;
   provider_payment_id?: string | null;
   provider_preference_id?: string | null;
@@ -422,6 +429,7 @@ export type Payment = {
   expires_at?: string | null;
   paid_at: string | null;
   notes: string | null;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -442,6 +450,40 @@ export type PaymentWithRelations = Payment & {
   patients?: Patient | null;
   appointments?: Appointment | null;
   services?: Service | null;
+};
+
+export type ManualPaymentInput = {
+  clinicId: string;
+  patientId: string;
+  appointmentId?: string | null;
+  professionalId?: string | null;
+  serviceId?: string | null;
+  amount: number;
+  currency?: string;
+  method: "cash" | "transfer" | "card" | "other";
+  kind: PaymentKind;
+  status: "approved" | "pending";
+  notes?: string | null;
+};
+
+export type ManualPaymentResult = {
+  id: string;
+  clinic_id: string;
+  patient_id: string | null;
+  appointment_id: string | null;
+  professional_id: string | null;
+  service_id: string | null;
+  amount: number;
+  currency: string;
+  method: string | null;
+  kind: PaymentKind;
+  source: PaymentSource;
+  status: string;
+  paid_at: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  appointment_payment_status?: string | null;
 };
 
 export type PaymentSettings = {

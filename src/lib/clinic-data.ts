@@ -29,6 +29,8 @@ import {
   Patient,
   PatientInput,
   PatientWithAppointments,
+  ManualPaymentInput,
+  ManualPaymentResult,
   PaymentFilters,
   PaymentEvent,
   PaymentSettings,
@@ -342,6 +344,49 @@ export async function getPaymentSettings(clinicId: string): Promise<PaymentSetti
     console.error("Failed to load payment settings", error);
     throw new FriendlyDataError("No pudimos cargar la configuracion de pagos.");
   }
+}
+
+const PAYMENT_RPC_ERROR_MESSAGES: Record<string, string> = {
+  INVALID_AMOUNT:               "Ingresá un monto válido mayor a cero.",
+  INVALID_PATIENT:              "Seleccioná un paciente para registrar el pago.",
+  INVALID_METHOD:               "Elegí un medio de pago válido.",
+  INVALID_KIND:                 "Elegí un tipo de pago válido.",
+  INVALID_STATUS:               "Estado de pago inválido.",
+  FORBIDDEN:                    "No tenés permisos para registrar pagos.",
+  UNAUTHORIZED:                 "No tenés permisos para registrar pagos.",
+  PAYMENT_APPOINTMENT_MISMATCH: "Los datos del pago no coinciden con el turno seleccionado.",
+  PAYMENT_CLINIC_MISMATCH:      "Los datos del pago no pertenecen a la clínica actual.",
+};
+
+function resolvePaymentRpcError(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  for (const [key, friendly] of Object.entries(PAYMENT_RPC_ERROR_MESSAGES)) {
+    if (msg.includes(key)) return friendly;
+  }
+  return "No pudimos registrar el pago. Revisá los datos e intentá nuevamente.";
+}
+
+export async function createManualPayment(input: ManualPaymentInput): Promise<ManualPaymentResult> {
+  const { data, error } = await supabase.rpc("create_manual_payment", {
+    p_clinic_id:       input.clinicId,
+    p_patient_id:      input.patientId,
+    p_appointment_id:  input.appointmentId  ?? null,
+    p_professional_id: input.professionalId ?? null,
+    p_service_id:      input.serviceId      ?? null,
+    p_amount:          input.amount,
+    p_currency:        input.currency       ?? "ARS",
+    p_method:          input.method,
+    p_kind:            input.kind,
+    p_status:          input.status,
+    p_notes:           input.notes          ?? null,
+  });
+
+  if (error) {
+    console.error("createManualPayment RPC error", error);
+    throw new FriendlyDataError(resolvePaymentRpcError(error));
+  }
+
+  return data as ManualPaymentResult;
 }
 
 export async function updatePaymentSettings(id: string, data: Partial<PaymentSettings>, clinicId?: string): Promise<PaymentSettings> {
