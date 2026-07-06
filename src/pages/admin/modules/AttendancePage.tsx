@@ -570,7 +570,8 @@ export function AttendancePage() {
         {/* Resumen automatico */}
         {!loading && !pageError && appointment && (
           <AutomaticSummaryCard
-            canUse={canWrite && !attentionFinished}
+            attentionStarted={!!attentionStartedAt}
+            canUse={canWrite && attentionInProgress && !evolutionIsClosed && !evolutionBlocked}
             onApplySummary={handleApplyAutomaticSummary}
           />
         )}

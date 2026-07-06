@@ -40,11 +40,12 @@ function formatAutomaticSummaryDuration(seconds: number): string {
 }
 
 type AutomaticSummaryCardProps = {
+  attentionStarted: boolean;
   canUse: boolean;
   onApplySummary: (summary: string) => void;
 };
 
-export function AutomaticSummaryCard({ canUse, onApplySummary }: AutomaticSummaryCardProps) {
+export function AutomaticSummaryCard({ attentionStarted, canUse, onApplySummary }: AutomaticSummaryCardProps) {
   const [status, setStatus] = useState<AutomaticSummaryStatus>("idle");
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [consentStatus, setConsentStatus] = useState<AutomaticSummaryConsentStatus>("pending");
@@ -105,7 +106,7 @@ export function AutomaticSummaryCard({ canUse, onApplySummary }: AutomaticSummar
     const cleanSummary = summaryDraft.trim();
     if (!cleanSummary) return;
     onApplySummary(cleanSummary);
-    setAuditNote("Resumen aplicado al borrador de atencion. Revisalo antes de guardar o cerrar la evolucion.");
+    setAuditNote("Resumen copiado al borrador de evolución. Revisalo y guardalo desde el formulario de evolución.");
     setStatus("applied");
   }
 
@@ -136,6 +137,9 @@ export function AutomaticSummaryCard({ canUse, onApplySummary }: AutomaticSummar
                 </div>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-clinic-muted">
                   Transcribe y resume lo conversado en la atencion. No diagnostica, no indica tratamientos, no recomienda medicacion y no toma decisiones clinicas. El profesional debe revisar y aprobar antes de guardar.
+                </p>
+                <p className="mt-1 text-xs text-clinic-muted">
+                  El resumen se copia al borrador de evolución. Nada se guarda automáticamente.
                 </p>
                 {auditNote && (
                   <p className="mt-2 text-xs font-medium text-clinic-muted">{auditNote}</p>
@@ -174,7 +178,9 @@ export function AutomaticSummaryCard({ canUse, onApplySummary }: AutomaticSummar
 
           {!canUse && status === "idle" && (
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              El resumen automatico queda disponible durante una atencion abierta y para roles con permiso de escritura clinica.
+              {!attentionStarted
+                ? "Iniciá la atención para activar el resumen automático."
+                : "El resumen automático queda disponible durante una atención abierta y para roles con permiso de escritura clínica."}
             </div>
           )}
 
@@ -250,7 +256,7 @@ export function AutomaticSummaryCard({ canUse, onApplySummary }: AutomaticSummar
                     className="flex items-center gap-2 rounded-lg bg-clinic-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <CheckCircle2 size={15} />
-                    Copiar al borrador
+                    Copiar al borrador de evolución
                   </button>
                   <button
                     onClick={handleDiscard}
