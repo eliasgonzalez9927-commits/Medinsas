@@ -12,6 +12,7 @@ import {
   getPaymentEvents,
   getPayments,
   getPaymentSettings,
+  getProfessionals,
   updatePaymentSettings
 } from "../../../lib/clinic-data";
 import { getPublicAppUrl } from "../../../lib/public-url";
@@ -47,6 +48,7 @@ type RendicionRow = {
 export function PaymentsPage() {
   const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const [payments, setPayments] = useState<PaymentWithRelations[]>([]);
+  const [profMap, setProfMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [syncingId, setSyncingId] = useState("");
@@ -60,7 +62,16 @@ export function PaymentsPage() {
     setLoading(true);
     setError("");
     try {
-      setPayments(await getPayments(clinic.id, { dateFrom: range.dateFrom, dateTo: range.dateTo, timezone: clinic.timezone ?? undefined }));
+      const [rawPayments, profsResult] = await Promise.all([
+        getPayments(clinic.id, { dateFrom: range.dateFrom, dateTo: range.dateTo, timezone: clinic.timezone ?? undefined }),
+        getProfessionals(clinic.id)
+      ]);
+      setPayments(Array.isArray(rawPayments) ? rawPayments : []);
+      const map: Record<string, string> = {};
+      for (const p of profsResult.data) {
+        map[p.id] = `${p.name} ${p.last_name}`.trim();
+      }
+      setProfMap(map);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar los pagos.");
     } finally {
@@ -74,14 +85,15 @@ export function PaymentsPage() {
   }, [clinic?.id, clinicLoading, range.dateFrom, range.dateTo]);
 
   const summary = useMemo(() => {
-    const approved = payments.filter(isApproved);
-    const pending = payments.filter(isPending);
-    const expired = payments.filter(isExpired);
-    const deposits = payments.filter((p) => p.kind === "deposit");
-    const manual = payments.filter((p) => p.source === "manual");
-    const mp = payments.filter((p) => p.source === "mercado_pago");
+    const safe = Array.isArray(payments) ? payments : [];
+    const approved = safe.filter(isApproved);
+    const pending = safe.filter(isPending);
+    const expired = safe.filter(isExpired);
+    const deposits = safe.filter((p) => p.kind === "deposit");
+    const manual = safe.filter((p) => p.source === "manual");
+    const mp = safe.filter((p) => p.source === "mercado_pago");
     return {
-      total: payments.length,
+      total: safe.length,
       cobrado: sumAmount(approved),
       porCobrar: sumAmount(pending),
       vencido: sumAmount(expired),
@@ -92,17 +104,17 @@ export function PaymentsPage() {
   }, [payments]);
 
   const rendicion = useMemo((): RendicionRow[] => {
-    if (payments.length === 0) return [];
+    const safe = Array.isArray(payments) ? payments : [];
+    if (safe.length === 0) return [];
     const groups = new Map<string | null, PaymentWithRelations[]>();
-    for (const p of payments) {
-      const key = p.professional_id;
+    for (const p of safe) {
+      const key = p.professional_id ?? null;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(p);
     }
     return Array.from(groups.entries())
       .map(([profId, pms]) => {
-        const prof = pms[0]?.professionals;
-        const name = prof ? `${prof.name} ${prof.last_name}`.trim() : "Sin profesional asignado";
+        const name = (profId && profMap[profId]) ? profMap[profId] : "Sin profesional asignado";
         const approved = pms.filter(isApproved);
         const pending = pms.filter(isPending);
         const expired = pms.filter(isExpired);
@@ -120,7 +132,7 @@ export function PaymentsPage() {
         };
       })
       .sort((a, b) => b.cobrado - a.cobrado);
-  }, [payments]);
+  }, [payments, profMap]);
 
   async function syncPayment(paymentId: string) {
     setSyncingId(paymentId);
