@@ -20,7 +20,10 @@ export function Register() {
 
     try {
       await signUp({ email, password, fullName, phone, role: "patient" });
-      navigate("/patient/book");
+      navigate("/paciente/login", {
+        replace: true,
+        state: { notice: "Cuenta paciente creada. Iniciá sesión para entrar a Mi Medin." }
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo crear la cuenta.");
     } finally {
@@ -94,7 +97,7 @@ export function Register() {
 
         <p className="mt-6 text-sm text-clinic-muted">
           Ya tienes cuenta?{" "}
-          <Link to="/login" className="font-semibold text-clinic-brand">
+          <Link to="/paciente/login" className="font-semibold text-clinic-brand">
             Inicia sesion
           </Link>
         </p>

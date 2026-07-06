@@ -26,7 +26,15 @@ import { ServicesPage } from "./pages/admin/modules/ServicesPage";
 import { PaymentFailurePage, PaymentPendingPage, PaymentSuccessPage } from "./pages/payments/PaymentReturnPage";
 import { PublicBookingPage } from "./pages/booking/PublicBookingPage";
 import { ClinicLanding } from "./pages/landing/ClinicLanding";
-import { PatientBooking } from "./pages/patient/PatientBooking";
+import { PatientPortalRoute } from "./components/patient/PatientPortalRoute";
+import { PatientLoginPage, PatientRegisterPage } from "./pages/patient/PatientAuthPages";
+import {
+  PatientAppointmentsPage,
+  PatientDashboardPage,
+  PatientFamilyPage,
+  PatientNewAppointmentPage,
+  PatientProfilePage
+} from "./pages/patient/PatientPortalPages";
 import { PublicAppointmentPage } from "./pages/patient/PublicAppointmentPage";
 import { SuperadminClinicDetailPage, SuperadminClinicsPage, SuperadminDashboard } from "./pages/superadmin/SuperadminPages";
 import { SuperadminPlansPage, SuperadminSubscriptionsPage } from "./pages/superadmin/SaasBillingPages";
@@ -43,6 +51,8 @@ export function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/paciente/login" element={<PatientLoginPage />} />
+      <Route path="/paciente/registro" element={<PatientRegisterPage />} />
       <Route path="/clinica-demo" element={<ClinicLanding />} />
       <Route path="/reservar/:clinicSlug" element={<PublicBookingPage />} />
       <Route path="/reservar/:clinicSlug/:filter" element={<PublicBookingPage />} />
@@ -53,8 +63,13 @@ export function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<HomeRedirect />} />
       </Route>
-      <Route element={<ProtectedRoute roles={["patient"]} />}>
-        <Route path="/patient/book" element={<PatientBooking />} />
+      <Route path="/patient/book" element={<Navigate to="/paciente/turnos/nuevo" replace />} />
+      <Route element={<PatientPortalRoute />}>
+        <Route path="/paciente" element={<PatientDashboardPage />} />
+        <Route path="/paciente/turnos" element={<PatientAppointmentsPage />} />
+        <Route path="/paciente/turnos/nuevo" element={<PatientNewAppointmentPage />} />
+        <Route path="/paciente/perfil" element={<PatientProfilePage />} />
+        <Route path="/paciente/grupo-familiar" element={<PatientFamilyPage />} />
       </Route>
       <Route element={<ProtectedRoute roles={ADMIN_ROLES} />}>
         <Route path="/admin" element={<AdminDashboard />} />

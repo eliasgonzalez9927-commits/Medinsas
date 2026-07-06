@@ -20,14 +20,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
           <nav className="flex items-center gap-2">
             <NavLink
-              to={isStaff ? "/admin" : "/patient/book"}
+              to={isStaff ? "/admin" : "/paciente"}
               className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-clinic-muted hover:bg-clinic-surface"
             >
               <CalendarDays size={18} />
               {isStaff ? "Administracion" : "Reservar"}
             </NavLink>
             <Link
-              to={isStaff ? "/admin" : "/patient/book"}
+              to={isStaff ? "/admin" : "/paciente"}
               className="hidden items-center gap-2 rounded-lg border border-clinic-line px-3 py-2 text-sm text-clinic-muted hover:bg-clinic-surface sm:flex"
             >
               <UserRound size={18} />
