@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import type { ClinicModuleKey } from "./modules";
 import type { UserRole } from "../types/database";
-import { CLINIC_ADMIN_ROLES } from "./auth-roles";
+import { ADMIN_ROLES, CLINIC_ADMIN_ROLES } from "./auth-roles";
 
 export type AdminNavigationGroup =
   | "summary"
@@ -63,7 +63,7 @@ export const ADMIN_MODULES: AdminModuleDefinition[] = [
   { key: "online_booking", label: "Reservas online", path: "/admin/booking", icon: CalendarDays, group: "operations", status: "active", moduleFlag: "reservas_online" },
   { key: "onboarding", label: "Onboarding", path: "/admin/onboarding", icon: ClipboardCheck, group: "operations", status: "beta", allowedRoles: CLINIC_ADMIN_ROLES },
 
-  { key: "payments", label: "Pagos", path: "/admin/pagos", icon: WalletCards, group: "administration", status: "active", moduleFlag: ["pagos", "mercado_pago"], allowedRoles: CLINIC_ADMIN_ROLES },
+  { key: "payments", label: "Ingresos", path: "/admin/pagos", icon: WalletCards, group: "administration", status: "active", moduleFlag: ["pagos", "mercado_pago"], allowedRoles: ADMIN_ROLES },
   { key: "financing", label: "Financiación", path: "/admin/financiacion", icon: Banknote, group: "administration", status: "coming_soon", moduleFlag: "financiacion", description: "Opciones de financiación y simulaciones para tratamientos.", allowedRoles: CLINIC_ADMIN_ROLES },
   { key: "billing", label: "Facturación", path: "/admin/facturacion", icon: ReceiptText, group: "administration", status: "coming_soon", moduleFlag: "facturacion", description: "Comprobantes internos e integración fiscal cuando esté lista.", allowedRoles: CLINIC_ADMIN_ROLES },
 

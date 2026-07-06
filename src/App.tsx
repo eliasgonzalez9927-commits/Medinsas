@@ -98,9 +98,15 @@ export function App() {
         <Route path="/admin/importaciones" element={<ImportsPage />} />
         <Route path="/admin/notificaciones" element={<NotificationsPage />} />
         <Route path="/admin/notificaciones/configuracion" element={<SettingsNotificationsPage />} />
-        <Route path="/admin/pagos" element={<PaymentsPage />} />
+        {/* Configuración MP — solo clinic_admin/admin, receptionist excluida */}
         <Route path="/admin/pagos/configuracion" element={<PaymentSettingsPage />} />
+        </Route>
+      {/* Ingresos — receptionist incluida: puede registrar y consultar cobros operativos */}
+      <Route element={<ProtectedRoute roles={ADMIN_ROLES} />}>
+        <Route path="/admin/pagos" element={<PaymentsPage />} />
         <Route path="/admin/pagos/:id" element={<PaymentDetailPage />} />
+      </Route>
+      <Route element={<ProtectedRoute roles={CLINIC_ADMIN_ROLES} />}>
         <Route path="/admin/financiacion" element={<ComingSoonPage title="Financiación" description="Próximamente vas a poder preparar opciones de financiación de tratamientos y conectar proveedores de scoring cuando estén validados." />} />
         <Route path="/admin/facturacion" element={<ComingSoonPage title="Facturación" description="Próximamente vas a poder gestionar comprobantes internos e integraciones fiscales. No se emitirán facturas reales hasta contar con la integración correspondiente." />} />
         <Route path="/admin/facturacion/comprobantes" element={<ComingSoonPage title="Comprobantes" description="La emisión y gestión de comprobantes estará disponible cuando el módulo de facturación esté operativo." />} />

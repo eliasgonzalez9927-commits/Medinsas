@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CreditCard, ExternalLink, RefreshCw, Settings, WalletCards } from "lucide-react";
 import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
@@ -16,8 +16,9 @@ import {
 import { getPublicAppUrl } from "../../../lib/public-url";
 import { DateRangeValue, resolveDateRange } from "../../../lib/date-range";
 import { supabase } from "../../../lib/supabase";
-import { PaymentEvent, PaymentSettings, PaymentWithRelations } from "../../../types/clinic";
+import { ManualPaymentInput, PaymentEvent, PaymentSettings, PaymentWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
+import { PaymentFormPanel } from "./PaymentFormPanel";
 
 type EnvHealth = {
   mercadoPagoAccessToken: boolean;
@@ -36,6 +37,7 @@ export function PaymentsPage() {
   const [error, setError] = useState("");
   const [syncingId, setSyncingId] = useState("");
   const [range, setRange] = useState<DateRangeValue>(() => resolveDateRange("this_month"));
+  const [formOpen, setFormOpen] = useState(false);
 
   async function load() {
     if (!clinic) return;
@@ -83,15 +85,31 @@ export function PaymentsPage() {
     }
   }
 
+  const handleFormSubmit = useCallback((_input: ManualPaymentInput) => {
+    // Fase 3C: conectar con createManualPayment()
+    setFormOpen(false);
+  }, []);
+
   return (
     <AdminPageShell
-      description="Links de pago, señas, pagos de turnos y trazabilidad con Mercado Pago."
-      eyebrow="Finanzas"
+      actionLabel="Registrar pago"
+      description="Pagos, señas y cobros operativos asociados a pacientes, turnos y servicios."
+      eyebrow="Ingresos"
+      onAction={() => setFormOpen((open) => !open)}
       onRefresh={load}
-      title="Pagos"
+      title="Ingresos"
     >
       {error && <Message tone="error">{error}</Message>}
       {!clinic && !clinicLoading && <NoActiveClinicState />}
+      {clinic && formOpen && (
+        <PaymentFormPanel
+          clinicId={clinic.id}
+          onCancel={() => setFormOpen(false)}
+          onSubmit={handleFormSubmit}
+          submitLabel="Disponible en la siguiente fase"
+          submitDisabled
+        />
+      )}
       {clinic && <DateRangeFilter timezone={clinic.timezone ?? "America/Argentina/Mendoza"} defaultPreset="this_month" onChange={setRange} />}
       {clinic && <>
       <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
