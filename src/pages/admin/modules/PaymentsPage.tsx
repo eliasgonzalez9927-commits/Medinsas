@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { CreditCard, ExternalLink, RefreshCw, Settings, WalletCards } from "lucide-react";
 import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
@@ -7,6 +7,7 @@ import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { Button } from "../../../components/ui/Button";
 import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import {
+  createManualPayment,
   getPaymentById,
   getPaymentEvents,
   getPayments,
@@ -38,6 +39,8 @@ export function PaymentsPage() {
   const [syncingId, setSyncingId] = useState("");
   const [range, setRange] = useState<DateRangeValue>(() => resolveDateRange("this_month"));
   const [formOpen, setFormOpen] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
 
   async function load() {
     if (!clinic) return;
@@ -85,10 +88,18 @@ export function PaymentsPage() {
     }
   }
 
-  const handleFormSubmit = useCallback((_input: ManualPaymentInput) => {
-    // Fase 3C: conectar con createManualPayment()
-    setFormOpen(false);
-  }, []);
+  async function handleFormSubmit(input: ManualPaymentInput) {
+    setFormError("");
+    setFormSuccess("");
+    try {
+      await createManualPayment(input);
+      setFormOpen(false);
+      setFormSuccess("Pago registrado correctamente.");
+      await load();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "No pudimos registrar el pago. Revisá los datos e intentá nuevamente.");
+    }
+  }
 
   return (
     <AdminPageShell
@@ -100,14 +111,15 @@ export function PaymentsPage() {
       title="Ingresos"
     >
       {error && <Message tone="error">{error}</Message>}
+      {formSuccess && <Message tone="success">{formSuccess}</Message>}
       {!clinic && !clinicLoading && <NoActiveClinicState />}
       {clinic && formOpen && (
         <PaymentFormPanel
           clinicId={clinic.id}
-          onCancel={() => setFormOpen(false)}
+          error={formError}
+          onCancel={() => { setFormOpen(false); setFormError(""); }}
           onSubmit={handleFormSubmit}
-          submitLabel="Disponible en la siguiente fase"
-          submitDisabled
+          submitLabel="Registrar pago"
         />
       )}
       {clinic && <DateRangeFilter timezone={clinic.timezone ?? "America/Argentina/Mendoza"} defaultPreset="this_month" onChange={setRange} />}

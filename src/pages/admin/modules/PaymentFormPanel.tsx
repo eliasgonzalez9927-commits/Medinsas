@@ -14,6 +14,7 @@ import {
 type Props = {
   clinicId: string;
   defaultValues?: Partial<ManualPaymentInput>;
+  error?: string;
   onCancel: () => void;
   onSubmit?: (input: ManualPaymentInput) => Promise<void> | void;
   submitDisabled?: boolean;
@@ -42,6 +43,7 @@ const STATUS_OPTIONS = [
 export function PaymentFormPanel({
   clinicId,
   defaultValues,
+  error: externalError,
   onCancel,
   onSubmit,
   submitDisabled = false,
@@ -147,6 +149,12 @@ export function PaymentFormPanel({
           ✕
         </button>
       </div>
+
+      {externalError && (
+        <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+          {externalError}
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} noValidate className="grid gap-5">
         {/* Paciente */}
@@ -330,7 +338,7 @@ export function PaymentFormPanel({
             type="submit"
             variant="primary"
           >
-            {submitting ? "Guardando..." : submitLabel}
+            {submitting ? "Registrando..." : submitLabel}
           </Button>
           <Button onClick={onCancel} type="button" variant="ghost">
             Cancelar
