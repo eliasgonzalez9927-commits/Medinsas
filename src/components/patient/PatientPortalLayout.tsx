@@ -2,6 +2,8 @@ import { CalendarDays, HeartPulse, Home, LogOut, Menu, UserRound, UsersRound } f
 import { ReactNode, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import { patientProfileMock } from "../../data/patientPortalMock";
+import { disablePatientPreview, isPatientPreviewActive } from "../../lib/patient-preview";
 
 const patientNav = [
   { to: "/paciente", label: "Inicio", icon: Home },
@@ -13,9 +15,28 @@ const patientNav = [
 export function PatientPortalLayout({ children }: { children: ReactNode }) {
   const { profile, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const previewActive = isPatientPreviewActive();
+  const patientName = previewActive
+    ? `${patientProfileMock.firstName} ${patientProfileMock.lastName}`
+    : profile?.full_name ?? "Paciente";
+
+  async function handleSignOut() {
+    if (previewActive) {
+      disablePatientPreview();
+      window.location.href = "/paciente/login";
+      return;
+    }
+    await signOut();
+  }
 
   return (
     <div className="min-h-screen bg-[#F6FAF9] text-clinic-ink">
+      {previewActive && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-semibold text-amber-900">
+          Preview local de QA visual. No es una sesión real y queda deshabilitado en producción.
+        </div>
+      )}
+
       <header className="sticky top-0 z-30 border-b border-clinic-line bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <Link to="/paciente" className="flex items-center gap-3">
@@ -36,11 +57,11 @@ export function PatientPortalLayout({ children }: { children: ReactNode }) {
 
           <div className="hidden items-center gap-3 lg:flex">
             <div className="rounded-full border border-clinic-line px-3 py-2 text-sm text-clinic-muted">
-              {profile?.full_name ?? "Paciente"}
+              {patientName}
             </div>
             <button
               type="button"
-              onClick={signOut}
+              onClick={handleSignOut}
               className="grid h-10 w-10 place-items-center rounded-lg border border-clinic-line text-clinic-muted transition hover:bg-clinic-surface hover:text-clinic-ink"
               aria-label="Cerrar sesion"
             >
@@ -66,7 +87,7 @@ export function PatientPortalLayout({ children }: { children: ReactNode }) {
               ))}
               <button
                 type="button"
-                onClick={signOut}
+                onClick={handleSignOut}
                 className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-clinic-muted hover:bg-clinic-surface"
               >
                 <LogOut size={17} />

@@ -1,9 +1,13 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import { isPatientPreviewActive } from "../../lib/patient-preview";
 
 export function PatientPortalRoute() {
   const { role, user, loading } = useAuth();
   const location = useLocation();
+  const previewActive = isPatientPreviewActive();
+
+  if (previewActive) return <Outlet />;
 
   if (loading) {
     return (

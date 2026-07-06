@@ -35,6 +35,7 @@ import {
   PatientNewAppointmentPage,
   PatientProfilePage
 } from "./pages/patient/PatientPortalPages";
+import { PatientPreviewPage } from "./pages/patient/PatientPreviewPage";
 import { PublicAppointmentPage } from "./pages/patient/PublicAppointmentPage";
 import { SuperadminClinicDetailPage, SuperadminClinicsPage, SuperadminDashboard } from "./pages/superadmin/SuperadminPages";
 import { SuperadminPlansPage, SuperadminSubscriptionsPage } from "./pages/superadmin/SaasBillingPages";
@@ -53,6 +54,7 @@ export function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/paciente/login" element={<PatientLoginPage />} />
       <Route path="/paciente/registro" element={<PatientRegisterPage />} />
+      <Route path="/paciente/preview" element={<PatientPreviewPage />} />
       <Route path="/clinica-demo" element={<ClinicLanding />} />
       <Route path="/reservar/:clinicSlug" element={<PublicBookingPage />} />
       <Route path="/reservar/:clinicSlug/:filter" element={<PublicBookingPage />} />
