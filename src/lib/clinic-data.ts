@@ -280,7 +280,7 @@ export async function getPayments(clinicId: string, filters: PaymentFilters = {}
   try {
     let query = supabase
       .from("payments")
-      .select("*, clinics(*), patients(*), appointments(*), services(*)")
+      .select("*, clinics(*), patients(*), appointments(*), services(*), professionals(id, name, last_name)")
       .eq("clinic_id", clinicId)
       .order("created_at", { ascending: false });
     if (filters.dateFrom) {

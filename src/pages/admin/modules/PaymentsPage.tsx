@@ -31,6 +31,19 @@ type EnvHealth = {
   supabaseServiceRoleKey: boolean;
 };
 
+type RendicionRow = {
+  id: string | null;
+  name: string;
+  count: number;
+  cobrado: number;
+  senias: number;
+  copagos: number;
+  pagos: number;
+  ajustes: number;
+  pendiente: number;
+  vencido: number;
+};
+
 export function PaymentsPage() {
   const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const [payments, setPayments] = useState<PaymentWithRelations[]>([]);
@@ -61,18 +74,52 @@ export function PaymentsPage() {
   }, [clinic?.id, clinicLoading, range.dateFrom, range.dateTo]);
 
   const summary = useMemo(() => {
-    const approved = payments.filter((payment) => getEffectivePaymentStatus(payment) === "approved");
-    const pending = payments.filter((payment) => ["pending", "in_process"].includes(getEffectivePaymentStatus(payment)));
-    const expired = payments.filter((payment) => getEffectivePaymentStatus(payment) === "expired");
+    const approved = payments.filter(isApproved);
+    const pending = payments.filter(isPending);
+    const expired = payments.filter(isExpired);
+    const deposits = payments.filter((p) => p.kind === "deposit");
+    const manual = payments.filter((p) => p.source === "manual");
+    const mp = payments.filter((p) => p.source === "mercado_pago");
     return {
       total: payments.length,
-      approved: approved.length,
-      pending: pending.length,
-      expired: expired.length,
-      amount: approved.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0),
-      deposits: approved.filter((payment) => getPaymentKind(payment).type === "deposit").length,
-      fullPayments: approved.filter((payment) => getPaymentKind(payment).type === "full").length
+      cobrado: sumAmount(approved),
+      porCobrar: sumAmount(pending),
+      vencido: sumAmount(expired),
+      senias: { count: deposits.filter(isApproved).length, amount: sumAmount(deposits.filter(isApproved)) },
+      manual: { count: manual.length, cobrado: sumAmount(manual.filter(isApproved)) },
+      mp: { count: mp.length, cobrado: sumAmount(mp.filter(isApproved)) },
     };
+  }, [payments]);
+
+  const rendicion = useMemo((): RendicionRow[] => {
+    if (payments.length === 0) return [];
+    const groups = new Map<string | null, PaymentWithRelations[]>();
+    for (const p of payments) {
+      const key = p.professional_id;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(p);
+    }
+    return Array.from(groups.entries())
+      .map(([profId, pms]) => {
+        const prof = pms[0]?.professionals;
+        const name = prof ? `${prof.name} ${prof.last_name}`.trim() : "Sin profesional asignado";
+        const approved = pms.filter(isApproved);
+        const pending = pms.filter(isPending);
+        const expired = pms.filter(isExpired);
+        return {
+          id: profId,
+          name,
+          count: pms.length,
+          cobrado: sumAmount(approved),
+          senias: pms.filter((p) => p.kind === "deposit").length,
+          copagos: pms.filter((p) => p.kind === "copay").length,
+          pagos: pms.filter((p) => p.kind === "payment").length,
+          ajustes: pms.filter((p) => p.kind === "adjustment").length,
+          pendiente: sumAmount(pending),
+          vencido: sumAmount(expired),
+        };
+      })
+      .sort((a, b) => b.cobrado - a.cobrado);
   }, [payments]);
 
   async function syncPayment(paymentId: string) {
@@ -124,15 +171,58 @@ export function PaymentsPage() {
       )}
       {clinic && <DateRangeFilter timezone={clinic.timezone ?? "America/Argentina/Mendoza"} defaultPreset="this_month" onChange={setRange} />}
       {clinic && <>
-      <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
-        <Metric label="Pagos" value={String(summary.total)} />
-        <Metric label="Aprobados" value={String(summary.approved)} />
-        <Metric label="Pendientes" value={String(summary.pending)} />
-        <Metric label="Vencidos" value={String(summary.expired)} />
-        <Metric label="Señas" value={String(summary.deposits)} />
-        <Metric label="Pagos totales" value={String(summary.fullPayments)} />
-        <Metric label="Cobrado" value={formatMoney(summary.amount)} />
+      <section className="grid gap-4 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-7">
+        <Metric label="Cobrado" value={formatMoney(summary.cobrado)} />
+        <Metric label="Por cobrar" value={formatMoney(summary.porCobrar)} />
+        <Metric label="Vencido" value={formatMoney(summary.vencido)} />
+        <Metric label="Señas" value={String(summary.senias.count)} sub={formatMoney(summary.senias.amount)} />
+        <Metric label="Manual" value={String(summary.manual.count)} sub={formatMoney(summary.manual.cobrado)} />
+        <Metric label="Mercado Pago" value={String(summary.mp.count)} sub={formatMoney(summary.mp.cobrado)} />
+        <Metric label="Movimientos" value={String(summary.total)} />
       </section>
+
+      <SectionCard className="overflow-hidden">
+          <div className="border-b border-clinic-line px-5 py-4">
+            <h2 className="font-semibold text-clinic-ink">Rendición por profesional</h2>
+            <p className="mt-1 text-sm text-clinic-muted">Resumen operativo del período. No equivale a una liquidación final de honorarios.</p>
+          </div>
+          {rendicion.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-clinic-muted">No hay ingresos en el período seleccionado.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-clinic-line bg-clinic-surface text-left text-xs font-semibold text-clinic-muted">
+                    <th className="px-5 py-3">Profesional</th>
+                    <th className="px-4 py-3 text-right">Movimientos</th>
+                    <th className="px-4 py-3 text-right">Cobrado</th>
+                    <th className="px-4 py-3 text-right">Señas</th>
+                    <th className="px-4 py-3 text-right">Copagos</th>
+                    <th className="px-4 py-3 text-right">Pagos</th>
+                    <th className="px-4 py-3 text-right">Ajustes</th>
+                    <th className="px-4 py-3 text-right">Pend./Venc.</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-clinic-line">
+                  {rendicion.map((row) => (
+                    <tr key={row.id ?? "sin-profesional"}>
+                      <td className="px-5 py-3 font-medium text-clinic-ink">{row.name}</td>
+                      <td className="px-4 py-3 text-right text-clinic-muted">{row.count}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-clinic-ink">{formatMoney(row.cobrado)}</td>
+                      <td className="px-4 py-3 text-right text-clinic-muted">{row.senias || "—"}</td>
+                      <td className="px-4 py-3 text-right text-clinic-muted">{row.copagos || "—"}</td>
+                      <td className="px-4 py-3 text-right text-clinic-muted">{row.pagos || "—"}</td>
+                      <td className="px-4 py-3 text-right text-clinic-muted">{row.ajustes || "—"}</td>
+                      <td className="px-4 py-3 text-right text-clinic-muted">
+                        {row.pendiente + row.vencido > 0 ? formatMoney(row.pendiente + row.vencido) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
 
       <SectionCard className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
@@ -159,8 +249,8 @@ export function PaymentsPage() {
                 </div>
                 <StatusBadge status={getEffectivePaymentStatus(payment)} />
                 <span className="text-sm font-semibold text-clinic-ink">{formatMoney(payment.amount)}</span>
-                <span className="text-sm text-clinic-muted">{getPaymentKind(payment).label}</span>
-                <span className="text-sm text-clinic-muted">{payment.provider ?? "manual"}</span>
+                <KindBadge kind={payment.kind} />
+                <SourceBadge source={payment.source} />
                 <div className="flex flex-wrap gap-2">
                   <button
                     className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-clinic-line px-3 py-1.5 text-xs font-semibold text-clinic-ink hover:bg-clinic-surface disabled:opacity-60"
@@ -256,9 +346,9 @@ export function PaymentDetailPage() {
               <Info label="Vencimiento" value={payment.expires_at ? formatDate(payment.expires_at, payment.clinics?.timezone ?? undefined) : "Sin vencimiento"} />
               <Info label="Estado del turno" value={payment.appointments?.status ?? "Sin turno"} />
               <Info label="Estado pago turno" value={payment.appointments?.payment_status ?? "Sin estado"} />
-              <Info label="Tipo de pago" value={getPaymentKind(payment).label} />
+              <Info label="Tipo de pago" value={kindLabel(payment.kind)} />
               <Info label="Monto pagado" value={formatMoney(payment.amount)} />
-              <Info label="Saldo pendiente" value={formatRemaining(getPaymentKind(payment).remainingAmount)} />
+              <Info label="Saldo pendiente" value={payment.kind === "deposit" ? formatRemaining(Math.max(Number(payment.services?.price ?? 0) - Number(payment.amount ?? 0), 0)) : "—"} />
               <Info label="Proveedor" value={payment.provider ?? "manual"} />
               <Info label="Provider payment id" value={payment.provider_payment_id ?? "Pendiente"} />
               <Info label="Preference id" value={payment.provider_preference_id ?? "Pendiente"} />
@@ -453,13 +543,35 @@ function EnvRow({ label, ready }: { label: string; ready?: boolean }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-lg border border-clinic-line bg-white p-4 shadow-sm"><p className="text-sm text-clinic-muted">{label}</p><p className="mt-1 text-xl font-semibold text-clinic-ink">{value}</p></div>;
+function Metric({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-lg border border-clinic-line bg-white p-4 shadow-sm">
+      <p className="text-sm text-clinic-muted">{label}</p>
+      <p className="mt-1 text-xl font-semibold text-clinic-ink">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-clinic-muted">{sub}</p>}
+    </div>
+  );
 }
 
 function StatusBadge({ status }: { status: string }) {
   const tone = status === "approved" ? "bg-emerald-50 text-emerald-700" : ["pending", "in_process"].includes(status) ? "bg-amber-50 text-amber-700" : status === "expired" ? "bg-slate-100 text-slate-700" : "bg-red-50 text-red-700";
   return <span className={`rounded-lg px-3 py-2 text-center text-xs font-semibold ${tone}`}>{paymentStatusLabel(status)}</span>;
+}
+
+function KindBadge({ kind }: { kind: string }) {
+  const styles: Record<string, string> = {
+    deposit: "bg-blue-50 text-blue-700",
+    payment: "bg-emerald-50 text-emerald-700",
+    copay: "bg-violet-50 text-violet-700",
+    adjustment: "bg-amber-50 text-amber-700",
+  };
+  return <span className={`rounded-lg px-2 py-1 text-xs font-semibold ${styles[kind] ?? "bg-slate-100 text-slate-600"}`}>{kindLabel(kind)}</span>;
+}
+
+function SourceBadge({ source }: { source: string }) {
+  const label = source === "mercado_pago" ? "Mercado Pago" : source === "import" ? "Importado" : "Manual";
+  const style = source === "mercado_pago" ? "bg-sky-50 text-sky-700" : "bg-slate-100 text-slate-600";
+  return <span className={`rounded-lg px-2 py-1 text-xs font-semibold ${style}`}>{label}</span>;
 }
 
 function Info({ label, value }: { label: string; value: string }) {
@@ -500,6 +612,22 @@ function getEffectivePaymentStatus(payment: PaymentWithRelations) {
   return payment.status;
 }
 
+function sumAmount(arr: PaymentWithRelations[]) {
+  return arr.reduce((s, p) => s + Number(p.amount ?? 0), 0);
+}
+
+function isApproved(p: PaymentWithRelations) { return getEffectivePaymentStatus(p) === "approved"; }
+function isExpired(p: PaymentWithRelations) { return getEffectivePaymentStatus(p) === "expired"; }
+function isPending(p: PaymentWithRelations) {
+  const s = getEffectivePaymentStatus(p);
+  return s === "pending" || s === "in_process";
+}
+
+function kindLabel(kind: string): string {
+  const labels: Record<string, string> = { deposit: "Seña", payment: "Pago", copay: "Copago", adjustment: "Ajuste" };
+  return labels[kind] ?? "Pago";
+}
+
 function formatMoney(value: number) {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(Number(value || 0));
 }
@@ -508,16 +636,6 @@ function formatRemaining(value: number) {
   return Number(value ?? 0) <= 0 ? "Sin saldo pendiente" : formatMoney(value);
 }
 
-function getPaymentKind(payment: PaymentWithRelations): { type: "deposit" | "full"; label: string; remainingAmount: number } {
-  const amount = Number(payment.amount ?? 0);
-  const price = Number(payment.services?.price ?? 0);
-  const remainingAmount = Math.max(price - amount, 0);
-  if (price > 0 && amount >= price) return { type: "full", label: "Pago total", remainingAmount };
-  if (payment.services?.payment_required && !payment.services?.deposit_required) return { type: "full", label: "Pago total", remainingAmount };
-  const notesLookLikeDeposit = String(payment.notes ?? "").toLowerCase().includes("sena") || String(payment.notes ?? "").toLowerCase().includes("seña");
-  if (payment.services?.deposit_required || notesLookLikeDeposit) return { type: "deposit", label: "Seña", remainingAmount };
-  return { type: "full", label: "Pago total", remainingAmount };
-}
 
 async function syncPaymentStatus(paymentId: string) {
   const { data } = await supabase.auth.getSession();
