@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ClipboardList } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ClipboardList, Mic, Sparkles, Square } from "lucide-react";
 import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import {
   closeClinicalEvolutionDraft,
@@ -40,6 +40,25 @@ const EMPTY_FIELDS: ClinicalEvolutionDraftUpdate = {
   observations: ""
 };
 
+type SummaryAssistantStatus =
+  | "idle"
+  | "consent_rejected"
+  | "recording"
+  | "transcribing"
+  | "summarized"
+  | "applied"
+  | "discarded"
+  | "error";
+
+type ConsentStatus = "pending" | "accepted" | "rejected" | "revoked";
+type ConsentType = "verbal" | "written" | "digital";
+
+const MOCK_AUTO_SUMMARY = [
+  "Durante la consulta, el paciente y el profesional conversaron sobre el motivo de consulta y la evolución referida.",
+  "El profesional mencionó indicaciones generales que deberán ser revisadas y editadas antes de guardar el registro.",
+  "Se dejó espacio para completar próximo control u otros puntos conversados si corresponde."
+].join("\n\n");
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -74,6 +93,15 @@ export function AttendancePage() {
   const [closeEvolutionOnFinish, setCloseEvolutionOnFinish] = useState(true);
 
   const formRef = useRef<HTMLDivElement>(null);
+
+  // Resumen automatico (UI preparada; sin audio/IA real en V1)
+  const [summaryStatus, setSummaryStatus] = useState<SummaryAssistantStatus>("idle");
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [consentStatus, setConsentStatus] = useState<ConsentStatus>("pending");
+  const [consentType, setConsentType] = useState<ConsentType>("verbal");
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [summaryDraft, setSummaryDraft] = useState("");
+  const [summaryAuditNote, setSummaryAuditNote] = useState("");
 
   useEffect(() => {
     if (clinicLoading || !activeClinicId || !appointmentId) return;
@@ -128,6 +156,62 @@ export function AttendancePage() {
 
     return () => { cancelled = true; };
   }, [activeClinicId, clinicLoading, appointmentId]);
+
+  useEffect(() => {
+    if (summaryStatus !== "recording") return;
+    const timer = window.setInterval(() => setRecordingSeconds((seconds) => seconds + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [summaryStatus]);
+
+  // ---------------------------------------------------------------------------
+  // Resumen automatico handlers
+  // ---------------------------------------------------------------------------
+
+  function handleAcceptSummaryConsent() {
+    setConsentStatus("accepted");
+    setShowConsentModal(false);
+    setSummaryAuditNote(`Consentimiento ${consentType} registrado para transcribir y resumir esta atencion.`);
+    setRecordingSeconds(0);
+    setSummaryDraft("");
+    setSummaryStatus("recording");
+  }
+
+  function handleRejectSummaryConsent() {
+    setConsentStatus("rejected");
+    setShowConsentModal(false);
+    setSummaryAuditNote("Consentimiento rechazado. No se activo el resumen automatico.");
+    setSummaryStatus("consent_rejected");
+  }
+
+  function handleFinishListening() {
+    setSummaryStatus("transcribing");
+    window.setTimeout(() => {
+      setSummaryDraft(MOCK_AUTO_SUMMARY);
+      setSummaryAuditNote("Resumen generado en modo preparatorio. Debe ser revisado y aprobado por el profesional.");
+      setSummaryStatus("summarized");
+    }, 900);
+  }
+
+  function handleApplySummary() {
+    const cleanSummary = summaryDraft.trim();
+    if (!cleanSummary) return;
+    setFields((current) => ({
+      ...current,
+      current_condition: cleanSummary,
+      observations: [
+        current.observations,
+        "Resumen generado automaticamente a partir de la conversacion, revisado y aprobado por el profesional."
+      ].filter(Boolean).join("\n\n")
+    }));
+    setSummaryAuditNote("Resumen aplicado al borrador de atencion. Revisalo antes de guardar o cerrar la evolucion.");
+    setSummaryStatus("applied");
+  }
+
+  function handleDiscardSummary() {
+    setSummaryDraft("");
+    setSummaryAuditNote("Resumen descartado. No se aplico al registro de atencion.");
+    setSummaryStatus("discarded");
+  }
 
   // ---------------------------------------------------------------------------
   // Attention handlers
@@ -554,6 +638,23 @@ export function AttendancePage() {
           </div>
         )}
 
+        {/* Resumen automatico */}
+        {!loading && !pageError && appointment && (
+          <SummaryAssistantCard
+            auditNote={summaryAuditNote}
+            canUse={canWrite && !attentionFinished}
+            consentStatus={consentStatus}
+            onApply={handleApplySummary}
+            onDiscard={handleDiscardSummary}
+            onFinishListening={handleFinishListening}
+            onOpenConsent={() => setShowConsentModal(true)}
+            recordingSeconds={recordingSeconds}
+            setSummaryDraft={setSummaryDraft}
+            status={summaryStatus}
+            summaryDraft={summaryDraft}
+          />
+        )}
+
         {/* Loading skeleton */}
         {loading && (
           <SectionCard>
@@ -718,6 +819,63 @@ export function AttendancePage() {
         )}
       </main>
 
+      {/* Summary assistant consent modal */}
+      {showConsentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e6f4f1] text-clinic-brand">
+                <Mic size={19} />
+              </span>
+              <div>
+                <p className="font-semibold text-clinic-ink">Consentimiento para resumen automatico</p>
+                <p className="mt-2 text-sm leading-6 text-clinic-muted">
+                  El paciente autoriza la grabacion/transcripcion de esta atencion para generar un resumen de lo conversado. El resumen debera ser revisado y aprobado por el profesional antes de guardarse. La IA no realiza diagnosticos, no indica tratamientos y no toma decisiones clinicas.
+                </p>
+              </div>
+            </div>
+
+            <label className="mt-5 block">
+              <span className="text-sm font-medium text-clinic-ink">Tipo de consentimiento</span>
+              <select
+                value={consentType}
+                onChange={(event) => setConsentType(event.target.value as ConsentType)}
+                className="mt-2 h-10 w-full rounded-lg border border-clinic-line bg-white px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+              >
+                <option value="verbal">Verbal</option>
+                <option value="written">Escrito</option>
+                <option value="digital">Digital</option>
+              </select>
+            </label>
+
+            <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              No se guardara audio por defecto en esta version. Esta funcion queda preparada para transcripcion/resumen y revision humana.
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                onClick={() => setShowConsentModal(false)}
+                className="rounded-lg border border-clinic-line px-4 py-2 text-sm font-medium text-clinic-ink transition-colors hover:bg-clinic-surface"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRejectSummaryConsent}
+                className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
+              >
+                Consentimiento rechazado
+              </button>
+              <button
+                onClick={handleAcceptSummaryConsent}
+                className="rounded-lg bg-clinic-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90"
+              >
+                Consentimiento aceptado
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Close evolution confirmation modal */}
       {showCloseConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
@@ -820,6 +978,156 @@ export function AttendancePage() {
 // Sub-components
 // ---------------------------------------------------------------------------
 
+function SummaryAssistantCard({
+  auditNote,
+  canUse,
+  consentStatus,
+  onApply,
+  onDiscard,
+  onFinishListening,
+  onOpenConsent,
+  recordingSeconds,
+  setSummaryDraft,
+  status,
+  summaryDraft
+}: {
+  auditNote: string;
+  canUse: boolean;
+  consentStatus: ConsentStatus;
+  onApply: () => void;
+  onDiscard: () => void;
+  onFinishListening: () => void;
+  onOpenConsent: () => void;
+  recordingSeconds: number;
+  setSummaryDraft: (value: string) => void;
+  status: SummaryAssistantStatus;
+  summaryDraft: string;
+}) {
+  const isRecording = status === "recording";
+  const isTranscribing = status === "transcribing";
+  const hasEditableSummary = status === "summarized" || status === "applied";
+
+  return (
+    <SectionCard className="overflow-hidden">
+      <div className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#e6f4f1] text-clinic-brand">
+            <Sparkles size={20} />
+          </span>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-semibold text-clinic-ink">Resumen automatico</p>
+              <SummaryAssistantStatusChip status={status} />
+            </div>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-clinic-muted">
+              Medin puede transcribir la atencion y generar un resumen editable de lo conversado. La IA no realiza diagnosticos, no indica tratamientos y no toma decisiones clinicas. El profesional debe revisar y aprobar el contenido antes de guardarlo.
+            </p>
+            {auditNote && (
+              <p className="mt-2 text-xs font-medium text-clinic-muted">{auditNote}</p>
+            )}
+          </div>
+        </div>
+
+        {status === "idle" && (
+          <button
+            onClick={onOpenConsent}
+            disabled={!canUse}
+            className="shrink-0 rounded-lg bg-clinic-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Activar resumen automatico
+          </button>
+        )}
+
+        {isRecording && (
+          <button
+            onClick={onFinishListening}
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
+          >
+            <Square size={14} />
+            Finalizar escucha
+          </button>
+        )}
+      </div>
+
+      {status === "consent_rejected" && (
+        <div className="mx-5 mb-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          El consentimiento fue rechazado. No se activo transcripcion ni resumen automatico.
+        </div>
+      )}
+
+      {isRecording && (
+        <div className="mx-5 mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+          <span className="font-semibold">Escuchando atencion</span>
+          <span>{formatDuration(recordingSeconds)}</span>
+          <span className="text-emerald-700">Consentimiento: {consentStatus === "accepted" ? "aceptado" : "pendiente"}</span>
+        </div>
+      )}
+
+      {isTranscribing && (
+        <div className="mx-5 mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Preparando transcripcion y resumen. Esta version usa un flujo simulado hasta conectar servicios reales.
+        </div>
+      )}
+
+      {(hasEditableSummary || status === "discarded") && (
+        <div className="border-t border-clinic-line px-5 py-5">
+          {status === "discarded" ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              Resumen descartado. Podés activar nuevamente el resumen automatico si el paciente autoriza.
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              <label>
+                <span className="text-sm font-medium text-clinic-ink">Resumen editable de la conversacion</span>
+                <textarea
+                  value={summaryDraft}
+                  onChange={(event) => setSummaryDraft(event.target.value)}
+                  className="mt-2 min-h-44 w-full rounded-lg border border-clinic-line px-3 py-3 text-sm leading-6 outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+                />
+              </label>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Revisá el resumen antes de aplicarlo. No agregues conclusiones, diagnosticos o indicaciones que no hayan sido mencionadas durante la consulta.
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={onApply}
+                  disabled={!summaryDraft.trim()}
+                  className="flex items-center gap-2 rounded-lg bg-clinic-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <CheckCircle2 size={15} />
+                  Aplicar al registro de atencion
+                </button>
+                <button
+                  onClick={onDiscard}
+                  className="rounded-lg border border-clinic-line px-4 py-2 text-sm font-medium text-clinic-ink transition-colors hover:bg-clinic-surface"
+                >
+                  Descartar resumen
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function SummaryAssistantStatusChip({ status }: { status: SummaryAssistantStatus }) {
+  const config: Record<SummaryAssistantStatus, { label: string; className: string }> = {
+    idle: { label: "Listo para asistir", className: "bg-slate-100 text-slate-600" },
+    consent_rejected: { label: "Consentimiento rechazado", className: "bg-slate-100 text-slate-600" },
+    recording: { label: "Escuchando", className: "bg-emerald-100 text-emerald-700" },
+    transcribing: { label: "Transcribiendo", className: "bg-blue-100 text-blue-700" },
+    summarized: { label: "Resumen listo", className: "bg-[#e6f4f1] text-clinic-brand" },
+    applied: { label: "Aplicado", className: "bg-emerald-100 text-emerald-700" },
+    discarded: { label: "Descartado", className: "bg-slate-100 text-slate-600" },
+    error: { label: "Error", className: "bg-red-100 text-red-700" }
+  };
+  const item = config[status];
+  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${item.className}`}>{item.label}</span>;
+}
+
 function AppointmentMeta({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
@@ -915,6 +1223,12 @@ function formatTime(iso: string): string {
     timeZone: "America/Argentina/Buenos_Aires",
     hourCycle: "h23"
   }).format(new Date(iso));
+}
+
+function formatDuration(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 
 function formatAttentionSummary(startIso: string, endIso: string): string {
