@@ -22,7 +22,7 @@ export function Login() {
     try {
       const snapshot = await signIn(email, password);
       const nextPath = getPostLoginPath(snapshot.role);
-      if (!nextPath || nextPath === "/patient/book") {
+      if (!nextPath || snapshot.role === "patient") {
         setError("Sin permisos para acceder al panel.");
         return;
       }
