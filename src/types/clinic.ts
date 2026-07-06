@@ -450,6 +450,7 @@ export type PaymentWithRelations = Payment & {
   patients?: Patient | null;
   appointments?: Appointment | null;
   services?: Service | null;
+  professionals?: Professional | null;
 };
 
 export type ManualPaymentInput = {
