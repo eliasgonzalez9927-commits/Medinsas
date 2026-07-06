@@ -39,6 +39,7 @@ import {
   PatientNewAppointmentPage,
   PatientProfilePage
 } from "./pages/patient/PatientPortalPages";
+import { PatientPreviewPage } from "./pages/patient/PatientPreviewPage";
 import { PublicAppointmentPage } from "./pages/patient/PublicAppointmentPage";
 import { ClinicalRecordPage } from "./pages/admin/modules/ClinicalRecordPage";
 import { AttendancePage } from "./pages/admin/modules/AttendancePage";
@@ -60,6 +61,7 @@ export function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/paciente/login" element={<PatientLoginPage />} />
       <Route path="/paciente/registro" element={<PatientRegisterPage />} />
+      <Route path="/paciente/preview" element={<PatientPreviewPage />} />
       <Route path="/aceptar-invitacion" element={<AcceptInvitation />} />
       <Route path="/recuperar-contrasena" element={<ForgotPassword />} />
       <Route path="/restablecer-contrasena" element={<ResetPassword />} />

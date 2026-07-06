@@ -29,9 +29,12 @@ import {
   patientProfileMock,
   patientSpecialtiesMock
 } from "../../data/patientPortalMock";
+import { isPatientPreviewActive } from "../../lib/patient-preview";
 
 export function PatientDashboardPage() {
   const { profile } = useAuth();
+  const previewActive = isPatientPreviewActive();
+  const displayName = previewActive ? patientProfileMock.firstName : firstName(profile?.full_name) ?? patientProfileMock.firstName;
   const nextAppointment = patientAppointmentsMock
     .filter((appointment) => ["confirmed", "pending"].includes(appointment.status))
     .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0];
@@ -44,7 +47,7 @@ export function PatientDashboardPage() {
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#54AAA0]">Mi Medin</p>
             <h1 className="mt-3 text-3xl font-semibold tracking-normal text-clinic-ink">
-              Hola, {firstName(profile?.full_name) ?? patientProfileMock.firstName}
+              Hola, {displayName}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-clinic-muted">
               Revisá tus próximos turnos, reservá una nueva atención y mantené actualizados tus datos de contacto.
@@ -192,7 +195,7 @@ export function PatientNewAppointmentPage() {
         <PageHeader
           eyebrow="Nueva reserva"
           title="Reservar turno"
-          description="Elegí especialidad, profesional y horario. Esta versión deja la creación preparada en modo mock."
+          description="Elegí especialidad, profesional y horario. La clínica revisará la solicitud antes de confirmar."
         />
 
         <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1fr_360px]">
@@ -244,7 +247,7 @@ export function PatientNewAppointmentPage() {
               <SummaryRow label="Paciente" value={patientOptions.find((item) => item.id === patientId)?.label ?? "Titular"} />
             </div>
             <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-              La confirmación real dependerá de disponibilidad segura y reglas de la clínica. No se crea un turno real en esta versión.
+              La confirmación dependerá de disponibilidad y reglas de la clínica. En esta vista de prueba no se registra una reserva.
             </div>
             <button
               type="submit"
@@ -256,7 +259,7 @@ export function PatientNewAppointmentPage() {
 
             {confirmed && (
               <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-                Solicitud preparada. La clínica deberá confirmar disponibilidad antes de crear el turno real.
+                Solicitud preparada. La clínica deberá confirmar disponibilidad antes de agendar el turno.
               </div>
             )}
           </PortalCard>
@@ -305,7 +308,7 @@ export function PatientProfilePage() {
             </div>
 
             <div className="rounded-lg border border-teal-200 bg-[#E6F4F1] px-4 py-3 text-sm leading-6 text-teal-900">
-              Guardado mock: queda preparado para conectar a pacientes/perfiles cuando RLS permita edición por titular.
+              Los cambios quedan preparados en esta vista de prueba, sin actualizar datos reales de la clínica.
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -316,7 +319,7 @@ export function PatientProfilePage() {
                 <CheckCircle2 size={17} />
                 Guardar cambios
               </button>
-              {saved && <span className="text-sm font-medium text-emerald-700">Cambios guardados en modo mock.</span>}
+              {saved && <span className="text-sm font-medium text-emerald-700">Cambios preparados en esta vista de prueba.</span>}
             </div>
           </PortalCard>
         </form>
@@ -340,7 +343,7 @@ export function PatientFamilyPage() {
     const nextMember = { ...form, id: `fam-${Date.now()}` };
     setMembers((current) => [nextMember, ...current]);
     setForm({ firstName: "", lastName: "", documentNumber: "", relationship: "", birthDate: "" });
-    setSaved("Familiar agregado en modo mock. Ya queda disponible para el flujo de reserva.");
+    setSaved("Familiar agregado en esta vista de prueba. Ya queda disponible para reservar un turno.");
   }
 
   return (
