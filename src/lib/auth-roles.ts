@@ -40,6 +40,6 @@ export function getPostLoginPath(role?: UserRole | null) {
   if (role === "receptionist") return "/admin/agenda";
   if (role === "professional" || role === "doctor") return "/admin/mi-agenda";
   if (isAdminRole(role)) return "/admin";
-  if (role === "patient") return "/patient/book";
+  if (role === "patient") return "/paciente";
   return null;
 }
