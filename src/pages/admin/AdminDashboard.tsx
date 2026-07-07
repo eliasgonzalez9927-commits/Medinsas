@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 import { Link, useNavigate } from "react-router-dom";
 import {
   CalendarCheck2,
@@ -17,10 +18,11 @@ import {
 import { AppointmentStatusBadge } from "../../components/admin/AppointmentStatusBadge";
 import { AdminLayout } from "../../components/admin/AdminLayout";
 import { DateRangeFilter } from "../../components/admin/DateRangeFilter";
+import { NoActiveClinicState } from "../../components/admin/NoActiveClinicState";
 import { Button } from "../../components/ui/Button";
+import { useActiveClinic } from "../../contexts/ActiveClinicContext";
 import {
   getAppointments,
-  getDefaultClinic,
   getPatients,
   getProfessionals,
   getServices
@@ -38,7 +40,7 @@ const DAILY_CAPACITY = 24;
 
 export function AdminDashboard() {
   const navigate = useNavigate();
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
   const [patients, setPatients] = useState<PatientWithAppointments[]>([]);
   const [professionals, setProfessionals] = useState<ProfessionalWithRelations[]>([]);
@@ -48,20 +50,15 @@ export function AdminDashboard() {
   const [range, setRange] = useState<DateRangeValue>(() => resolveDateRange("today"));
 
   async function loadDashboard() {
+    if (!clinic) return;
     setLoading(true);
     setError("");
     try {
-      const loadedClinic = await getDefaultClinic();
-      setClinic(loadedClinic);
-      if (!loadedClinic) {
-        setError("No encontramos la clínica configurada.");
-        return;
-      }
       const [loadedAppointments, loadedPatients, professionalResult, serviceResult] = await Promise.all([
-        getAppointments(loadedClinic.id, { dateFrom: range.dateFrom, dateTo: range.dateTo, timezone: loadedClinic.timezone ?? undefined }),
-        getPatients(loadedClinic.id),
-        getProfessionals(loadedClinic.id),
-        getServices(loadedClinic.id)
+        getAppointments(clinic.id, { dateFrom: range.dateFrom, dateTo: range.dateTo, timezone: clinic.timezone ?? undefined }),
+        getPatients(clinic.id),
+        getProfessionals(clinic.id),
+        getServices(clinic.id)
       ]);
       setAppointments(loadedAppointments);
       setPatients(loadedPatients);
@@ -75,9 +72,33 @@ export function AdminDashboard() {
     }
   }
 
+  // Soft refresh: recarga el dashboard sin spinner bloqueante.
+  async function softLoadDashboard() {
+    if (!clinic) return;
+    try {
+      const [loadedAppointments, loadedPatients, professionalResult, serviceResult] = await Promise.all([
+        getAppointments(clinic.id, { dateFrom: range.dateFrom, dateTo: range.dateTo, timezone: clinic.timezone ?? undefined }),
+        getPatients(clinic.id),
+        getProfessionals(clinic.id),
+        getServices(clinic.id)
+      ]);
+      setAppointments(loadedAppointments);
+      setPatients(loadedPatients);
+      setProfessionals(professionalResult.data);
+      setServices(serviceResult.data);
+    } catch {
+      // Fallo silencioso: mantiene datos existentes.
+    }
+  }
+
+  const { lastRefreshedAt, isRefreshing, isOnline, refresh } = useAutoRefresh(softLoadDashboard, {
+    intervalMs: 60_000,
+    pauseWhenHidden: true,
+  });
+
   useEffect(() => {
-    loadDashboard();
-  }, [range.dateFrom, range.dateTo]);
+    if (clinic) loadDashboard();
+  }, [clinic?.id, range.dateFrom, range.dateTo]);
 
   const timezone = clinic?.timezone ?? "America/Argentina/Mendoza";
   const isToday = range.preset === "today";
@@ -108,7 +129,13 @@ export function AdminDashboard() {
     : "Sin próximos turnos";
 
   return (
-    <AdminLayout onCreateAppointment={() => navigate("/admin/agenda")} onRefresh={loadDashboard}>
+    <AdminLayout
+      onCreateAppointment={() => navigate("/admin/agenda")}
+      onRefresh={refresh}
+      lastRefreshedAt={lastRefreshedAt}
+      isRefreshing={isRefreshing}
+      isOnline={isOnline}
+    >
       <main className="mx-auto flex max-w-[1360px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <section className="flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
           <div>
@@ -128,8 +155,9 @@ export function AdminDashboard() {
         </section>
 
         {error && <Message>{error}</Message>}
+        {!clinic && !clinicLoading && <NoActiveClinicState />}
 
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {clinic && <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Metric
             title={isToday ? "Turnos hoy" : "Turnos del período"}
             value={String(summary.total)}
@@ -144,9 +172,9 @@ export function AdminDashboard() {
             icon={<CalendarCheck2 size={20} />}
           />
           <Metric title="Ocupación" value={`${summary.occupancy}%`} helper="Capacidad estimada" icon={<Percent size={20} />} progress={summary.occupancy} />
-        </section>
+        </section>}
 
-        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]">
+        {clinic && <section className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]">
           <Panel title="Agenda de hoy" action={<LinkButton to={agendaLink}>Ver agenda completa <ChevronRight size={16} /></LinkButton>}>
             {loading ? (
               <EmptyLine>Cargando agenda...</EmptyLine>
@@ -189,9 +217,9 @@ export function AdminDashboard() {
               <ActionItem icon={<ExternalLink size={18} />} count={activePublicLinks} label="Compartir link de reservas" description="Activá la agenda online con pacientes." to="/admin/booking" />
             </div>
           </Panel>
-        </section>
+        </section>}
 
-        <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        {clinic && <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <Panel title="Indicadores simples">
             <div className="grid gap-3 sm:grid-cols-3">
               <SmallMetric icon={<UsersRound size={18} />} label="Pacientes nuevos del período" value={String(newPatients)} />
@@ -210,7 +238,7 @@ export function AdminDashboard() {
               <QuickLink icon={<Settings2 size={20} />} label="Disponibilidad" description="Definí horarios y días hábiles" to="/admin/disponibilidad" />
             </div>
           </Panel>
-        </section>
+        </section>}
       </main>
     </AdminLayout>
   );

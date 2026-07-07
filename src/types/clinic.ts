@@ -138,6 +138,10 @@ export type Appointment = {
   payment_required?: boolean;
   created_at: string;
   updated_at?: string;
+  attention_started_at?: string | null;
+  attention_started_by?: string | null;
+  attention_finished_at?: string | null;
+  attention_finished_by?: string | null;
 };
 
 export type AppointmentPaymentStatus =
@@ -396,6 +400,10 @@ export type FiscalSettings = {
   updated_at: string;
 };
 
+export type PaymentKind = "deposit" | "payment" | "copay" | "adjustment";
+
+export type PaymentSource = "manual" | "mercado_pago" | "import";
+
 export type Payment = {
   id: string;
   clinic_id: string;
@@ -403,9 +411,12 @@ export type Payment = {
   appointment_id: string | null;
   invoice_id?: string | null;
   service_id?: string | null;
+  professional_id: string | null;
   amount: number;
   currency: string;
   method: string | null;
+  kind: PaymentKind;
+  source: PaymentSource;
   provider?: string;
   provider_payment_id?: string | null;
   provider_preference_id?: string | null;
@@ -418,6 +429,7 @@ export type Payment = {
   expires_at?: string | null;
   paid_at: string | null;
   notes: string | null;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -438,6 +450,40 @@ export type PaymentWithRelations = Payment & {
   patients?: Patient | null;
   appointments?: Appointment | null;
   services?: Service | null;
+};
+
+export type ManualPaymentInput = {
+  clinicId: string;
+  patientId: string;
+  appointmentId?: string | null;
+  professionalId?: string | null;
+  serviceId?: string | null;
+  amount: number;
+  currency?: string;
+  method: "cash" | "transfer" | "card" | "other";
+  kind: PaymentKind;
+  status: "approved" | "pending";
+  notes?: string | null;
+};
+
+export type ManualPaymentResult = {
+  id: string;
+  clinic_id: string;
+  patient_id: string | null;
+  appointment_id: string | null;
+  professional_id: string | null;
+  service_id: string | null;
+  amount: number;
+  currency: string;
+  method: string | null;
+  kind: PaymentKind;
+  source: PaymentSource;
+  status: string;
+  paid_at: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  appointment_payment_status?: string | null;
 };
 
 export type PaymentSettings = {
@@ -731,4 +777,57 @@ export type HealthPlan = {
   name: string;
   code: string | null;
   active: boolean;
+};
+
+// ---------------------------------------------------------------------------
+// Registro clínico V1
+// ---------------------------------------------------------------------------
+
+export type ClinicalEvolutionStatus = "draft" | "closed";
+
+export type ClinicalEvolution = {
+  id: string;
+  clinic_id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  professional_id: string | null;
+  reason: string | null;
+  current_condition: string | null;
+  physical_exam: string | null;
+  diagnosis: string | null;
+  plan: string | null;
+  observations: string | null;
+  status: ClinicalEvolutionStatus;
+  closed_at: string | null;
+  closed_by: string | null;
+  created_at: string;
+  created_by: string | null;
+  updated_at: string;
+  updated_by: string | null;
+};
+
+export type ClinicalEvolutionWithProfessional = ClinicalEvolution & {
+  professional: { id: string; name: string; last_name: string } | null;
+};
+
+export type ClinicalEvolutionDraftInput = {
+  clinic_id: string;
+  patient_id: string;
+  appointment_id?: string | null;
+  professional_id: string | null;
+  reason: string;
+  current_condition: string;
+  physical_exam: string;
+  diagnosis: string;
+  plan: string;
+  observations: string;
+};
+
+export type ClinicalEvolutionDraftUpdate = {
+  reason: string;
+  current_condition: string;
+  physical_exam: string;
+  diagnosis: string;
+  plan: string;
+  observations: string;
 };

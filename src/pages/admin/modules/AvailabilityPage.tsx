@@ -1,7 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CalendarClock, Plus, Trash2 } from "lucide-react";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import {
   createAvailabilityBlock,
   createAvailabilityRule,
@@ -9,14 +11,12 @@ import {
   deleteAvailabilityRule,
   getAvailabilityBlocks,
   getAvailabilityRules,
-  getDefaultClinic,
   getLocations,
   getProfessionals
 } from "../../../lib/clinic-data";
 import {
   AvailabilityBlock,
   AvailabilityRuleWithRelations,
-  Clinic,
   Location,
   ProfessionalWithRelations
 } from "../../../types/clinic";
@@ -25,7 +25,7 @@ import { AdminPageShell } from "./AdminPageShell";
 const dayLabels = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
 
 export function AvailabilityPage() {
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const [professionals, setProfessionals] = useState<ProfessionalWithRelations[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [rules, setRules] = useState<AvailabilityRuleWithRelations[]>([]);
@@ -55,20 +55,15 @@ export function AvailabilityPage() {
   );
 
   async function load() {
+    if (!clinic) return;
     setLoading(true);
     setError("");
     try {
-      const loadedClinic = await getDefaultClinic();
-      setClinic(loadedClinic);
-      if (!loadedClinic) {
-        setError("No encontramos la clinica configurada. Ejecuta las migraciones y el seed inicial.");
-        return;
-      }
       const [professionalsResult, loadedLocations, rulesResult, loadedBlocks] = await Promise.all([
-        getProfessionals(loadedClinic.id),
-        getLocations(loadedClinic.id),
-        getAvailabilityRules(loadedClinic.id),
-        getAvailabilityBlocks(loadedClinic.id)
+        getProfessionals(clinic.id),
+        getLocations(clinic.id),
+        getAvailabilityRules(clinic.id),
+        getAvailabilityBlocks(clinic.id)
       ]);
       setProfessionals(professionalsResult.data);
       setFromFallback(professionalsResult.fromFallback || rulesResult.fromFallback);
@@ -84,8 +79,8 @@ export function AvailabilityPage() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    if (clinic) load();
+  }, [clinic?.id]);
 
   async function handleCreateRule(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -118,7 +113,7 @@ export function AvailabilityPage() {
       return;
     }
     try {
-      await deleteAvailabilityRule(rule.id);
+      await deleteAvailabilityRule(rule.id, clinic?.id);
       setNotice("Horario eliminado.");
       await load();
     } catch (err) {
@@ -147,7 +142,7 @@ export function AvailabilityPage() {
 
   async function handleDeleteBlock(block: AvailabilityBlock) {
     try {
-      await deleteAvailabilityBlock(block.id);
+      await deleteAvailabilityBlock(block.id, clinic?.id);
       setNotice("Bloqueo eliminado.");
       await load();
     } catch (err) {
@@ -168,7 +163,9 @@ export function AvailabilityPage() {
         </Message>
       )}
       {error && <Message tone="error">{error}</Message>}
+      {!clinic && !clinicLoading && <NoActiveClinicState />}
 
+      {clinic && <>
       <section className="grid gap-4 lg:grid-cols-4">
         {[
           ["Lunes a viernes", "08:00 a 20:00"],
@@ -318,6 +315,7 @@ export function AvailabilityPage() {
           )}
         </SectionCard>
       </section>
+      </>}
     </AdminPageShell>
   );
 }

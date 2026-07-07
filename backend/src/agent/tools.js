@@ -2,7 +2,12 @@ import { z } from "zod";
 import { supabase } from "../lib/supabase.js";
 import { assertCanUseTool, canUseTool, ROLES } from "../security/roles.js";
 
-export const toolDefinitions = [
+// FASE 0 SEGURIDAD: toolDefinitions vaciado — el agente opera sin tools hasta que
+// se implemente multi-clínica, routing por phone_number_id y audit trail completo.
+// Las implementaciones de cada tool se preservan abajo para referencia futura.
+export const toolDefinitions = [];
+
+const _disabledToolDefinitions = [
   {
     type: "function",
     name: "get_daily_schedule",

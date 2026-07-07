@@ -12,7 +12,10 @@ const createClinicUserSchema = z.object({
   role: z.enum(["clinic_admin", "receptionist", "professional"]).default("clinic_admin")
 });
 
-superadminRouter.post("/api/superadmin/clinics/:clinicId/users", async (req, res, next) => {
+superadminRouter.post("/api/superadmin/clinics/:clinicId/users", createClinicUserHandler);
+superadminRouter.post("/superadmin/clinics/:clinicId/users", createClinicUserHandler);
+
+async function createClinicUserHandler(req, res, next) {
   try {
     const auth = await authenticatePlatformAdmin(req);
     const clinicId = z.string().uuid().parse(req.params.clinicId);
@@ -83,7 +86,7 @@ superadminRouter.post("/api/superadmin/clinics/:clinicId/users", async (req, res
     if (error instanceof z.ZodError) return res.status(400).json({ error: "INVALID_PAYLOAD" });
     next(error);
   }
-});
+}
 
 async function authenticatePlatformAdmin(req) {
   const header = req.get("authorization") ?? "";

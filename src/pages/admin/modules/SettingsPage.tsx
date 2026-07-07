@@ -1,15 +1,15 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Building2, CalendarClock, Mail, MapPin, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import { useAuth } from "../../../contexts/AuthContext";
 import {
   createLocation,
-  createUserInvitation,
   getClinicHours,
   getClinicMembers,
-  getDefaultClinic,
   getLocations,
   getProfessionals,
   getUserInvitations,
@@ -18,6 +18,7 @@ import {
   updateLocation,
   upsertClinicHour
 } from "../../../lib/clinic-data";
+import { cancelInvitation, changeClinicMemberRole, createInvitation, updateClinicMemberProfessional } from "../../../lib/invitations";
 import { getClinicNotificationSettings, updateClinicNotificationSettings } from "../../../lib/notifications";
 import { canManageClinic, canManageUsers } from "../../../lib/permissions";
 import { supabase } from "../../../lib/supabase";
@@ -60,13 +61,27 @@ const tabs: Array<{ id: SettingsTab; label: string; to: string }> = [
   { id: "integrations", label: "Integraciones", to: "/admin/configuracion#integraciones" }
 ];
 
-const roles: UserRole[] = ["platform_admin", "clinic_admin", "receptionist", "professional"];
+// La invitacion a clinica nunca debe poder otorgar platform_admin: el backend
+// (POST /api/invitations) rechaza ese rol por diseno de seguridad.
+const invitableRoles: UserRole[] = ["clinic_admin", "receptionist", "professional"];
 const roleLabels: Record<string, string> = {
   platform_admin: "Platform admin",
   clinic_admin: "Admin clinica",
+  admin: "Administrador",
   receptionist: "Recepcion",
   professional: "Profesional"
 };
+
+// Roles asignables desde "Cambiar rol" en Usuarios y permisos. platform_admin
+// queda excluido por diseno: el backend (PATCH /api/clinic-members/:id/role)
+// rechaza ese rol explicitamente.
+const assignableRoles: Array<"clinic_admin" | "admin" | "receptionist" | "professional"> = [
+  "clinic_admin",
+  "admin",
+  "receptionist",
+  "professional"
+];
+const ADMIN_MEMBER_ROLES = ["clinic_admin", "admin"];
 
 const days = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
 
@@ -90,7 +105,7 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
   const { role, user } = useAuth();
   const { hash } = useLocation();
   const [activeTab, setActiveTab] = useState<SettingsTab>(hashToTab(hash) ?? initialTab);
-  const [clinic, setClinic] = useState<Clinic | null>(null);
+  const { activeClinic: clinic, activeRole, loading: clinicLoading, refreshClinics } = useActiveClinic();
   const [locations, setLocations] = useState<Location[]>([]);
   const [hours, setHours] = useState<ClinicHours[]>([]);
   const [members, setMembers] = useState<ClinicMemberWithProfile[]>([]);
@@ -102,23 +117,21 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
   const [error, setError] = useState("");
 
   const permissions = useMemo(() => ({
-    manageClinic: canManageClinic(role),
-    manageUsers: canManageUsers(role)
-  }), [role]);
+    manageClinic: canManageClinic(activeRole ?? role),
+    manageUsers: canManageUsers(activeRole ?? role)
+  }), [activeRole, role]);
 
   async function load() {
+    if (!clinic) return;
     setLoading(true);
     setError("");
     try {
-      const loadedClinic = await getDefaultClinic();
-      setClinic(loadedClinic);
-      if (!loadedClinic) return;
       const [loadedLocations, loadedHours, loadedMembers, loadedInvitations, professionalResult] = await Promise.all([
-        getLocations(loadedClinic.id),
-        getClinicHours(loadedClinic.id).catch(() => []),
-        getClinicMembers(loadedClinic.id).catch(() => []),
-        getUserInvitations(loadedClinic.id).catch(() => []),
-        getProfessionals(loadedClinic.id)
+        getLocations(clinic.id),
+        getClinicHours(clinic.id).catch(() => []),
+        getClinicMembers(clinic.id).catch(() => []),
+        getUserInvitations(clinic.id).catch(() => []),
+        getProfessionals(clinic.id)
       ]);
       setLocations(loadedLocations);
       setHours(loadedHours);
@@ -133,8 +146,9 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    if (clinic) load();
+    else if (!clinicLoading) setLoading(false);
+  }, [clinic?.id, clinicLoading]);
 
   useEffect(() => {
     const next = hashToTab(hash);
@@ -146,8 +160,8 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
     setSaving(true);
     setError("");
     try {
-      const updated = await updateClinic(clinic.id, data);
-      setClinic(updated);
+      await updateClinic(clinic.id, data);
+      await refreshClinics();
       setNotice("Datos de la clinica actualizados.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos guardar la clinica.");
@@ -194,35 +208,109 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
   }) {
     if (!clinic || !permissions.manageUsers) return;
     setSaving(true);
+    setError("");
     try {
-      const invitation = await createUserInvitation({
-        clinic_id: clinic.id,
-        invited_by: user?.id ?? null,
-        ...data
+      await createInvitation({
+        clinicId: clinic.id,
+        email: data.email,
+        fullName: data.full_name,
+        role: data.role as "clinic_admin" | "receptionist" | "professional",
+        locationId: data.location_id ?? null,
+        professionalId: data.professional_id ?? null
       });
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (sessionData.session) {
-        await fetch("/api/messages/send", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${sessionData.session.access_token}`
-          },
-          body: JSON.stringify({
-            clinicId: clinic.id,
-            recipients: [{ email: data.email }],
-            subject: "Te invitaron a Medin",
-            text: `Hola ${data.full_name}, te invitaron a Medin como ${roleLabels[data.role] ?? data.role}.`,
-            template: "user_invitation",
-            related_entity_type: "user_invitation",
-            related_entity_id: invitation.id
-          })
-        }).catch(() => undefined);
-      }
-      setNotice("Invitacion registrada. Si Resend esta configurado, se enviara el email.");
+      setNotice("Invitación enviada. El usuario va a recibir un email con el link para aceptarla.");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos invitar al usuario.");
+      const code = err instanceof Error ? err.message : "";
+      const message = code === "ALREADY_PENDING"
+        ? "Ya hay una invitación pendiente para ese email en esta clínica."
+        : code === "FORBIDDEN_CLINIC"
+          ? "Tu rol no permite invitar usuarios a esta clínica."
+          : code === "INVALID_PAYLOAD"
+            ? "Revisá los datos del formulario, hay un campo inválido."
+            : code === "PROFESSIONAL_REQUIRED"
+              ? "Para invitar un usuario profesional, es obligatorio seleccionar un profesional de la clínica."
+              : code === "PROFESSIONAL_NOT_FOUND"
+                ? "El profesional seleccionado no existe."
+                : code === "PROFESSIONAL_CLINIC_MISMATCH"
+                  ? "El profesional seleccionado no pertenece a esta clínica."
+                  : "No pudimos invitar al usuario.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function cancelUserInvitation(id: string) {
+    if (!permissions.manageUsers) return;
+    setSaving(true);
+    setError("");
+    try {
+      await cancelInvitation(id);
+      setNotice("Invitación cancelada. Ya podés enviar una nueva invitación si hace falta.");
+      await load();
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "";
+      const message = code === "INVITATION_ALREADY_ACCEPTED"
+        ? "Esa invitación ya fue aceptada, no se puede cancelar."
+        : code === "FORBIDDEN"
+          ? "Tu rol no permite cancelar invitaciones de esta clínica."
+          : code === "INVITATION_NOT_FOUND"
+            ? "No encontramos esa invitación."
+            : "No pudimos cancelar la invitación.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function changeMemberRole(id: string, role: "clinic_admin" | "admin" | "receptionist" | "professional") {
+    if (!permissions.manageUsers) return;
+    setSaving(true);
+    setError("");
+    try {
+      await changeClinicMemberRole(id, role);
+      setNotice("Rol actualizado correctamente.");
+      await load();
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "";
+      const message = code === "FORBIDDEN"
+        ? "No tenés permisos para cambiar roles."
+        : code === "INVALID_PAYLOAD"
+          ? "No se puede asignar platform admin desde esta pantalla."
+          : code === "SELF_DEMOTION_FORBIDDEN"
+            ? "No podés quitarte tu propio rol administrativo."
+            : code === "CLINIC_WITHOUT_ADMIN"
+              ? "La clínica debe conservar al menos un administrador activo."
+              : code === "MEMBER_NOT_FOUND"
+                ? "No encontramos ese usuario."
+                : "No pudimos actualizar el rol.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateMemberProfessional(id: string, professionalId: string | null) {
+    if (!permissions.manageUsers) return;
+    setSaving(true);
+    setError("");
+    try {
+      await updateClinicMemberProfessional(id, professionalId);
+      setNotice("Profesional asociado actualizado.");
+      await load();
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "";
+      const message = code === "FORBIDDEN"
+        ? "No tenés permisos para editar esta vinculación."
+        : code === "MEMBER_NOT_FOUND"
+          ? "No encontramos ese usuario."
+          : code === "PROFESSIONAL_NOT_FOUND"
+            ? "El profesional seleccionado no existe."
+            : code === "PROFESSIONAL_CLINIC_MISMATCH"
+              ? "El profesional no pertenece a esta clínica."
+              : "No pudimos actualizar el profesional asociado.";
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -258,10 +346,10 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
         </div>
       </SectionCard>
 
-      {loading ? (
+      {loading || clinicLoading ? (
         <SectionCard className="p-8 text-center text-clinic-muted">Cargando configuracion...</SectionCard>
       ) : !clinic ? (
-        <Message tone="error">No encontramos la clinica principal.</Message>
+        <NoActiveClinicState />
       ) : (
         <>
           {activeTab === "clinic" && <ClinicForm clinic={clinic} disabled={!permissions.manageClinic || saving} onSave={saveClinic} />}
@@ -269,10 +357,15 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
           {activeTab === "hours" && <HoursPanel disabled={!permissions.manageClinic || saving} hours={hours} clinicId={clinic.id} onSave={saveHour} />}
           {activeTab === "users" && (
             <UsersPanel
+              canManageUsers={permissions.manageUsers}
+              currentUserId={user?.id ?? ""}
               disabled={!permissions.manageUsers || saving}
               invitations={invitations}
               locations={locations}
               members={members}
+              onCancelInvitation={cancelUserInvitation}
+              onChangeRole={changeMemberRole}
+              onUpdateProfessional={updateMemberProfessional}
               onInvite={inviteUser}
               onRefresh={load}
               professionals={professionals}
@@ -436,10 +529,19 @@ function HourRow({ disabled, hour, onSave }: { disabled: boolean; hour: ClinicHo
   );
 }
 
-function UsersPanel({ disabled, invitations, locations, members, onInvite, onRefresh, professionals }: { disabled: boolean; invitations: UserInvitation[]; locations: Location[]; members: ClinicMemberWithProfile[]; onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void; onRefresh: () => void; professionals: ProfessionalWithRelations[] }) {
+function UsersPanel({ canManageUsers, currentUserId, disabled, invitations, locations, members, onCancelInvitation, onChangeRole, onUpdateProfessional, onInvite, onRefresh, professionals }: { canManageUsers: boolean; currentUserId: string; disabled: boolean; invitations: UserInvitation[]; locations: Location[]; members: ClinicMemberWithProfile[]; onCancelInvitation: (id: string) => void; onChangeRole: (id: string, role: "clinic_admin" | "admin" | "receptionist" | "professional") => void; onUpdateProfessional: (id: string, professionalId: string | null) => void; onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void; onRefresh: () => void; professionals: ProfessionalWithRelations[] }) {
   const [form, setForm] = useState({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
+  const pendingInvitations = invitations.filter((invitation) => invitation.status === "pending");
+
+  const requiresProfessional = form.role === "professional";
+  const activeProfessionals = professionals.filter((p) => p.active);
+  const noProfessionalsAvailable = requiresProfessional && activeProfessionals.length === 0;
+  const missingProfessional = requiresProfessional && !form.professional_id;
+  const inviteBlocked = disabled || noProfessionalsAvailable || missingProfessional;
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (inviteBlocked) return;
     onInvite({ ...form, location_id: form.location_id || null, professional_id: form.professional_id || null });
     setForm({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
   }
@@ -450,46 +552,247 @@ function UsersPanel({ disabled, invitations, locations, members, onInvite, onRef
         <form onSubmit={submit} className="mt-5 grid gap-4">
           <Input label="Email" type="email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} required />
           <Input label="Nombre" value={form.full_name} onChange={(value) => setForm({ ...form, full_name: value })} required />
-          <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value })} options={roles.map((item) => ({ value: item, label: roleLabels[item] }))} />
+          <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value, professional_id: "" })} options={invitableRoles.map((item) => ({ value: item, label: roleLabels[item] }))} />
           <Select label="Sede opcional" value={form.location_id} onChange={(value) => setForm({ ...form, location_id: value })} options={[{ value: "", label: "Sin sede asignada" }, ...locations.map((item) => ({ value: item.id, label: item.name }))]} />
-          <Select label="Profesional asociado" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} options={[{ value: "", label: "Sin profesional" }, ...professionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))]} />
-          <Button disabled={disabled} type="submit" variant="primary">Enviar invitacion</Button>
+          <div className="grid gap-1.5">
+            <Select
+              label={requiresProfessional ? "Profesional asociado (obligatorio)" : "Profesional asociado"}
+              value={form.professional_id}
+              onChange={(value) => setForm({ ...form, professional_id: value })}
+              options={[
+                { value: "", label: requiresProfessional ? "Seleccioná un profesional…" : "Sin profesional" },
+                ...activeProfessionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))
+              ]}
+            />
+            {noProfessionalsAvailable && (
+              <Message tone="warning">No hay profesionales cargados. Creá un profesional antes de invitar un usuario con rol Profesional.</Message>
+            )}
+            {requiresProfessional && !noProfessionalsAvailable && missingProfessional && (
+              <p className="text-xs font-medium text-amber-700">Para invitar un usuario profesional, primero vinculalo a un profesional de la clínica.</p>
+            )}
+          </div>
+          <Button disabled={inviteBlocked} type="submit" variant="primary">Enviar invitacion</Button>
         </form>
       </SectionCard>
-      <SectionCard className="overflow-hidden">
-        <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
-          <h2 className="font-semibold">Usuarios y permisos</h2>
-          <Button onClick={onRefresh}>Actualizar</Button>
-        </div>
-        <div className="divide-y divide-clinic-line">
-          {members.map((member) => <MemberRow key={member.id} disabled={disabled} member={member} onRefresh={onRefresh} />)}
-          {invitations.map((invitation) => (
-            <article key={invitation.id} className="grid gap-3 bg-amber-50/40 px-5 py-4 md:grid-cols-[1fr_130px_120px] md:items-center">
-              <div><p className="font-semibold">{invitation.full_name}</p><p className="text-sm text-clinic-muted">{invitation.email}</p></div>
-              <span className="text-sm font-medium">{roleLabels[invitation.role] ?? invitation.role}</span>
-              <span className="rounded-lg bg-white px-3 py-2 text-center text-xs font-semibold text-amber-700">{invitation.status}</span>
-            </article>
-          ))}
-        </div>
-      </SectionCard>
+      <div className="grid gap-6">
+        <SectionCard className="overflow-hidden">
+          <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
+            <div>
+              <h2 className="font-semibold">Usuarios del equipo</h2>
+              <p className="text-xs text-clinic-muted">Personas con acceso a la clínica y permisos asignados.</p>
+            </div>
+            <Button onClick={onRefresh}>Actualizar</Button>
+          </div>
+          <div className="divide-y divide-clinic-line">
+            {members.map((member) => (
+              <MemberRow
+                key={member.id}
+                canManageUsers={canManageUsers}
+                currentUserId={currentUserId}
+                disabled={disabled}
+                member={member}
+                professionals={professionals}
+                onChangeRole={onChangeRole}
+                onUpdateProfessional={onUpdateProfessional}
+                onRefresh={onRefresh}
+              />
+            ))}
+          </div>
+        </SectionCard>
+        <SectionCard className="overflow-hidden">
+          <div className="border-b border-clinic-line px-5 py-4">
+            <h2 className="font-semibold">Invitaciones pendientes</h2>
+            <p className="text-xs text-clinic-muted">Invitaciones enviadas que todavía no fueron aceptadas.</p>
+          </div>
+          <div className="divide-y divide-clinic-line">
+            {pendingInvitations.length === 0 && (
+              <p className="px-5 py-4 text-sm text-clinic-muted">No hay invitaciones pendientes.</p>
+            )}
+            {pendingInvitations.map((invitation) => (
+              <article key={invitation.id} className="grid gap-3 bg-amber-50/40 px-5 py-4 md:grid-cols-[1fr_130px_120px_140px] md:items-center">
+                <div><p className="font-semibold">{invitation.full_name}</p><p className="text-sm text-clinic-muted">{invitation.email}</p></div>
+                <span className="text-sm font-medium">{roleLabels[invitation.role] ?? invitation.role}</span>
+                <span className="rounded-lg bg-white px-3 py-2 text-center text-xs font-semibold text-amber-700">Pendiente</span>
+                <Button disabled={disabled} onClick={() => onCancelInvitation(invitation.id)}>Cancelar invitación</Button>
+              </article>
+            ))}
+          </div>
+        </SectionCard>
+      </div>
     </section>
   );
 }
 
-function MemberRow({ disabled, member, onRefresh }: { disabled: boolean; member: ClinicMemberWithProfile; onRefresh: () => void }) {
+const PROFESSIONAL_ROLES_SET = new Set(["professional", "doctor"]);
+
+function MemberRow({ canManageUsers, currentUserId, disabled, member, professionals, onChangeRole, onUpdateProfessional, onRefresh }: { canManageUsers: boolean; currentUserId: string; disabled: boolean; member: ClinicMemberWithProfile; professionals: ProfessionalWithRelations[]; onChangeRole: (id: string, role: "clinic_admin" | "admin" | "receptionist" | "professional") => void; onUpdateProfessional: (id: string, professionalId: string | null) => void; onRefresh: () => void }) {
+  const [roleModalOpen, setRoleModalOpen] = useState(false);
+  const [professionalModalOpen, setProfessionalModalOpen] = useState(false);
+  const isProfRole = PROFESSIONAL_ROLES_SET.has(member.role);
+  const unlinked = isProfRole && !member.professional_id;
+
   async function toggle() {
     await updateClinicMember(member.id, { active: !member.active });
     onRefresh();
   }
+
+  const profName = member.professionals
+    ? `Dr/a. ${member.professionals.name} ${member.professionals.last_name}`
+    : null;
+  const accountName = member.profiles?.full_name ?? member.user_id;
+  const locationLabel = member.locations?.name ?? "Sin sede";
+
+  const primaryName = isProfRole && profName ? profName : accountName;
+  const subtitle = isProfRole
+    ? profName
+      ? `Cuenta: ${accountName} · ${locationLabel}`
+      : `Sin profesional asociado · ${locationLabel}`
+    : locationLabel;
+
   return (
-    <article className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_140px_120px] md:items-center">
-      <div>
-        <p className="font-semibold text-clinic-ink">{member.profiles?.full_name ?? member.user_id}</p>
-        <p className="text-sm text-clinic-muted">{member.locations?.name ?? "Sin sede"} · {member.professionals ? `${member.professionals.name} ${member.professionals.last_name}` : "Sin profesional asociado"}</p>
+    <article className="px-5 py-4">
+      <div className="grid gap-3 md:grid-cols-[1fr_140px_100px_120px_120px] md:items-center">
+        <div>
+          <p className="font-semibold text-clinic-ink">{primaryName}</p>
+          <p className="text-sm text-clinic-muted">{subtitle}</p>
+        </div>
+        <span className="text-sm font-medium">{roleLabels[member.role] ?? member.role}</span>
+        <span className={`rounded-lg px-3 py-2 text-center text-xs font-semibold ${member.active ? "bg-emerald-50 text-emerald-700" : "bg-clinic-surface text-clinic-muted"}`}>
+          {member.active ? "Activo" : "Inactivo"}
+        </span>
+        <Button disabled={disabled} onClick={toggle}>{member.active ? "Desactivar" : "Activar"}</Button>
+        {canManageUsers && (
+          <Button disabled={disabled} onClick={() => setRoleModalOpen(true)}>Cambiar rol</Button>
+        )}
       </div>
-      <span className="text-sm font-medium">{roleLabels[member.role] ?? member.role}</span>
-      <Button disabled={disabled} onClick={toggle}>{member.active ? "Desactivar" : "Activar"}</Button>
+      {canManageUsers && isProfRole && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {unlinked && (
+            <p className="text-xs font-medium text-amber-700">
+              Este usuario profesional todavía no está vinculado a un profesional.
+            </p>
+          )}
+          <Button disabled={disabled} onClick={() => setProfessionalModalOpen(true)}>
+            {member.professional_id ? "Editar profesional asociado" : "Vincular profesional"}
+          </Button>
+        </div>
+      )}
+      {roleModalOpen && (
+        <ChangeRoleModal
+          isSelf={member.user_id === currentUserId}
+          member={member}
+          onClose={() => setRoleModalOpen(false)}
+          onConfirm={(role) => {
+            setRoleModalOpen(false);
+            onChangeRole(member.id, role);
+          }}
+        />
+      )}
+      {professionalModalOpen && (
+        <LinkProfessionalModal
+          member={member}
+          professionals={professionals}
+          onClose={() => setProfessionalModalOpen(false)}
+          onConfirm={(professionalId) => {
+            setProfessionalModalOpen(false);
+            onUpdateProfessional(member.id, professionalId);
+          }}
+        />
+      )}
     </article>
+  );
+}
+
+function LinkProfessionalModal({ member, professionals, onClose, onConfirm }: { member: ClinicMemberWithProfile; professionals: ProfessionalWithRelations[]; onClose: () => void; onConfirm: (professionalId: string | null) => void }) {
+  const [selectedId, setSelectedId] = useState<string>(member.professional_id ?? "");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <h2 className="text-lg font-semibold text-clinic-ink">Vincular profesional</h2>
+        <div className="mt-4 grid gap-3 text-sm">
+          <div>
+            <span className="text-clinic-muted">Usuario</span>
+            <p className="font-medium text-clinic-ink">{member.profiles?.full_name ?? member.user_id}</p>
+          </div>
+          <div>
+            <span className="text-clinic-muted">Rol</span>
+            <p className="font-medium text-clinic-ink">{roleLabels[member.role] ?? member.role}</p>
+          </div>
+          <Select
+            label="Profesional asociado"
+            value={selectedId}
+            onChange={setSelectedId}
+            options={[
+              { value: "", label: "Sin profesional asociado" },
+              ...professionals.filter((p) => p.active).map((p) => ({ value: p.id, label: `${p.name} ${p.last_name}` }))
+            ]}
+          />
+        </div>
+        <div className="mt-5 flex justify-end gap-3">
+          <Button onClick={onClose}>Cancelar</Button>
+          <Button
+            disabled={selectedId === (member.professional_id ?? "")}
+            onClick={() => onConfirm(selectedId || null)}
+            variant="primary"
+          >
+            Guardar cambio
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChangeRoleModal({ isSelf, member, onClose, onConfirm }: { isSelf: boolean; member: ClinicMemberWithProfile; onClose: () => void; onConfirm: (role: "clinic_admin" | "admin" | "receptionist" | "professional") => void }) {
+  const [role, setRole] = useState<"clinic_admin" | "admin" | "receptionist" | "professional">(
+    (assignableRoles.includes(member.role as typeof assignableRoles[number]) ? member.role : "receptionist") as "clinic_admin" | "admin" | "receptionist" | "professional"
+  );
+  const wasAdmin = ADMIN_MEMBER_ROLES.includes(member.role);
+  const staysAdmin = ADMIN_MEMBER_ROLES.includes(role);
+  const blockedBySelfDemotion = isSelf && wasAdmin && !staysAdmin;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <h2 className="text-lg font-semibold text-clinic-ink">Cambiar rol</h2>
+        <div className="mt-4 grid gap-3 text-sm">
+          <div>
+            <span className="text-clinic-muted">Usuario</span>
+            <p className="font-medium text-clinic-ink">{member.profiles?.full_name ?? member.user_id}</p>
+          </div>
+          <div>
+            <span className="text-clinic-muted">Rol actual</span>
+            <p className="font-medium text-clinic-ink">{roleLabels[member.role] ?? member.role}</p>
+          </div>
+          <Select
+            label="Nuevo rol"
+            value={role}
+            onChange={(value) => setRole(value as typeof role)}
+            options={assignableRoles.map((item) => ({ value: item, label: roleLabels[item] }))}
+          />
+          {!wasAdmin && staysAdmin && (
+            <Message tone="warning">Vas a otorgarle permisos administrativos completos a este usuario.</Message>
+          )}
+          {wasAdmin && !staysAdmin && !blockedBySelfDemotion && (
+            <Message tone="warning">Vas a quitarle el rol administrativo a este usuario.</Message>
+          )}
+          {blockedBySelfDemotion && (
+            <Message tone="error">No podés quitarte tu propio rol administrativo.</Message>
+          )}
+        </div>
+        <div className="mt-5 flex justify-end gap-3">
+          <Button onClick={onClose}>Cancelar</Button>
+          <Button
+            disabled={blockedBySelfDemotion || role === member.role}
+            onClick={() => onConfirm(role)}
+            variant="primary"
+          >
+            Guardar cambio
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

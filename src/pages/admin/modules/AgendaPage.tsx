@@ -1,9 +1,12 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
+import { ChevronDown, ClipboardList, Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import {
   cancelAppointment,
   confirmAppointment,
@@ -12,7 +15,6 @@ import {
   createPatient,
   getAppointments,
   getAvailableSlots,
-  getDefaultClinic,
   getLocations,
   getClinicMembers,
   getPatients,
@@ -26,7 +28,7 @@ import { supabase } from "../../../lib/supabase";
 import { DateRangeValue, resolveDateRange } from "../../../lib/date-range";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { useAuth } from "../../../contexts/AuthContext";
-import { canCreateOverbooking } from "../../../lib/permissions";
+import { canCreateOverbooking, canWriteClinicalRecords } from "../../../lib/permissions";
 import {
   AppointmentInput,
   AppointmentStatus,
@@ -38,7 +40,9 @@ import {
   ProfessionalWithRelations,
   ServiceWithRelations
 } from "../../../types/clinic";
+import { UserRole } from "../../../types/database";
 import { AdminPageShell } from "./AdminPageShell";
+import { useAutoRefresh } from "../../../hooks/useAutoRefresh";
 
 type AppointmentForm = {
   patient_id: string;
@@ -73,11 +77,253 @@ type DateAvailability = {
 
 const today = new Date().toISOString().slice(0, 10);
 
+type ActionItem = {
+  label: string;
+  icon?: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+};
+
+type AppointmentActionsMenuProps = {
+  appointment: AppointmentWithRelations;
+  activeRole: UserRole | null;
+  isProfessionalRole: boolean;
+  paymentLinks: Record<string, string>;
+  onGeneratePaymentLink: () => void;
+  onCopyPaymentLink: () => void;
+  onCopyWhatsApp: () => void;
+  onOpenWhatsApp: () => void;
+  onConfirm: () => void;
+  onCompleted: () => void;
+  onNoShow: () => void;
+  onCancel: () => void;
+  onAttend: () => void;
+  onViewClinicalRecord: () => void;
+};
+
+function AppointmentActionsMenu({
+  appointment,
+  activeRole,
+  isProfessionalRole,
+  paymentLinks,
+  onGeneratePaymentLink,
+  onCopyPaymentLink,
+  onCopyWhatsApp,
+  onOpenWhatsApp,
+  onConfirm,
+  onCompleted,
+  onNoShow,
+  onCancel,
+  onAttend,
+  onViewClinicalRecord,
+}: AppointmentActionsMenuProps) {
+  const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const trigger = triggerRef.current;
+    if (trigger) {
+      const rect = trigger.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const estimatedHeight = 320;
+      const right = Math.max(8, window.innerWidth - rect.right);
+      if (spaceBelow < estimatedHeight && rect.top > estimatedHeight) {
+        setMenuStyle({ position: "fixed", bottom: window.innerHeight - rect.top + 4, right, zIndex: 50 });
+      } else {
+        setMenuStyle({ position: "fixed", top: rect.bottom + 4, right, zIndex: 50 });
+      }
+    }
+    function onOutsideClick(e: MouseEvent) {
+      if (
+        triggerRef.current && !triggerRef.current.contains(e.target as Node) &&
+        menuRef.current && !menuRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onOutsideClick);
+    return () => document.removeEventListener("mousedown", onOutsideClick);
+  }, [open]);
+
+  const isPlatformAdmin = activeRole === "platform_admin";
+  const isStatusActive = !["cancelled", "completed"].includes(appointment.status);
+  const canAttend = canWriteClinicalRecords(activeRole) && !["cancelled", "completed", "no_show"].includes(appointment.status);
+  const hasPhone = Boolean(appointment.patient?.phone);
+
+  // Grupo comunicación/pago
+  const paymentGroupAll: ActionItem[] = [
+    { label: "Generar link de pago", icon: <CreditCard size={14} />, onClick: onGeneratePaymentLink },
+    ...(paymentLinks[appointment.id]
+      ? [{ label: "Copiar link de pago", icon: <Copy size={14} />, onClick: onCopyPaymentLink }]
+      : []),
+    { label: "Copiar mensaje WhatsApp", icon: <Copy size={14} />, onClick: onCopyWhatsApp, disabled: !hasPhone },
+    { label: "Abrir WhatsApp", icon: <MessageCircle size={14} />, onClick: onOpenWhatsApp, disabled: !hasPhone },
+  ];
+
+  // Grupo estado
+  const statusGroupAll: ActionItem[] = [
+    ...(appointment.status === "pending" ? [{ label: "Confirmar", onClick: onConfirm }] : []),
+    ...(canAttend ? [{ label: "Atender", icon: <ClipboardList size={14} />, onClick: onAttend }] : []),
+    ...(isStatusActive ? [
+      { label: "Marcar atendido", onClick: onCompleted },
+      { label: "No asistió", onClick: onNoShow },
+    ] : []),
+  ];
+
+  // Grupo destructivo
+  const destructiveGroupAll: ActionItem[] = [
+    ...(isStatusActive ? [{ label: "Cancelar", onClick: onCancel }] : []),
+  ];
+
+  // Determinar primarios y filtrar los secundarios por grupo
+  let primaryActions: ActionItem[] = [];
+  let paymentGroup = paymentGroupAll;
+  let statusGroup = statusGroupAll;
+  let destructiveGroup = destructiveGroupAll;
+
+  if (isProfessionalRole) {
+    primaryActions = canAttend
+      ? [{ label: "Atender", icon: <ClipboardList size={16} />, onClick: onAttend }]
+      : [];
+    paymentGroup = [];
+    statusGroup = [
+      ...(appointment.patient?.id
+        ? [{ label: "Ver registro clínico", icon: <ClipboardList size={14} />, onClick: onViewClinicalRecord }]
+        : []),
+      { label: "Abrir WhatsApp", icon: <MessageCircle size={14} />, onClick: onOpenWhatsApp, disabled: !hasPhone },
+      { label: "Copiar mensaje WhatsApp", icon: <Copy size={14} />, onClick: onCopyWhatsApp, disabled: !hasPhone },
+    ];
+    destructiveGroup = [];
+  } else if (!isPlatformAdmin) {
+    primaryActions = [
+      ...(appointment.status === "pending" ? [{ label: "Confirmar", onClick: onConfirm }] : []),
+      { label: "Abrir WhatsApp", icon: <MessageCircle size={16} />, onClick: onOpenWhatsApp, disabled: !hasPhone },
+    ];
+    const primaryLabels = new Set(primaryActions.map((a) => a.label));
+    paymentGroup = paymentGroupAll.filter((a) => !primaryLabels.has(a.label));
+    statusGroup = statusGroupAll.filter((a) => !primaryLabels.has(a.label));
+  }
+
+  const totalSecondary = paymentGroup.length + statusGroup.length + destructiveGroup.length;
+
+  function run(action: ActionItem) {
+    if (action.disabled) return;
+    action.onClick();
+    setOpen(false);
+  }
+
+  const dropdown = open
+    ? createPortal(
+        <div
+          ref={menuRef}
+          style={menuStyle}
+          className="min-w-[224px] max-w-[280px] rounded-xl border border-clinic-line bg-white shadow-[0_8px_28px_rgba(13,54,66,0.13)]"
+        >
+          <div className="max-h-72 overflow-y-auto py-1.5">
+            {paymentGroup.length > 0 && (
+              <div>
+                {paymentGroup.map((a) => (
+                  <DropdownItem key={a.label} action={a} onRun={run} />
+                ))}
+              </div>
+            )}
+            {statusGroup.length > 0 && (
+              <>
+                {paymentGroup.length > 0 && <hr className="my-1 border-clinic-line" />}
+                <div>
+                  {statusGroup.map((a) => (
+                    <DropdownItem key={a.label} action={a} onRun={run} />
+                  ))}
+                </div>
+              </>
+            )}
+            {destructiveGroup.length > 0 && (
+              <>
+                {(paymentGroup.length > 0 || statusGroup.length > 0) && <hr className="my-1 border-clinic-line" />}
+                <div>
+                  {destructiveGroup.map((a) => (
+                    <DropdownItem key={a.label} action={a} onRun={run} destructive />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>,
+        document.body
+      )
+    : null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {primaryActions.map((action) => (
+        <Button
+          key={action.label}
+          icon={action.icon}
+          onClick={action.onClick}
+          disabled={action.disabled}
+          variant={action.label === "Atender" ? "primary" : "secondary"}
+        >
+          {action.label}
+        </Button>
+      ))}
+      {totalSecondary > 0 && (
+        <>
+          <button
+            ref={triggerRef}
+            type="button"
+            onClick={() => setOpen((prev) => !prev)}
+            aria-haspopup="true"
+            aria-expanded={open}
+            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-clinic-line bg-white px-4 py-2 text-sm font-semibold text-clinic-ink shadow-[0_2px_8px_rgba(13,54,66,0.025)] transition hover:bg-[#e6f4f1]"
+          >
+            Más acciones
+            <ChevronDown size={15} className={`transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+          </button>
+          {dropdown}
+        </>
+      )}
+    </div>
+  );
+}
+
+function DropdownItem({
+  action,
+  onRun,
+  destructive = false,
+}: {
+  action: ActionItem;
+  onRun: (action: ActionItem) => void;
+  destructive?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={action.disabled}
+      onClick={() => onRun(action)}
+      className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+        destructive
+          ? "text-red-600 hover:bg-red-50"
+          : "text-clinic-ink hover:bg-[#e6f4f1]"
+      }`}
+    >
+      {action.icon && (
+        <span className={`flex-shrink-0 ${destructive ? "text-red-400" : "text-clinic-muted"}`}>
+          {action.icon}
+        </span>
+      )}
+      {action.label}
+    </button>
+  );
+}
+
 export function AgendaPage() {
   const { role, user } = useAuth();
+  const { activeClinic: clinic, loading: clinicLoading, activeRole, activeMembership } = useActiveClinic();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [clinic, setClinic] = useState<Clinic | null>(null);
   const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
   const [professionals, setProfessionals] = useState<ProfessionalWithRelations[]>([]);
   const [services, setServices] = useState<ServiceWithRelations[]>([]);
@@ -118,21 +364,28 @@ export function AgendaPage() {
     notes: ""
   });
 
+  // Soft refresh: recarga solo turnos sin bloquear la UI (no setLoading).
+  // Usada por el hook de auto-refresh; loadBase() sigue siendo el hard load inicial.
+  const softRefresh = useCallback(async () => {
+    await loadAppointments();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clinic?.id, range.dateFrom, range.dateTo, professionalId, serviceId, status]);
+
+  const { lastRefreshedAt, isRefreshing, isOnline, refresh } = useAutoRefresh(softRefresh, {
+    intervalMs: 30_000,
+    pauseWhenHidden: true,
+  });
+
   async function loadBase() {
+    if (!clinic) return;
     setLoading(true);
     setError("");
     try {
-      const loadedClinic = await getDefaultClinic();
-      setClinic(loadedClinic);
-      if (!loadedClinic) {
-        setError("No encontramos la clinica configurada. Ejecuta las migraciones y el seed inicial.");
-        return;
-      }
       const [professionalResult, serviceResult, loadedPatients, loadedLocations] = await Promise.all([
-        getProfessionals(loadedClinic.id),
-        getServices(loadedClinic.id),
-        getPatients(loadedClinic.id),
-        getLocations(loadedClinic.id)
+        getProfessionals(clinic.id),
+        getServices(clinic.id),
+        getPatients(clinic.id),
+        getLocations(clinic.id)
       ]);
       const activeProfessionals = professionalResult.data.filter((item) => item.active);
       const activeServices = serviceResult.data.filter((item) => item.active);
@@ -140,7 +393,7 @@ export function AgendaPage() {
       setServices(activeServices);
       setPatients(loadedPatients);
       setLocations(loadedLocations);
-      setMembers((await getClinicMembers(loadedClinic.id).catch(() => [])).map((member) => ({ user_id: member.user_id, profiles: member.profiles ? { full_name: member.profiles.full_name } : null })));
+      setMembers((await getClinicMembers(clinic.id).catch(() => [])).map((member) => ({ user_id: member.user_id, profiles: member.profiles ? { full_name: member.profiles.full_name } : null })));
       setForm((current) => ({
         ...current,
         patient_id: current.patient_id || loadedPatients[0]?.id || "",
@@ -148,7 +401,7 @@ export function AgendaPage() {
         service_id: current.service_id || activeServices[0]?.id || "",
         location_id: current.location_id || loadedLocations[0]?.id || ""
       }));
-      await loadAppointments(loadedClinic.id, loadedClinic.timezone ?? "America/Argentina/Mendoza");
+      await loadAppointments(clinic.id, clinic.timezone ?? "America/Argentina/Mendoza");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar la agenda.");
     } finally {
@@ -170,8 +423,23 @@ export function AgendaPage() {
   }
 
   useEffect(() => {
-    loadBase();
-  }, []);
+    if (clinic) loadBase();
+  }, [clinic?.id]);
+
+  const isProfessionalRole = activeRole === "professional" || activeRole === "doctor";
+  const linkedProfessionalId = activeMembership?.professional_id ?? null;
+
+  // Auto-filtrar agenda para usuarios con rol professional/doctor.
+  // Se ejecuta cuando el membership ya está disponible.
+  useEffect(() => {
+    if (!isProfessionalRole) return;
+    if (linkedProfessionalId) {
+      setProfessionalId(linkedProfessionalId);
+    } else {
+      // Sin vínculo: lista vacía (filtro imposible de satisfacer).
+      setProfessionalId("__unlinked__");
+    }
+  }, [isProfessionalRole, linkedProfessionalId]);
 
   useEffect(() => {
     setSearchQuery(searchParams.get("search") ?? "");
@@ -518,10 +786,10 @@ export function AgendaPage() {
   async function handleStatus(id: string, action: "confirm" | "cancel" | "completed" | "no_show") {
     setError("");
     try {
-      if (action === "confirm") await confirmAppointment(id);
-      if (action === "cancel") await cancelAppointment(id, "Cancelado desde agenda");
-      if (action === "completed") await markAppointmentCompleted(id);
-      if (action === "no_show") await markAppointmentNoShow(id);
+      if (action === "confirm") await confirmAppointment(id, clinic?.id);
+      if (action === "cancel") await cancelAppointment(id, "Cancelado desde agenda", clinic?.id);
+      if (action === "completed") await markAppointmentCompleted(id, clinic?.id);
+      if (action === "no_show") await markAppointmentNoShow(id, clinic?.id);
       setNotice("Estado actualizado.");
       await loadAppointments();
     } catch (err) {
@@ -576,20 +844,24 @@ export function AgendaPage() {
       eyebrow="Agenda clinica"
       onCreateAppointment={openCreate}
       onAction={openCreate}
-      onRefresh={refreshAgenda}
+      onRefresh={refresh}
+      lastRefreshedAt={lastRefreshedAt}
+      isRefreshing={isRefreshing}
+      isOnline={isOnline}
       title="Agenda"
     >
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
+      {!clinic && !clinicLoading && <NoActiveClinicState />}
 
-      <section className="grid gap-4 md:grid-cols-4">
+      {clinic && <section className="grid gap-4 md:grid-cols-4">
         <QuickAction icon={<Clock3 size={18} />} label={`${metrics.pending} turnos sin confirmar`} />
         <QuickAction icon={<UserX size={18} />} label={`${metrics.noShow} pacientes no asistieron`} />
         <QuickAction icon={<MessageCircle size={18} />} label={`${metrics.whatsapp} recordatorios pendientes`} />
         <QuickAction icon={<UserCheck size={18} />} label={`${metrics.freeSlots} huecos disponibles`} />
-      </section>
+      </section>}
 
-      {formOpen && (
+      {clinic && formOpen && (
         <SectionCard className="p-5">
           <h2 className="font-semibold text-clinic-ink">Crear turno manual</h2>
           <form onSubmit={handleSubmit} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -709,7 +981,7 @@ export function AgendaPage() {
         </SectionCard>
       )}
 
-      {overbookingOpen && (
+      {clinic && overbookingOpen && (
         <SectionCard className="border-amber-200 p-5">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-clinic-ink">Crear sobreturno</h2><p className="mt-1 text-sm text-clinic-muted">Excepción interna. No modifica ni genera disponibilidad pública.</p></div><span className="rounded-lg bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">Controlado</span></div>
           <form onSubmit={handleCreateOverbooking} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -730,70 +1002,124 @@ export function AgendaPage() {
         </SectionCard>
       )}
 
-      <SectionCard className="p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="font-semibold text-clinic-ink">Vista de agenda</h2>
-            <p className="text-sm text-clinic-muted">{range.label}. Filtrá, actualizá y creá turnos desde la misma agenda.</p>
+      <SectionCard className="p-4">
+        {/* Toolbar: selector de período + refresh | CTAs */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-lg border border-clinic-line bg-clinic-surface p-0.5">
+              {(["today", "this_week", "this_month", "custom"] as const).map((preset) => {
+                const labels = { today: "Hoy", this_week: "Semana", this_month: "Mes", custom: "Rango" } as const;
+                return (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setAgendaPreset(preset)}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                      range.preset === preset
+                        ? "bg-white text-clinic-brand shadow-sm"
+                        : "text-clinic-muted hover:text-clinic-ink"
+                    }`}
+                  >
+                    {labels[preset]}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={refresh}
+              title="Actualizar agenda"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-clinic-line bg-white text-clinic-muted transition hover:bg-[#e6f4f1] hover:text-clinic-ink"
+            >
+              <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
+            </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setAgendaPreset("today")}>Día</Button>
-            <Button onClick={() => setAgendaPreset("this_week")}>Semana</Button>
-            <Button onClick={() => setAgendaPreset("this_month")}>Mes</Button>
-            <Button onClick={() => setAgendaPreset("custom")}>Rango</Button>
-            <Button icon={<RefreshCw size={16} />} onClick={refreshAgenda}>Actualizar</Button>
-            <Button icon={<Plus size={16} />} onClick={openCreate} variant="primary">Nuevo turno</Button>
-            {canCreateOverbooking(role) && <Button onClick={openOverbooking}>Sobreturno</Button>}
+          <div className="flex items-center gap-2">
+            {!isProfessionalRole && <Button icon={<Plus size={15} />} onClick={openCreate} variant="primary">Nuevo turno</Button>}
+            {!isProfessionalRole && canCreateOverbooking(role) && <Button onClick={openOverbooking}>Sobreturno</Button>}
           </div>
         </div>
-        <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="today" onChange={(nextRange) => { setRange(nextRange); setSelectedDate(nextRange.dateFrom); }} />
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_180px]">
-          <Select label="Profesional" value={professionalId} onChange={setProfessionalId}>
-            <option value="all">Todos</option>
-            {professionals.map((professional) => (
-              <option key={professional.id} value={professional.id}>
-                Dr/a. {professional.name} {professional.last_name}
-              </option>
-            ))}
-          </Select>
-          <Select label="Servicio" value={serviceId} onChange={setServiceId}>
-            <option value="all">Todos</option>
-            {services.map((service) => (
-              <option key={service.id} value={service.id}>
-                {service.name}
-              </option>
-            ))}
-          </Select>
-          <Select label="Estado" value={status} onChange={(value) => setStatus(value as "all" | AppointmentStatus)}>
-            <option value="all">Todos</option>
-            <option value="pending">Pendiente</option>
-            <option value="confirmed">Confirmado</option>
-            <option value="cancelled">Cancelado</option>
-            <option value="rescheduled">Reprogramado</option>
-            <option value="completed">Atendido</option>
-            <option value="no_show">No asistio</option>
-          </Select>
+
+        <div className="mt-3">
+          <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="today" onChange={(nextRange) => { setRange(nextRange); setSelectedDate(nextRange.dateFrom); }} />
         </div>
-        <label className="mt-4 block">
-          <span className="text-sm font-medium text-clinic-ink">Buscar turno</span>
-          <div className="relative mt-2">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-clinic-muted" size={16} />
-            <input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Código MED, paciente, DNI, teléfono, profesional o servicio"
-              className="h-10 w-full rounded-lg border border-clinic-line py-2 pl-9 pr-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
-            />
+
+        {isProfessionalRole && !linkedProfessionalId && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+            Tu usuario profesional no está vinculado a un profesional de la clínica. Pedile al administrador que complete la vinculación desde Configuración → Usuarios y permisos.
           </div>
-        </label>
+        )}
+
+        {/* Filtros compactos en línea */}
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <div className="min-w-[160px] flex-1">
+            <p className="mb-1 text-xs font-medium text-clinic-muted">Profesional</p>
+            <select
+              value={professionalId}
+              onChange={isProfessionalRole ? undefined : (e) => setProfessionalId(e.target.value)}
+              disabled={isProfessionalRole}
+              className="h-9 w-full rounded-lg border border-clinic-line bg-white px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-clinic-surface disabled:text-clinic-muted"
+            >
+              {!isProfessionalRole && <option value="all">Todos</option>}
+              {professionals.map((professional) => (
+                <option key={professional.id} value={professional.id}>
+                  Dr/a. {professional.name} {professional.last_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="min-w-[160px] flex-1">
+            <p className="mb-1 text-xs font-medium text-clinic-muted">Servicio</p>
+            <select
+              value={serviceId}
+              onChange={(e) => setServiceId(e.target.value)}
+              className="h-9 w-full rounded-lg border border-clinic-line bg-white px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+            >
+              <option value="all">Todos</option>
+              {services.map((service) => (
+                <option key={service.id} value={service.id}>{service.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="min-w-[140px]">
+            <p className="mb-1 text-xs font-medium text-clinic-muted">Estado</p>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as "all" | AppointmentStatus)}
+              className="h-9 w-full rounded-lg border border-clinic-line bg-white px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+            >
+              <option value="all">Todos</option>
+              <option value="pending">Pendiente</option>
+              <option value="confirmed">Confirmado</option>
+              <option value="cancelled">Cancelado</option>
+              <option value="rescheduled">Reprogramado</option>
+              <option value="completed">Atendido</option>
+              <option value="no_show">No asistió</option>
+            </select>
+          </div>
+          <div className="min-w-[200px] flex-1">
+            <p className="mb-1 text-xs font-medium text-clinic-muted">Buscar</p>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-clinic-muted" size={14} />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Paciente, código, profesional..."
+                className="h-9 w-full rounded-lg border border-clinic-line py-2 pl-8 pr-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+              />
+            </div>
+          </div>
+        </div>
       </SectionCard>
 
-      <SectionCard className="overflow-hidden">
+      {clinic && <SectionCard className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
           <h2 className="font-semibold text-clinic-ink">{range.preset === "today" ? "Turnos del día" : "Turnos del período"}</h2>
-          <Button icon={<Plus size={16} />} onClick={openCreate}>
-            Nuevo
-          </Button>
+          {!isProfessionalRole && (
+            <Button icon={<Plus size={16} />} onClick={openCreate}>
+              Nuevo
+            </Button>
+          )}
         </div>
         {loading ? (
           <div className="px-5 py-10 text-center text-sm text-clinic-muted">Cargando turnos...</div>
@@ -806,78 +1132,82 @@ export function AgendaPage() {
             {visibleAppointments.map((appointment) => (
               <article
                 key={appointment.id}
-                className="grid gap-4 px-5 py-4 lg:grid-cols-[90px_1fr_1fr_170px_360px] lg:items-center"
+                className={`grid gap-3 border-l-[3px] px-5 py-4 transition-colors hover:bg-[#f7fbfa] lg:grid-cols-[72px_1fr_200px_148px_auto] lg:items-start ${appointmentStatusBorderColor(appointment.status)}`}
               >
-                <div className="font-semibold text-clinic-brand">{formatTime(appointment.starts_at, clinic?.timezone ?? undefined)}</div>
-                <div>
-                  <p className="font-semibold text-clinic-ink">
+                {/* Hora */}
+                <div className="pt-0.5">
+                  <p className="text-xl font-bold tabular-nums leading-none text-clinic-brand">
+                    {formatTime(appointment.starts_at, clinic?.timezone ?? undefined)}
+                  </p>
+                </div>
+
+                {/* Paciente */}
+                <div className="min-w-0">
+                  <p className="truncate text-base font-bold text-clinic-ink">
                     {appointment.patient
                       ? `${appointment.patient.first_name} ${appointment.patient.last_name}`
-                      : "Paciente sin vincular"}
+                      : "Sin paciente"}
                   </p>
-                  <p className="text-sm text-clinic-muted">
-                    Origen: {sourceLabel(appointment.source)} · {appointment.appointment_type === "telemedicine" ? "Telemedicina" : "Presencial"}
+                  <p className="mt-0.5 text-sm text-clinic-muted">
+                    {sourceLabel(appointment.source)} · {appointment.appointment_type === "telemedicine" ? "Telemedicina" : "Presencial"}
                   </p>
-                  {appointment.public_code && <p className="mt-1 text-xs font-semibold text-clinic-brand">Código: {appointment.public_code}</p>}
-                  {appointment.is_overbooking && <span className="mt-2 inline-flex rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">Sobreturno</span>}
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {appointment.public_code && (
+                      <span className="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-semibold text-clinic-brand">
+                        {appointment.public_code}
+                      </span>
+                    )}
+                    {appointment.is_overbooking && (
+                      <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                        Sobreturno
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-clinic-ink">
+
+                {/* Profesional + servicio */}
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-clinic-ink">
                     Dr/a. {appointment.professional?.name ?? ""} {appointment.professional?.last_name ?? ""}
                   </p>
-                  <p className="text-sm text-clinic-muted">{appointment.service?.name ?? appointment.reason}</p>
+                  <p className="mt-0.5 truncate text-sm text-clinic-muted">
+                    {appointment.service?.name ?? appointment.reason}
+                  </p>
                 </div>
-                <div className="grid gap-2">
+
+                {/* Badges */}
+                <div className="flex flex-col gap-1.5">
                   <AppointmentStatusBadge status={appointment.status} />
                   <PaymentStatusBadge status={appointment.payment_status ?? "unpaid"} />
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button icon={<CreditCard size={16} />} onClick={() => generatePaymentLink(appointment)}>
-                    Generar link
-                  </Button>
-                  {paymentLinks[appointment.id] && (
-                    <Button
-                      icon={<Copy size={16} />}
-                      onClick={() => {
-                        navigator.clipboard?.writeText(paymentLinks[appointment.id]);
-                        setNotice("Link copiado.");
-                      }}
-                    >
-                      Copiar link
-                    </Button>
-                  )}
-                  {appointment.status === "pending" && (
-                    <Button onClick={() => handleStatus(appointment.id, "confirm")}>Confirmar</Button>
-                  )}
-                  <Button
-                    icon={<Copy size={16} />}
-                    onClick={() => copyWhatsAppMessage(appointment)}
-                    title={appointment.patient?.phone ? "Copiar mensaje para WhatsApp" : "El paciente no tiene teléfono cargado."}
-                    disabled={!appointment.patient?.phone}
-                  >
-                    Copiar mensaje
-                  </Button>
-                  <Button
-                    icon={<MessageCircle size={16} />}
-                    onClick={() => openWhatsApp(appointment)}
-                    title={appointment.patient?.phone ? "Abrir WhatsApp" : "El paciente no tiene teléfono cargado."}
-                    disabled={!appointment.patient?.phone}
-                  >
-                    Abrir WhatsApp
-                  </Button>
-                  {!["cancelled", "completed"].includes(appointment.status) && (
-                    <>
-                      <Button onClick={() => handleStatus(appointment.id, "completed")}>Atendido</Button>
-                      <Button onClick={() => handleStatus(appointment.id, "no_show")}>No asistio</Button>
-                      <Button onClick={() => handleStatus(appointment.id, "cancel")}>Cancelar</Button>
-                    </>
-                  )}
+
+                {/* Acciones */}
+                <div>
+                  <AppointmentActionsMenu
+                    appointment={appointment}
+                    activeRole={activeRole}
+                    isProfessionalRole={isProfessionalRole}
+                    paymentLinks={paymentLinks}
+                    onGeneratePaymentLink={() => generatePaymentLink(appointment)}
+                    onCopyPaymentLink={() => {
+                      navigator.clipboard?.writeText(paymentLinks[appointment.id]);
+                      setNotice("Link copiado.");
+                    }}
+                    onCopyWhatsApp={() => copyWhatsAppMessage(appointment)}
+                    onOpenWhatsApp={() => openWhatsApp(appointment)}
+                    onConfirm={() => handleStatus(appointment.id, "confirm")}
+                    onCompleted={() => handleStatus(appointment.id, "completed")}
+                    onNoShow={() => handleStatus(appointment.id, "no_show")}
+                    onCancel={() => handleStatus(appointment.id, "cancel")}
+                    onAttend={() => navigate(`/admin/atencion/${appointment.id}`)}
+                    onViewClinicalRecord={() => navigate(`/admin/registro-clinico/${appointment.patient?.id}`)}
+                  />
                 </div>
               </article>
             ))}
           </div>
         )}
-      </SectionCard>
+      </SectionCard>}
     </AdminPageShell>
   );
 }
@@ -962,12 +1292,14 @@ function Select({
   value,
   onChange,
   required = false,
+  disabled = false,
   children
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
+  disabled?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -977,7 +1309,8 @@ function Select({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         required={required}
-        className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+        disabled={disabled}
+        className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-clinic-surface disabled:text-clinic-muted"
       >
         {children}
       </select>
@@ -1014,6 +1347,18 @@ function formatShortDateLabel(date: string) {
 function addDaysToDateString(date: string, days: number) {
   const [year, month, day] = date.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+function appointmentStatusBorderColor(status: string): string {
+  const map: Record<string, string> = {
+    pending: "border-l-amber-400",
+    confirmed: "border-l-teal-500",
+    completed: "border-l-emerald-400",
+    no_show: "border-l-gray-300",
+    cancelled: "border-l-gray-200",
+    rescheduled: "border-l-blue-400",
+  };
+  return map[status] ?? "border-l-clinic-line";
 }
 
 function sourceLabel(value: string) {

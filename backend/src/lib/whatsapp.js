@@ -2,7 +2,9 @@ import crypto from "node:crypto";
 import { config } from "../config.js";
 
 export function verifyMetaSignature({ rawBody, signature }) {
-  if (!config.WHATSAPP_APP_SECRET) return true;
+  // Fail closed: all conditions must be met — never approve silently.
+  if (!config.WHATSAPP_APP_SECRET) return false;
+  if (!rawBody) return false;
   if (!signature?.startsWith("sha256=")) return false;
 
   const expected = crypto

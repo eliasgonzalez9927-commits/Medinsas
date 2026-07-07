@@ -8,6 +8,7 @@ const envSchema = z.object({
   OPENAI_MODEL: z.string().default("gpt-5.5"),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+  WHATSAPP_ENABLED: z.string().optional().transform(v => v === "true"),
   WHATSAPP_VERIFY_TOKEN: z.string().default("not-configured"),
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),

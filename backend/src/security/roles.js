@@ -4,12 +4,13 @@ export const ROLES = {
   ADMIN: "admin"
 };
 
-export const TOOL_PERMISSIONS = {
-  get_daily_schedule: [ROLES.DOCTOR, ROLES.ADMIN],
-  book_appointment: [ROLES.PATIENT],
-  get_medical_record: [ROLES.PATIENT, ROLES.DOCTOR],
-  get_clinic_metrics: [ROLES.ADMIN]
-};
+// FASE 0 SEGURIDAD: todas las tools bloqueadas hasta implementar multi-clínica seguro.
+// get_daily_schedule: lee turnos de TODAS las clínicas sin clinic_id filter (service role).
+// book_appointment: crea turnos sin clinic_id/professional_id/service_id ni validación.
+// get_medical_record: expone historia clínica sensible por canal no seguro (WhatsApp).
+// get_clinic_metrics: sin contexto de clínica, cruza datos multi-tenant.
+// Rehabilitar tool por tool solo tras implementar routing multi-clínica y audit trail.
+export const TOOL_PERMISSIONS = {};
 
 export function canUseTool(role, toolName) {
   return Boolean(TOOL_PERMISSIONS[toolName]?.includes(role));

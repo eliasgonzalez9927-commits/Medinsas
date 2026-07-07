@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { CalendarDays, Copy, Stethoscope } from "lucide-react";
+import { NoActiveClinicState } from "../../../components/admin/NoActiveClinicState";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { useActiveClinic } from "../../../contexts/ActiveClinicContext";
 import { getProfessionalById } from "../../../lib/clinic-data";
 import { buildPublicUrl } from "../../../lib/public-url";
 import { ProfessionalWithRelations } from "../../../types/clinic";
@@ -12,6 +14,7 @@ const dayLabels = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes
 
 export function ProfessionalProfilePage() {
   const { id } = useParams();
+  const { activeClinic: clinic, loading: clinicLoading } = useActiveClinic();
   const [professional, setProfessional] = useState<ProfessionalWithRelations | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -19,10 +22,14 @@ export function ProfessionalProfilePage() {
   useEffect(() => {
     async function load() {
       if (!id) return;
+      if (!clinic) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError("");
       try {
-        setProfessional(await getProfessionalById(id));
+        setProfessional(await getProfessionalById(id, clinic.id));
       } catch (err) {
         setError(err instanceof Error ? err.message : "No pudimos cargar el profesional.");
       } finally {
@@ -30,9 +37,17 @@ export function ProfessionalProfilePage() {
       }
     }
     load();
-  }, [id]);
+  }, [id, clinic?.id]);
 
-  if (loading) {
+  if (!clinic && !clinicLoading) {
+    return (
+      <AdminPageShell description="Selecciona una clinica activa para ver el perfil profesional." eyebrow="Perfil profesional" title="Profesional">
+        <NoActiveClinicState />
+      </AdminPageShell>
+    );
+  }
+
+  if (loading || clinicLoading) {
     return (
       <AdminPageShell description="Cargando datos del profesional." eyebrow="Perfil profesional" title="Profesional">
         <div className="rounded-lg border border-clinic-line bg-white p-8 text-center text-clinic-muted">

@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
+import { useAutoRefresh } from "../../../hooks/useAutoRefresh";
 import { CheckCircle2, ClipboardCheck, RefreshCw, XCircle } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
@@ -54,6 +55,26 @@ export function AppointmentRequestsPage() {
     }
   }
 
+  // Soft refresh: actualiza datos sin spinner bloqueante.
+  async function softLoadRequests() {
+    try {
+      const token = await getAccessToken();
+      const response = await fetch("/api/appointment-requests", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error ?? "Error al actualizar solicitudes.");
+      setRequests(body.requests ?? []);
+    } catch {
+      // Fallo silencioso: mantiene datos existentes.
+    }
+  }
+
+  const { lastRefreshedAt, isRefreshing, isOnline, refresh } = useAutoRefresh(softLoadRequests, {
+    intervalMs: 60_000,
+    pauseWhenHidden: true,
+  });
+
   useEffect(() => {
     document.title = "Medin | Solicitudes";
     loadRequests();
@@ -100,7 +121,10 @@ export function AppointmentRequestsPage() {
     <AdminPageShell
       description="Solicitudes iniciadas desde el link privado del turno. La reprogramación queda como gestión manual hasta conectar agenda/disponibilidad."
       eyebrow="Acceso paciente"
-      onRefresh={loadRequests}
+      onRefresh={refresh}
+      lastRefreshedAt={lastRefreshedAt}
+      isRefreshing={isRefreshing}
+      isOnline={isOnline}
       title="Solicitudes de pacientes"
     >
       {notice && <Message tone="success">{notice}</Message>}
