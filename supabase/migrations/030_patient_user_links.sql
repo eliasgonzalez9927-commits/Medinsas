@@ -34,7 +34,7 @@ exception
 end $$;
 
 create unique index if not exists patient_user_links_active_identity_unique_idx
-  on public.patient_user_links(user_id, clinic_id, patient_id, relationship)
+  on public.patient_user_links(user_id, clinic_id, patient_id)
   where status <> 'revoked';
 
 create index if not exists patient_user_links_user_id_idx
@@ -121,4 +121,4 @@ comment on column public.patient_user_links.patient_id is
 comment on column public.patient_user_links.relationship is
   'Allowed values: self, guardian, family_member.';
 comment on column public.patient_user_links.status is
-  'Allowed values: invited, active, revoked. Revoked links are ignored by the active uniqueness guard.';
+  'Allowed values: invited, active, revoked. Only one non-revoked link per (user_id, clinic_id, patient_id) is allowed. Revoked links are excluded from the uniqueness guard and kept as history.';
