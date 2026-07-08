@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { CreditCard, ExternalLink, RefreshCw, Settings, WalletCards } from "lucide-react";
+import { ChevronDown, CreditCard, ExternalLink, RefreshCw, Settings, WalletCards } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { Button } from "../../../components/ui/Button";
@@ -144,14 +144,16 @@ export function PaymentsPage() {
       {error && <Message tone="error">{error}</Message>}
       <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="this_month" onChange={setRange} />
 
+      <section className="grid gap-3 sm:grid-cols-3">
+        <MetricCard label="Cobrado" value={formatMoney(summary.cobrado)} accent="teal" size="lg" />
+        <MetricCard label="Por cobrar" value={formatMoney(summary.porCobrar)} accent="amber" size="lg" />
+        <MetricCard label="Vencido" value={formatMoney(summary.vencido)} accent="slate" size="lg" />
+      </section>
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Cobrado" value={formatMoney(summary.cobrado)} accent="teal" />
-        <MetricCard label="Por cobrar" value={formatMoney(summary.porCobrar)} accent="amber" />
-        <MetricCard label="Vencido" value={formatMoney(summary.vencido)} accent="slate" />
-        <MetricCard label="Señas cobradas" value={formatMoney(summary.senias)} sub={`${summary.seniaCount} seña${summary.seniaCount !== 1 ? "s" : ""}`} accent="teal" />
-        <MetricCard label="Manual" value={formatMoney(summary.manual)} sub={`${summary.manualCount} pago${summary.manualCount !== 1 ? "s" : ""}`} />
-        <MetricCard label="Mercado Pago" value={formatMoney(summary.mp)} sub={`${summary.mpCount} pago${summary.mpCount !== 1 ? "s" : ""}`} />
-        <MetricCard label="Movimientos" value={String(summary.total)} sub="en el periodo" />
+        <MetricCard label="Señas cobradas" value={formatMoney(summary.senias)} sub={`${summary.seniaCount} seña${summary.seniaCount !== 1 ? "s" : ""}`} size="sm" />
+        <MetricCard label="Manual" value={formatMoney(summary.manual)} sub={`${summary.manualCount} pago${summary.manualCount !== 1 ? "s" : ""}`} size="sm" />
+        <MetricCard label="Mercado Pago" value={formatMoney(summary.mp)} sub={`${summary.mpCount} pago${summary.mpCount !== 1 ? "s" : ""}`} size="sm" />
+        <MetricCard label="Movimientos" value={String(summary.total)} sub="en el periodo" size="sm" />
       </section>
 
       {rendicion.length > 0 && (
@@ -269,6 +271,7 @@ export function PaymentDetailPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [showTech, setShowTech] = useState(false);
 
   async function load() {
     try {
@@ -335,11 +338,7 @@ export function PaymentDetailPage() {
               <Info label="Tipo de pago" value={getPaymentKind(payment).label} />
               <Info label="Monto pagado" value={formatMoney(payment.amount)} />
               <Info label="Saldo pendiente" value={formatRemaining(getPaymentKind(payment).remainingAmount)} />
-              <Info label="Proveedor" value={payment.provider ?? "manual"} />
-              <Info label="Provider payment id" value={payment.provider_payment_id ?? "Pendiente"} />
-              <Info label="Preference id" value={payment.provider_preference_id ?? "Pendiente"} />
-              <Info label="External reference" value={payment.external_reference ?? "Sin referencia"} />
-              <Info label="Metodo" value={payment.payment_method ?? "Pendiente"} />
+              <Info label="Método de pago" value={payment.payment_method ?? "Pendiente"} />
             </dl>
             <div className="mt-5">
               <Button icon={<RefreshCw size={16} />} onClick={syncCurrentPayment} disabled={syncing}>
@@ -351,14 +350,32 @@ export function PaymentDetailPage() {
                 Advertencia: este pago no tiene un turno asociado con fecha y hora. Revisar la reserva original antes de contactar al paciente.
               </p>
             )}
-            {payment.checkout_url && (
-              <a className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line px-4 py-2 text-sm font-semibold" href={payment.checkout_url}>
-                <ExternalLink size={16} /> Abrir checkout
-              </a>
-            )}
             <p className="mt-5 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
               Pago registrado. La emision fiscal se gestiona desde Facturacion.
             </p>
+            <div className="mt-4 border-t border-clinic-line pt-4">
+              <button
+                type="button"
+                className="flex items-center gap-1 text-xs font-semibold text-clinic-muted hover:text-clinic-ink"
+                onClick={() => setShowTech(v => !v)}
+              >
+                <ChevronDown size={12} className={`transition-transform ${showTech ? "rotate-180" : ""}`} />
+                Datos técnicos (soporte)
+              </button>
+              {showTech && (
+                <dl className="mt-3 grid gap-3 text-sm">
+                  <Info label="Proveedor" value={payment.provider ?? "manual"} />
+                  <Info label="Provider payment id" value={payment.provider_payment_id ?? "Sin ID"} />
+                  <Info label="Preference id" value={payment.provider_preference_id ?? "Sin ID"} />
+                  <Info label="External reference" value={payment.external_reference ?? "Sin referencia"} />
+                  {payment.checkout_url && (
+                    <a className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-clinic-line px-3 py-2 text-sm font-semibold" href={payment.checkout_url}>
+                      <ExternalLink size={14} /> Abrir checkout
+                    </a>
+                  )}
+                </dl>
+              )}
+            </div>
           </SectionCard>
 
           <SectionCard className="overflow-hidden">
@@ -530,12 +547,12 @@ function EnvRow({ label, ready }: { label: string; ready?: boolean }) {
   );
 }
 
-function MetricCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: "teal" | "amber" | "slate" }) {
+function MetricCard({ label, value, sub, accent, size = "lg" }: { label: string; value: string; sub?: string; accent?: "teal" | "amber" | "slate"; size?: "lg" | "sm" }) {
   const valueClass = accent === "teal" ? "text-clinic-brand" : accent === "amber" ? "text-amber-600" : accent === "slate" ? "text-slate-500" : "text-clinic-ink";
   return (
-    <div className="rounded-xl border border-clinic-line bg-white p-4 shadow-sm">
+    <div className={`rounded-xl border border-clinic-line bg-white shadow-sm ${size === "lg" ? "p-5" : "p-4"}`}>
       <p className="text-sm font-medium text-clinic-muted">{label}</p>
-      <p className={`mt-2 text-2xl font-bold tracking-tight ${valueClass}`}>{value}</p>
+      <p className={`mt-2 font-bold tracking-tight ${size === "lg" ? "text-2xl" : "text-xl"} ${valueClass}`}>{value}</p>
       {sub && <p className="mt-1 text-xs text-clinic-muted">{sub}</p>}
     </div>
   );
@@ -565,9 +582,9 @@ function Message({ tone, children }: { tone: "success" | "error"; children: stri
 
 function paymentStatusLabel(status: string) {
   const labels: Record<string, string> = {
-    pending: "Pendiente",
-    in_process: "En proceso",
-    approved: "Aprobado",
+    pending: "Por cobrar",
+    in_process: "Por cobrar",
+    approved: "Cobrado",
     rejected: "Rechazado",
     cancelled: "Cancelado",
     refunded: "Reembolsado",
