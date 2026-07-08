@@ -10,6 +10,7 @@ import {
   getPaymentEvents,
   getPayments,
   getPaymentSettings,
+  getProfessionals,
   updatePaymentSettings
 } from "../../../lib/clinic-data";
 import { getPublicAppUrl } from "../../../lib/public-url";
@@ -28,9 +29,19 @@ type EnvHealth = {
   supabaseServiceRoleKey: boolean;
 };
 
+type RendicionRow = {
+  profId: string | null;
+  name: string;
+  count: number;
+  cobrado: number;
+  pendiente: number;
+  senias: number;
+};
+
 export function PaymentsPage() {
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [payments, setPayments] = useState<PaymentWithRelations[]>([]);
+  const [profMap, setProfMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [syncingId, setSyncingId] = useState("");
@@ -43,9 +54,18 @@ export function PaymentsPage() {
       const loadedClinic = await getDefaultClinic();
       setClinic(loadedClinic);
       if (!loadedClinic) return;
-      setPayments(await getPayments(loadedClinic.id, { dateFrom: range.dateFrom, dateTo: range.dateTo, timezone: loadedClinic.timezone ?? undefined }));
+      const [loadedPayments, profsResult] = await Promise.all([
+        getPayments(loadedClinic.id, { dateFrom: range.dateFrom, dateTo: range.dateTo, timezone: loadedClinic.timezone ?? undefined }),
+        getProfessionals(loadedClinic.id)
+      ]);
+      setPayments(Array.isArray(loadedPayments) ? loadedPayments : []);
+      const map: Record<string, string> = {};
+      for (const p of profsResult.data) {
+        map[p.id] = `${p.name} ${p.last_name}`.trim();
+      }
+      setProfMap(map);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos cargar los pagos.");
+      setError(err instanceof Error ? err.message : "No pudimos cargar los ingresos.");
     } finally {
       setLoading(false);
     }
@@ -55,20 +75,51 @@ export function PaymentsPage() {
     load();
   }, [range.dateFrom, range.dateTo]);
 
+  const safe = useMemo(() => Array.isArray(payments) ? payments : [], [payments]);
+
   const summary = useMemo(() => {
-    const approved = payments.filter((payment) => getEffectivePaymentStatus(payment) === "approved");
-    const pending = payments.filter((payment) => ["pending", "in_process"].includes(getEffectivePaymentStatus(payment)));
-    const expired = payments.filter((payment) => getEffectivePaymentStatus(payment) === "expired");
+    const approved = safe.filter(p => getEffectivePaymentStatus(p) === "approved");
+    const pending = safe.filter(p => ["pending", "in_process"].includes(getEffectivePaymentStatus(p)));
+    const expired = safe.filter(p => getEffectivePaymentStatus(p) === "expired");
+    const senias = approved.filter(p => getPaymentKind(p).type === "deposit");
+    const manual = approved.filter(p => !isMercadoPago(p));
+    const mp = approved.filter(p => isMercadoPago(p));
     return {
-      total: payments.length,
-      approved: approved.length,
-      pending: pending.length,
-      expired: expired.length,
-      amount: approved.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0),
-      deposits: approved.filter((payment) => getPaymentKind(payment).type === "deposit").length,
-      fullPayments: approved.filter((payment) => getPaymentKind(payment).type === "full").length
+      total: safe.length,
+      cobrado: approved.reduce((s, p) => s + Number(p.amount ?? 0), 0),
+      porCobrar: pending.reduce((s, p) => s + Number(p.amount ?? 0), 0),
+      vencido: expired.reduce((s, p) => s + Number(p.amount ?? 0), 0),
+      senias: senias.reduce((s, p) => s + Number(p.amount ?? 0), 0),
+      seniaCount: senias.length,
+      manual: manual.reduce((s, p) => s + Number(p.amount ?? 0), 0),
+      manualCount: manual.length,
+      mp: mp.reduce((s, p) => s + Number(p.amount ?? 0), 0),
+      mpCount: mp.length,
     };
-  }, [payments]);
+  }, [safe]);
+
+  const rendicion = useMemo<RendicionRow[]>(() => {
+    const byProf = new Map<string, RendicionRow>();
+    for (const p of safe) {
+      const profId = getProfId(p);
+      const key = profId ?? "__none__";
+      if (!byProf.has(key)) {
+        const name = (profId && profMap[profId]) ? profMap[profId] : "Sin profesional";
+        byProf.set(key, { profId, name, count: 0, cobrado: 0, pendiente: 0, senias: 0 });
+      }
+      const row = byProf.get(key)!;
+      const status = getEffectivePaymentStatus(p);
+      const amount = Number(p.amount ?? 0);
+      row.count++;
+      if (status === "approved") {
+        row.cobrado += amount;
+        if (getPaymentKind(p).type === "deposit") row.senias += amount;
+      } else if (["pending", "in_process"].includes(status)) {
+        row.pendiente += amount;
+      }
+    }
+    return Array.from(byProf.values()).sort((a, b) => b.cobrado - a.cobrado);
+  }, [safe, profMap]);
 
   async function syncPayment(paymentId: string) {
     setSyncingId(paymentId);
@@ -85,63 +136,125 @@ export function PaymentsPage() {
 
   return (
     <AdminPageShell
-      description="Links de pago, señas, pagos de turnos y trazabilidad con Mercado Pago."
+      description="Resumen de ingresos, rendición por profesional y trazabilidad de movimientos."
       eyebrow="Finanzas"
       onRefresh={load}
-      title="Pagos"
+      title="Ingresos"
     >
       {error && <Message tone="error">{error}</Message>}
       <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="this_month" onChange={setRange} />
-      <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
-        <Metric label="Pagos" value={String(summary.total)} />
-        <Metric label="Aprobados" value={String(summary.approved)} />
-        <Metric label="Pendientes" value={String(summary.pending)} />
-        <Metric label="Vencidos" value={String(summary.expired)} />
-        <Metric label="Señas" value={String(summary.deposits)} />
-        <Metric label="Pagos totales" value={String(summary.fullPayments)} />
-        <Metric label="Cobrado" value={formatMoney(summary.amount)} />
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Cobrado" value={formatMoney(summary.cobrado)} accent="teal" />
+        <MetricCard label="Por cobrar" value={formatMoney(summary.porCobrar)} accent="amber" />
+        <MetricCard label="Vencido" value={formatMoney(summary.vencido)} accent="slate" />
+        <MetricCard label="Señas cobradas" value={formatMoney(summary.senias)} sub={`${summary.seniaCount} seña${summary.seniaCount !== 1 ? "s" : ""}`} accent="teal" />
+        <MetricCard label="Manual" value={formatMoney(summary.manual)} sub={`${summary.manualCount} pago${summary.manualCount !== 1 ? "s" : ""}`} />
+        <MetricCard label="Mercado Pago" value={formatMoney(summary.mp)} sub={`${summary.mpCount} pago${summary.mpCount !== 1 ? "s" : ""}`} />
+        <MetricCard label="Movimientos" value={String(summary.total)} sub="en el periodo" />
       </section>
+
+      {rendicion.length > 0 && (
+        <SectionCard className="overflow-hidden">
+          <div className="border-b border-clinic-line px-5 py-4">
+            <h2 className="font-semibold text-clinic-ink">Rendición por profesional</h2>
+            <p className="mt-1 text-sm text-clinic-muted">{range.label}</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-clinic-line text-left text-clinic-muted">
+                  <th className="px-5 py-3 font-medium">Profesional</th>
+                  <th className="px-5 py-3 text-right font-medium">Movimientos</th>
+                  <th className="px-5 py-3 text-right font-medium">Cobrado</th>
+                  <th className="px-5 py-3 text-right font-medium">Señas</th>
+                  <th className="px-5 py-3 text-right font-medium">Por cobrar</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-clinic-line">
+                {rendicion.map(row => (
+                  <tr key={row.profId ?? "__none__"} className="hover:bg-clinic-surface/60">
+                    <td className="px-5 py-3 font-medium text-clinic-ink">{row.name}</td>
+                    <td className="px-5 py-3 text-right text-clinic-muted">{row.count}</td>
+                    <td className="px-5 py-3 text-right font-semibold text-clinic-ink">{formatMoney(row.cobrado)}</td>
+                    <td className="px-5 py-3 text-right text-clinic-muted">{formatMoney(row.senias)}</td>
+                    <td className="px-5 py-3 text-right text-clinic-muted">{formatMoney(row.pendiente)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </SectionCard>
+      )}
 
       <SectionCard className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
-          <div><h2 className="font-semibold text-clinic-ink">Listado de pagos</h2><p className="mt-1 text-sm text-clinic-muted">Creación de pago · {range.label}</p></div>
-          <Link to="/admin/pagos/configuracion" className="text-sm font-semibold text-clinic-brand">Configurar Mercado Pago</Link>
+          <div>
+            <h2 className="font-semibold text-clinic-ink">Movimientos</h2>
+            <p className="mt-1 text-sm text-clinic-muted">{range.label}</p>
+          </div>
+          <Link to="/admin/pagos/configuracion" className="text-sm font-semibold text-clinic-brand">Configurar MP</Link>
         </div>
         {loading ? (
-          <p className="px-5 py-8 text-center text-sm text-clinic-muted">Cargando pagos...</p>
-        ) : payments.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-clinic-muted">Todavia no hay pagos registrados.</p>
+          <p className="px-5 py-8 text-center text-sm text-clinic-muted">Cargando ingresos...</p>
+        ) : safe.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-clinic-muted">No hay movimientos en el periodo seleccionado.</p>
         ) : (
-          <div className="divide-y divide-clinic-line">
-            {payments.map((payment) => (
-              <article key={payment.id} className="grid gap-3 px-5 py-4 xl:grid-cols-[1.2fr_1.2fr_120px_120px_110px_110px_150px] xl:items-center">
-                <div>
-                  <p className="font-semibold text-clinic-ink">
-                    {payment.patients ? `${payment.patients.first_name} ${payment.patients.last_name}` : "Sin paciente"}
-                  </p>
-                  <p className="text-sm text-clinic-muted">{payment.services?.name ?? payment.notes ?? "Pago Mercado Pago"}</p>
-                </div>
-                <div className="text-sm text-clinic-muted">
-                  <p><span className="font-semibold text-clinic-ink">Turno:</span> {payment.appointments?.starts_at ? formatDate(payment.appointments.starts_at, payment.clinics?.timezone ?? undefined) : "Sin fecha"}</p>
-                  <p><span className="font-semibold text-clinic-ink">Pago:</span> {formatDate(payment.paid_at ?? payment.created_at, payment.clinics?.timezone ?? undefined)}</p>
-                </div>
-                <StatusBadge status={getEffectivePaymentStatus(payment)} />
-                <span className="text-sm font-semibold text-clinic-ink">{formatMoney(payment.amount)}</span>
-                <span className="text-sm text-clinic-muted">{getPaymentKind(payment).label}</span>
-                <span className="text-sm text-clinic-muted">{payment.provider ?? "manual"}</span>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-clinic-line px-3 py-1.5 text-xs font-semibold text-clinic-ink hover:bg-clinic-surface disabled:opacity-60"
-                    disabled={syncingId === payment.id}
-                    onClick={() => syncPayment(payment.id)}
-                    type="button"
-                  >
-                    <RefreshCw size={14} /> {syncingId === payment.id ? "Actualizando" : "Actualizar estado"}
-                  </button>
-                  <Link className="inline-flex min-h-9 items-center rounded-lg px-2 py-1.5 text-sm font-semibold text-clinic-brand" to={`/admin/pagos/${payment.id}`}>Ver</Link>
-                </div>
-              </article>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-clinic-line text-left text-clinic-muted">
+                  <th className="px-4 py-3 font-medium">Fecha</th>
+                  <th className="px-4 py-3 font-medium">Paciente</th>
+                  <th className="px-4 py-3 font-medium">Profesional</th>
+                  <th className="px-4 py-3 font-medium">Servicio</th>
+                  <th className="px-4 py-3 font-medium">Tipo</th>
+                  <th className="px-4 py-3 font-medium">Fuente</th>
+                  <th className="px-4 py-3 font-medium">Estado</th>
+                  <th className="px-4 py-3 text-right font-medium">Monto</th>
+                  <th className="px-4 py-3 font-medium">Acción</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-clinic-line">
+                {safe.map(payment => {
+                  const profId = getProfId(payment);
+                  const profName = (profId && profMap[profId]) ? profMap[profId] : "—";
+                  return (
+                    <tr key={payment.id} className="hover:bg-clinic-surface/60">
+                      <td className="whitespace-nowrap px-4 py-3 text-clinic-muted">
+                        {formatDate(payment.paid_at ?? payment.created_at, payment.clinics?.timezone ?? undefined)}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-clinic-ink">
+                        {payment.patients ? `${payment.patients.first_name} ${payment.patients.last_name}` : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-clinic-muted">{profName}</td>
+                      <td className="px-4 py-3 text-clinic-muted">{payment.services?.name ?? payment.notes ?? "—"}</td>
+                      <td className="px-4 py-3 text-clinic-muted">{getPaymentKind(payment).label}</td>
+                      <td className="px-4 py-3 text-clinic-muted">{isMercadoPago(payment) ? "Mercado Pago" : "Manual"}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={getEffectivePaymentStatus(payment)} />
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-clinic-ink">
+                        {formatMoney(payment.amount)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-clinic-line px-2 py-1 text-xs font-semibold text-clinic-ink hover:bg-clinic-surface disabled:opacity-60"
+                            disabled={syncingId === payment.id}
+                            onClick={() => syncPayment(payment.id)}
+                            type="button"
+                          >
+                            <RefreshCw size={12} /> {syncingId === payment.id ? "..." : "Sync"}
+                          </button>
+                          <Link className="text-sm font-semibold text-clinic-brand" to={`/admin/pagos/${payment.id}`}>Ver</Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </SectionCard>
@@ -417,8 +530,15 @@ function EnvRow({ label, ready }: { label: string; ready?: boolean }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-lg border border-clinic-line bg-white p-4 shadow-sm"><p className="text-sm text-clinic-muted">{label}</p><p className="mt-1 text-xl font-semibold text-clinic-ink">{value}</p></div>;
+function MetricCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: "teal" | "amber" | "slate" }) {
+  const valueClass = accent === "teal" ? "text-clinic-brand" : accent === "amber" ? "text-amber-600" : accent === "slate" ? "text-slate-500" : "text-clinic-ink";
+  return (
+    <div className="rounded-xl border border-clinic-line bg-white p-4 shadow-sm">
+      <p className="text-sm font-medium text-clinic-muted">{label}</p>
+      <p className={`mt-2 text-2xl font-bold tracking-tight ${valueClass}`}>{value}</p>
+      {sub && <p className="mt-1 text-xs text-clinic-muted">{sub}</p>}
+    </div>
+  );
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -455,6 +575,15 @@ function paymentStatusLabel(status: string) {
     expired: "Vencido"
   };
   return labels[status] ?? status;
+}
+
+function getProfId(payment: PaymentWithRelations): string | null {
+  return payment.professional_id ?? payment.appointments?.professional_id ?? null;
+}
+
+function isMercadoPago(payment: PaymentWithRelations): boolean {
+  const p = (payment.provider ?? "").toLowerCase();
+  return p.includes("mercado") || p === "mp";
 }
 
 function getEffectivePaymentStatus(payment: PaymentWithRelations) {
