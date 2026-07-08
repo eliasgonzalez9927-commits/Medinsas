@@ -256,9 +256,12 @@ export function PatientsPage() {
               return (
                 <article key={patient.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1fr_170px_170px_1fr_130px] lg:items-center">
                   <div>
-                    <p className="font-semibold text-clinic-ink">
+                    <Link
+                      to={`/admin/pacientes/${patient.id}`}
+                      className="font-semibold text-clinic-ink hover:text-clinic-brand hover:underline"
+                    >
                       {patient.first_name} {patient.last_name}
-                    </p>
+                    </Link>
                     <p className="text-sm text-clinic-muted">{patient.phone}</p>
                   </div>
                   <p className="text-sm text-clinic-muted">{patient.document_number ? `DNI ${patient.document_number}` : "Sin DNI"}</p>
