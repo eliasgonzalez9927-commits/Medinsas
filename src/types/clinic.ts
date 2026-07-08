@@ -396,6 +396,9 @@ export type FiscalSettings = {
   updated_at: string;
 };
 
+export type PaymentKind = "deposit" | "payment" | "copay" | "adjustment";
+export type PaymentSource = "manual" | "mercado_pago" | "import";
+
 export type Payment = {
   id: string;
   clinic_id: string;
@@ -418,6 +421,10 @@ export type Payment = {
   expires_at?: string | null;
   paid_at: string | null;
   notes: string | null;
+  professional_id?: string | null;
+  kind?: PaymentKind;
+  source?: PaymentSource;
+  created_by?: string | null;
   created_at: string;
   updated_at: string;
 };
