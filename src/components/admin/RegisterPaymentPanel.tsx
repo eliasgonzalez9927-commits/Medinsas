@@ -55,6 +55,7 @@ export function RegisterPaymentPanel({ open, onClose, onSaved, clinicId, default
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [debugError, setDebugError] = useState<{ code?: string; message?: string; details?: string; hint?: string } | null>(null);
 
   if (!open) return null;
 
@@ -86,10 +87,18 @@ export function RegisterPaymentPanel({ open, onClose, onSaved, clinicId, default
         notes: form.notes || null,
       });
       setForm({ amount: "", method: "cash", kind: "payment", status: "approved", notes: "" });
+      setDebugError(null);
       onSaved?.();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos registrar el pago.");
+      const e = err as { code?: string; message?: string; details?: string; hint?: string } | null;
+      setError("No pudimos registrar el pago. Revisá los datos e intentá nuevamente.");
+      setDebugError({
+        code: e?.code,
+        message: e?.message,
+        details: e?.details,
+        hint: e?.hint,
+      });
     } finally {
       setSaving(false);
     }
@@ -228,6 +237,19 @@ export function RegisterPaymentPanel({ open, onClose, onSaved, clinicId, default
             {error && (
               <div className="md:col-span-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
                 {error}
+              </div>
+            )}
+
+            {debugError && (
+              <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700 font-mono space-y-1">
+                <p className="font-semibold text-slate-500 text-[11px] uppercase tracking-wide">Detalle técnico para soporte</p>
+                {debugError.code && <p><span className="text-slate-400">code:</span> {debugError.code}</p>}
+                {debugError.message && <p><span className="text-slate-400">message:</span> {debugError.message}</p>}
+                {debugError.details && <p><span className="text-slate-400">details:</span> {debugError.details}</p>}
+                {debugError.hint && <p><span className="text-slate-400">hint:</span> {debugError.hint}</p>}
+                {!debugError.code && !debugError.message && !debugError.details && !debugError.hint && (
+                  <p className="text-slate-400">No hay detalles disponibles del error.</p>
+                )}
               </div>
             )}
 
