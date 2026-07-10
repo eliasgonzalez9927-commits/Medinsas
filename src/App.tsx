@@ -14,6 +14,7 @@ import { NotificationsPage } from "./pages/admin/modules/NotificationsPage";
 import { OnlineBookingPage } from "./pages/admin/modules/OnlineBookingPage";
 import { OnboardingPage } from "./pages/admin/modules/OnboardingPage";
 import { PatientsPage } from "./pages/admin/modules/PatientsPage";
+import { PatientFichaPage } from "./pages/admin/modules/PatientFichaPage";
 import { PaymentDetailPage, PaymentSettingsPage, PaymentsPage } from "./pages/admin/modules/PaymentsPage";
 import { ProfessionalsPage } from "./pages/admin/modules/ProfessionalsPage";
 import { ProfessionalProfilePage } from "./pages/admin/modules/ProfessionalProfilePage";
@@ -85,6 +86,7 @@ export function App() {
         <Route path="/admin/disponibilidad" element={<AvailabilityPage />} />
         <Route path="/admin/horarios" element={<AvailabilityPage />} />
         <Route path="/admin/pacientes" element={<PatientsPage />} />
+        <Route path="/admin/pacientes/:id" element={<PatientFichaPage />} />
         <Route path="/admin/importaciones" element={<ImportsPage />} />
         <Route path="/admin/servicios" element={<ServicesPage />} />
         <Route path="/admin/tratamientos" element={<ServicesPage />} />
