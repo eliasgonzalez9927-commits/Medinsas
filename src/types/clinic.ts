@@ -447,6 +447,22 @@ export type PaymentWithRelations = Payment & {
   services?: Service | null;
 };
 
+export type ManualPaymentInput = {
+  clinic_id: string;
+  patient_id: string | null;
+  appointment_id?: string | null;
+  service_id?: string | null;
+  professional_id?: string | null;
+  amount: number;
+  currency?: string;
+  method: string;
+  kind: PaymentKind;
+  source: PaymentSource;
+  status: PaymentStatus;
+  paid_at: string | null;
+  notes?: string | null;
+};
+
 export type PaymentSettings = {
   id: string;
   clinic_id: string;
