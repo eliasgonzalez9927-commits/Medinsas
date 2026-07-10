@@ -334,22 +334,34 @@ export async function getPaymentById(id: string): Promise<PaymentWithRelations |
 }
 
 export async function createPayment(data: ManualPaymentInput): Promise<Payment> {
-  const { data: created, error } = await supabase
-    .from("payments")
-    .insert({
-      clinic_id: data.clinic_id,
-      patient_id: data.patient_id || null,
-      appointment_id: data.appointment_id || null,
-      service_id: data.service_id || null,
-      amount: data.amount,
-      currency: data.currency ?? "ARS",
-      method: data.method,
-      status: data.status,
-      paid_at: data.paid_at,
-      notes: data.notes || null,
-    })
-    .select("*")
-    .single();
+  const payload = {
+    clinic_id: data.clinic_id,
+    patient_id: data.patient_id || null,
+    appointment_id: data.appointment_id || null,
+    service_id: data.service_id || null,
+    amount: data.amount,
+    currency: data.currency ?? "ARS",
+    method: data.method,
+    status: data.status,
+    paid_at: data.paid_at,
+    notes: data.notes || null,
+  };
+
+  const doInsert = () =>
+    supabase.from("payments").insert(payload).select("*").single();
+
+  let { data: created, error } = await doInsert();
+
+  // 42501 = RLS WITH CHECK failed, often caused by a stale/expired JWT
+  // that passed signature validation but had no auth context yet.
+  // Refreshing the session and retrying once recovers silently.
+  if (error?.code === "42501") {
+    const { error: refreshError } = await supabase.auth.refreshSession();
+    if (!refreshError) {
+      ({ data: created, error } = await doInsert());
+    }
+  }
+
   if (error) {
     console.error("createPayment error", { code: error.code, message: error.message, details: error.details, hint: error.hint });
     throw error;
