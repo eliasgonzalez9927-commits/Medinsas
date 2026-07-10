@@ -2,6 +2,7 @@ import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
+import { RegisterPaymentPanel } from "../../../components/admin/RegisterPaymentPanel";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
 import {
@@ -99,6 +100,7 @@ export function AgendaPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [paymentLinks, setPaymentLinks] = useState<Record<string, string>>({});
+  const [paymentAppt, setPaymentAppt] = useState<AppointmentWithRelations | null>(null);
   const [overbookingOpen, setOverbookingOpen] = useState(false);
   const [overbookingSaving, setOverbookingSaving] = useState(false);
   const [overbookingWarnings, setOverbookingWarnings] = useState<string[]>([]);
@@ -589,6 +591,32 @@ export function AgendaPage() {
         <QuickAction icon={<UserCheck size={18} />} label={`${metrics.freeSlots} huecos disponibles`} />
       </section>
 
+      {clinic && (
+        <RegisterPaymentPanel
+          open={paymentAppt !== null}
+          onClose={() => setPaymentAppt(null)}
+          onSaved={() => {
+            setNotice("Pago registrado correctamente.");
+            loadAppointments();
+          }}
+          clinicId={clinic.id}
+          defaultValues={paymentAppt ? {
+            appointmentId: paymentAppt.id,
+            patientId: paymentAppt.patient_id,
+            professionalId: paymentAppt.professional_id,
+            serviceId: paymentAppt.service_id,
+            patientName: paymentAppt.patient
+              ? `${paymentAppt.patient.first_name} ${paymentAppt.patient.last_name}`.trim()
+              : undefined,
+            professionalName: paymentAppt.professional
+              ? `Dr/a. ${paymentAppt.professional.name} ${paymentAppt.professional.last_name}`.trim()
+              : undefined,
+            serviceName: paymentAppt.service?.name,
+            appointmentAt: paymentAppt.starts_at,
+          } : undefined}
+        />
+      )}
+
       {formOpen && (
         <SectionCard className="p-5">
           <h2 className="font-semibold text-clinic-ink">Crear turno manual</h2>
@@ -832,6 +860,9 @@ export function AgendaPage() {
                   <PaymentStatusBadge status={appointment.payment_status ?? "unpaid"} />
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <Button icon={<CreditCard size={16} />} onClick={() => setPaymentAppt(appointment)}>
+                    Registrar pago
+                  </Button>
                   <Button icon={<CreditCard size={16} />} onClick={() => generatePaymentLink(appointment)}>
                     Generar link
                   </Button>
