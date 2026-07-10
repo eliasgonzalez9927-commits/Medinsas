@@ -339,26 +339,28 @@ export async function createPayment(data: ManualPaymentInput): Promise<Payment> 
       .from("payments")
       .insert({
         clinic_id: data.clinic_id,
-        patient_id: data.patient_id,
-        appointment_id: data.appointment_id ?? null,
-        service_id: data.service_id ?? null,
-        professional_id: data.professional_id ?? null,
+        patient_id: data.patient_id || null,
+        appointment_id: data.appointment_id || null,
+        service_id: data.service_id || null,
         amount: data.amount,
         currency: data.currency ?? "ARS",
         method: data.method,
-        kind: data.kind,
-        source: data.source,
         status: data.status,
         paid_at: data.paid_at,
-        notes: data.notes ?? null,
+        notes: data.notes || null,
       })
       .select("*")
       .single();
-    if (error) throw error;
+    if (error) {
+      console.error("createPayment error", { code: error.code, message: error.message, details: error.details, hint: error.hint });
+      throw error;
+    }
     return created as Payment;
   } catch (error) {
-    console.error("Failed to create payment", error);
-    throw new FriendlyDataError("No pudimos registrar el pago.");
+    if (!(error instanceof Error && "code" in error)) {
+      console.error("createPayment unexpected error", error);
+    }
+    throw new FriendlyDataError("No pudimos registrar el pago. Revisá los datos e intentá nuevamente.");
   }
 }
 
