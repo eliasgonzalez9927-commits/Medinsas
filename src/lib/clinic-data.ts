@@ -333,6 +333,22 @@ export async function getPaymentById(id: string): Promise<PaymentWithRelations |
   }
 }
 
+export async function getPaymentsByPatient(clinicId: string, patientId: string): Promise<PaymentWithRelations[]> {
+  try {
+    const { data, error } = await supabase
+      .from("payments")
+      .select("*, appointments(*), services(*)")
+      .eq("clinic_id", clinicId)
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as PaymentWithRelations[];
+  } catch (error) {
+    console.error("Failed to load payments by patient", error);
+    throw new FriendlyDataError("No pudimos cargar los pagos del paciente.");
+  }
+}
+
 export async function createPayment(data: ManualPaymentInput): Promise<Payment> {
   const payload = {
     clinic_id: data.clinic_id,
