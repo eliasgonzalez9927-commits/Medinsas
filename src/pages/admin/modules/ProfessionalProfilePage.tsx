@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { CalendarDays, Copy, Stethoscope } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
-import { getProfessionalById } from "../../../lib/clinic-data";
+import { getProfessionalById, updateProfessional } from "../../../lib/clinic-data";
 import { buildPublicUrl } from "../../../lib/public-url";
 import { ProfessionalWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
@@ -16,13 +16,22 @@ export function ProfessionalProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Settlement section state
+  const [shareInput, setShareInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveOk, setSaveOk] = useState(false);
+
   useEffect(() => {
     async function load() {
       if (!id) return;
       setLoading(true);
       setError("");
       try {
-        setProfessional(await getProfessionalById(id));
+        const prof = await getProfessionalById(id);
+        setProfessional(prof);
+        const current = prof?.professional_share_percentage;
+        setShareInput(current != null ? String(current) : "");
       } catch (err) {
         setError(err instanceof Error ? err.message : "No pudimos cargar el profesional.");
       } finally {
@@ -31,6 +40,42 @@ export function ProfessionalProfilePage() {
     }
     load();
   }, [id]);
+
+  async function handleSaveShare() {
+    if (!id) return;
+    setSaveError("");
+    setSaveOk(false);
+
+    const trimmed = shareInput.trim();
+    let parsed: number | null = null;
+
+    if (trimmed !== "") {
+      parsed = parseFloat(trimmed);
+      if (isNaN(parsed) || parsed < 0 || parsed > 100) {
+        setSaveError("El porcentaje debe estar entre 0 y 100.");
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      const updated = await updateProfessional(id, { professional_share_percentage: parsed });
+      setProfessional((prev) => prev ? { ...prev, professional_share_percentage: updated.professional_share_percentage } : prev);
+      setSaveOk(true);
+      setTimeout(() => setSaveOk(false), 3000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "No pudimos guardar el porcentaje.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const shareNum = shareInput.trim() !== "" ? parseFloat(shareInput) : null;
+  const shareValid = shareNum === null || (!isNaN(shareNum) && shareNum >= 0 && shareNum <= 100);
+  const clinicShare = shareNum != null && shareValid && !isNaN(shareNum) ? 100 - shareNum : null;
+  const exampleBase = 10000;
+  const exampleProf = shareNum != null && shareValid && !isNaN(shareNum) ? exampleBase * (shareNum / 100) : null;
+  const exampleClinica = exampleProf != null ? exampleBase - exampleProf : null;
 
   if (loading) {
     return (
@@ -147,6 +192,82 @@ export function ProfessionalProfilePage() {
           </p>
         </SectionCard>
       </section>
+
+      {/* Rendición */}
+      <SectionCard className="p-5">
+        <h2 className="text-lg font-semibold text-clinic-ink">Rendición</h2>
+        <p className="mt-1 text-sm text-clinic-muted">
+          El porcentaje define cómo se reparte cada atención cobrada entre el profesional y la clínica.
+        </p>
+
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          <div>
+            <label className="block text-sm font-medium text-clinic-ink" htmlFor="prof-share">
+              Porcentaje para el profesional (%)
+            </label>
+            <input
+              id="prof-share"
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              value={shareInput}
+              onChange={(e) => {
+                setShareInput(e.target.value);
+                setSaveError("");
+                setSaveOk(false);
+              }}
+              placeholder="Sin configurar"
+              className={`mt-1.5 w-full rounded-lg border px-3 py-2 text-sm text-clinic-ink outline-none focus:ring-2 focus:ring-clinic-brand/30 ${
+                !shareValid && shareInput.trim() !== ""
+                  ? "border-red-400 bg-red-50"
+                  : "border-clinic-line bg-white"
+              }`}
+            />
+            {!shareValid && shareInput.trim() !== "" && (
+              <p className="mt-1 text-xs text-red-600">El porcentaje debe estar entre 0 y 100.</p>
+            )}
+          </div>
+
+          <div>
+            <p className="block text-sm font-medium text-clinic-ink">
+              Porcentaje para la clínica (%)
+            </p>
+            <div className="mt-1.5 rounded-lg border border-clinic-line bg-clinic-surface px-3 py-2 text-sm text-clinic-muted">
+              {clinicShare != null ? `${clinicShare % 1 === 0 ? clinicShare : clinicShare.toFixed(2)}%` : "—"}
+            </div>
+          </div>
+        </div>
+
+        {exampleProf != null && exampleClinica != null && (
+          <p className="mt-4 rounded-lg bg-teal-50 px-4 py-2.5 text-sm text-teal-800">
+            Ejemplo con {formatARS(exampleBase)}: profesional{" "}
+            <span className="font-semibold">{formatARS(exampleProf)}</span> · clínica{" "}
+            <span className="font-semibold">{formatARS(exampleClinica)}</span>
+          </p>
+        )}
+
+        <div className="mt-5 flex items-center gap-3">
+          <Button
+            onClick={handleSaveShare}
+            disabled={saving || (!shareValid && shareInput.trim() !== "")}
+          >
+            {saving ? "Guardando..." : "Guardar"}
+          </Button>
+          {saveOk && (
+            <span className="text-sm font-medium text-teal-600">Guardado correctamente.</span>
+          )}
+          {saveError && (
+            <span className="text-sm text-red-600">{saveError}</span>
+          )}
+        </div>
+
+        {shareInput.trim() === "" && (
+          <p className="mt-3 text-xs text-clinic-muted">
+            Sin porcentaje configurado. Se mostrará una advertencia en el módulo de Ingresos.
+          </p>
+        )}
+      </SectionCard>
     </AdminPageShell>
   );
 }
@@ -158,4 +279,12 @@ function Info({ label, value }: { label: string; value: string }) {
       <dd className="text-right font-medium text-clinic-ink">{value}</dd>
     </div>
   );
+}
+
+function formatARS(value: number): string {
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  }).format(value);
 }
