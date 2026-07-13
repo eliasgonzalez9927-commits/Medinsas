@@ -22,6 +22,7 @@ type FormState = {
   license_number: string;
   bio: string;
   consultation_minutes: number;
+  active: boolean;
 };
 
 const emptyForm: FormState = {
@@ -31,7 +32,8 @@ const emptyForm: FormState = {
   phone: "",
   license_number: "",
   bio: "",
-  consultation_minutes: 30
+  consultation_minutes: 30,
+  active: true
 };
 
 export function ProfessionalsPage() {
@@ -85,7 +87,8 @@ export function ProfessionalsPage() {
       phone: professional.phone ?? "",
       license_number: professional.license_number ?? "",
       bio: professional.bio ?? "",
-      consultation_minutes: professional.consultation_minutes
+      consultation_minutes: professional.consultation_minutes,
+      active: professional.active
     });
     setFormOpen(true);
     setNotice("");
@@ -106,7 +109,7 @@ export function ProfessionalsPage() {
         license_number: form.license_number || null,
         bio: form.bio || null,
         consultation_minutes: Number(form.consultation_minutes),
-        active: true
+        active: form.active
       };
       if (form.id) {
         await updateProfessional(form.id, payload);
