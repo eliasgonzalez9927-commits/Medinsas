@@ -8,11 +8,13 @@ import {
   getPatientById,
   getProfessionals,
   getServices,
+  getPaymentsByPatient,
 } from "../../../lib/clinic-data";
 import {
   AppointmentPaymentStatus,
   AppointmentStatus,
   PatientWithAppointments,
+  PaymentWithRelations,
 } from "../../../types/clinic";
 
 export function PatientFichaPage() {
@@ -20,11 +22,14 @@ export function PatientFichaPage() {
   const [patient, setPatient] = useState<PatientWithAppointments | null>(null);
   const [profMap, setProfMap] = useState<Record<string, string>>({});
   const [serviceMap, setServiceMap] = useState<Record<string, string>>({});
+  const [payments, setPayments] = useState<PaymentWithRelations[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   async function load() {
     setLoading(true);
+    setPaymentsLoading(true);
     setError("");
     try {
       const clinic = await getDefaultClinic();
@@ -45,10 +50,14 @@ export function PatientFichaPage() {
         sm[svc.id] = svc.name;
       }
       setServiceMap(sm);
+
+      const pays = await getPaymentsByPatient(clinic.id, id);
+      setPayments(pays);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar la ficha.");
     } finally {
       setLoading(false);
+      setPaymentsLoading(false);
     }
   }
 
@@ -71,6 +80,16 @@ export function PatientFichaPage() {
   }, [patient]);
 
   const active = useMemo(() => isPatientActive(patient?.appointments), [patient]);
+
+  const paymentSummary = useMemo(() => {
+    const totalCobrado = payments
+      .filter((p) => p.status === "approved")
+      .reduce((sum, p) => sum + (p.amount ?? 0), 0);
+    const totalPendiente = payments
+      .filter((p) => p.status === "pending" || p.status === "in_process")
+      .reduce((sum, p) => sum + (p.amount ?? 0), 0);
+    return { totalCobrado, totalPendiente, count: payments.length };
+  }, [payments]);
 
   const fullName = patient ? `${patient.first_name} ${patient.last_name}` : "Paciente";
 
@@ -153,7 +172,7 @@ export function PatientFichaPage() {
       </SectionCard>
 
       {/* T3 — Turnos del paciente */}
-      <SectionCard>
+      <SectionCard className="mb-6">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
           <h2 className="font-semibold text-clinic-ink">Turnos</h2>
           <Link
@@ -210,6 +229,119 @@ export function PatientFichaPage() {
           </div>
         )}
       </SectionCard>
+
+      {/* T4 — Ingresos del paciente */}
+      <SectionCard>
+        <div className="border-b border-clinic-line px-5 py-4">
+          <h2 className="font-semibold text-clinic-ink">Ingresos del paciente</h2>
+          <p className="mt-0.5 text-xs text-clinic-muted">
+            Pagos y señas asociados a turnos o registros operativos del paciente.
+          </p>
+        </div>
+
+        {paymentsLoading ? (
+          <div className="px-5 py-8 text-center text-sm text-clinic-muted">Cargando ingresos...</div>
+        ) : payments.length === 0 ? (
+          <div className="px-5 py-12 text-center">
+            <p className="text-sm text-clinic-muted">
+              Todavía no hay ingresos registrados para este paciente.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Resumen */}
+            <div className="grid grid-cols-3 divide-x divide-clinic-line border-b border-clinic-line">
+              <div className="px-5 py-4">
+                <p className="text-xs font-medium uppercase tracking-wider text-clinic-muted">
+                  Cobrado
+                </p>
+                <p className="mt-1 text-lg font-bold text-teal-700">
+                  {formatARS(paymentSummary.totalCobrado)}
+                </p>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-xs font-medium uppercase tracking-wider text-clinic-muted">
+                  Por cobrar
+                </p>
+                <p className={`mt-1 text-lg font-bold ${paymentSummary.totalPendiente > 0 ? "text-amber-600" : "text-clinic-muted"}`}>
+                  {formatARS(paymentSummary.totalPendiente)}
+                </p>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-xs font-medium uppercase tracking-wider text-clinic-muted">
+                  Movimientos
+                </p>
+                <p className="mt-1 text-lg font-bold text-clinic-ink">
+                  {paymentSummary.count}
+                </p>
+              </div>
+            </div>
+
+            {/* Lista */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-clinic-line bg-clinic-surface text-left">
+                    <th className="px-5 py-3 font-medium text-clinic-muted">Fecha</th>
+                    <th className="px-5 py-3 font-medium text-clinic-muted">Monto</th>
+                    <th className="px-5 py-3 font-medium text-clinic-muted">Estado</th>
+                    <th className="px-5 py-3 font-medium text-clinic-muted">Medio</th>
+                    <th className="px-5 py-3 font-medium text-clinic-muted">Servicio</th>
+                    <th className="px-5 py-3 font-medium text-clinic-muted">Profesional</th>
+                    <th className="px-5 py-3 font-medium text-clinic-muted">Notas</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-clinic-line">
+                  {payments.map((pay) => {
+                    const profId = pay.appointments?.professional_id;
+                    const svcName =
+                      pay.services?.name ??
+                      (pay.service_id ? serviceMap[pay.service_id] : undefined) ??
+                      (pay.appointments?.service_id ? serviceMap[pay.appointments.service_id] : undefined);
+                    const apptDate = pay.appointments?.starts_at;
+                    return (
+                      <tr key={pay.id} className="hover:bg-clinic-surface">
+                        <td className="px-5 py-3 text-clinic-ink">
+                          {formatDate(pay.paid_at ?? pay.created_at)}
+                          {apptDate && (
+                            <span className="block text-xs text-clinic-muted">
+                              Turno: {formatDate(apptDate)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 font-medium text-clinic-ink">
+                          {formatARS(pay.amount)}
+                        </td>
+                        <td className="px-5 py-3">
+                          <PaymentStatusBadge status={pay.status} />
+                        </td>
+                        <td className="px-5 py-3 text-clinic-muted capitalize">
+                          {pay.method ?? "—"}
+                        </td>
+                        <td className="px-5 py-3 text-clinic-muted">
+                          {svcName ?? "—"}
+                        </td>
+                        <td className="px-5 py-3 text-clinic-muted">
+                          {profId ? (profMap[profId] ?? "—") : "—"}
+                        </td>
+                        <td className="px-5 py-3 text-clinic-muted">
+                          {pay.notes ? (
+                            <span title={pay.notes} className="block max-w-[160px] truncate">
+                              {pay.notes}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </SectionCard>
     </AdminPageShell>
   );
 }
@@ -238,6 +370,14 @@ function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
+function formatARS(amount: number): string {
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 function apptPaymentLabel(status?: AppointmentPaymentStatus): string {
   if (!status) return "—";
   const map: Record<AppointmentPaymentStatus, string> = {
@@ -250,6 +390,29 @@ function apptPaymentLabel(status?: AppointmentPaymentStatus): string {
     refunded: "Reembolsado",
   };
   return map[status] ?? status;
+}
+
+const PAYMENT_STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
+  approved: { label: "Cobrado", cls: "bg-teal-50 text-teal-700" },
+  pending: { label: "Por cobrar", cls: "bg-amber-50 text-amber-700" },
+  in_process: { label: "Por cobrar", cls: "bg-amber-50 text-amber-700" },
+  expired: { label: "Vencido", cls: "bg-red-50 text-red-700" },
+  rejected: { label: "Rechazado", cls: "bg-slate-100 text-slate-500" },
+  cancelled: { label: "Cancelado", cls: "bg-slate-100 text-slate-500" },
+  refunded: { label: "Reembolsado", cls: "bg-slate-100 text-slate-500" },
+  charged_back: { label: "Contracargo", cls: "bg-slate-100 text-slate-500" },
+};
+
+function PaymentStatusBadge({ status }: { status: string }) {
+  const config = PAYMENT_STATUS_CONFIG[status] ?? {
+    label: status,
+    cls: "bg-slate-100 text-slate-500",
+  };
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${config.cls}`}>
+      {config.label}
+    </span>
+  );
 }
 
 const STATUS_CONFIG: Record<AppointmentStatus, { label: string; cls: string }> = {
