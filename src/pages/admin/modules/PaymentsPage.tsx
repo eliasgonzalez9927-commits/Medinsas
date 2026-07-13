@@ -36,12 +36,14 @@ type RendicionRow = {
   cobrado: number;
   pendiente: number;
   senias: number;
+  profShare: number | null;
 };
 
 export function PaymentsPage() {
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [payments, setPayments] = useState<PaymentWithRelations[]>([]);
   const [profMap, setProfMap] = useState<Record<string, string>>({});
+  const [profShareMap, setProfShareMap] = useState<Record<string, number | null>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [syncingId, setSyncingId] = useState("");
@@ -60,10 +62,13 @@ export function PaymentsPage() {
       ]);
       setPayments(Array.isArray(loadedPayments) ? loadedPayments : []);
       const map: Record<string, string> = {};
+      const shareMap: Record<string, number | null> = {};
       for (const p of profsResult.data) {
         map[p.id] = `${p.name} ${p.last_name}`.trim();
+        shareMap[p.id] = p.professional_share_percentage ?? null;
       }
       setProfMap(map);
+      setProfShareMap(shareMap);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar los ingresos.");
     } finally {
@@ -105,7 +110,8 @@ export function PaymentsPage() {
       const key = profId ?? "__none__";
       if (!byProf.has(key)) {
         const name = (profId && profMap[profId]) ? profMap[profId] : "Sin profesional";
-        byProf.set(key, { profId, name, count: 0, cobrado: 0, pendiente: 0, senias: 0 });
+        const profShare = profId ? (profShareMap[profId] ?? null) : null;
+        byProf.set(key, { profId, name, count: 0, cobrado: 0, pendiente: 0, senias: 0, profShare });
       }
       const row = byProf.get(key)!;
       const status = getEffectivePaymentStatus(p);
@@ -119,7 +125,7 @@ export function PaymentsPage() {
       }
     }
     return Array.from(byProf.values()).sort((a, b) => b.cobrado - a.cobrado);
-  }, [safe, profMap]);
+  }, [safe, profMap, profShareMap]);
 
   async function syncPayment(paymentId: string) {
     setSyncingId(paymentId);
@@ -169,20 +175,40 @@ export function PaymentsPage() {
                   <th className="px-5 py-3 font-medium">Profesional</th>
                   <th className="px-5 py-3 text-right font-medium">Movimientos</th>
                   <th className="px-5 py-3 text-right font-medium">Cobrado</th>
+                  <th className="px-5 py-3 text-right font-medium">Para profesional</th>
+                  <th className="px-5 py-3 text-right font-medium">Para clínica</th>
                   <th className="px-5 py-3 text-right font-medium">Señas</th>
                   <th className="px-5 py-3 text-right font-medium">Por cobrar</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-clinic-line">
-                {rendicion.map(row => (
-                  <tr key={row.profId ?? "__none__"} className="hover:bg-clinic-surface/60">
-                    <td className="px-5 py-3 font-medium text-clinic-ink">{row.name}</td>
-                    <td className="px-5 py-3 text-right text-clinic-muted">{row.count}</td>
-                    <td className="px-5 py-3 text-right font-semibold text-clinic-ink">{formatMoney(row.cobrado)}</td>
-                    <td className="px-5 py-3 text-right text-clinic-muted">{formatMoney(row.senias)}</td>
-                    <td className="px-5 py-3 text-right text-clinic-muted">{formatMoney(row.pendiente)}</td>
-                  </tr>
-                ))}
+                {rendicion.map(row => {
+                  const paraProf = row.profShare != null ? row.cobrado * (row.profShare / 100) : null;
+                  const paraClinica = paraProf != null ? row.cobrado - paraProf : null;
+                  const shareLabel = row.profShare != null ? `${row.profShare}%` : null;
+                  const clinicLabel = row.profShare != null ? `${100 - row.profShare}%` : null;
+                  return (
+                    <tr key={row.profId ?? "__none__"} className="hover:bg-clinic-surface/60">
+                      <td className="px-5 py-3 font-medium text-clinic-ink">{row.name}</td>
+                      <td className="px-5 py-3 text-right text-clinic-muted">{row.count}</td>
+                      <td className="px-5 py-3 text-right font-semibold text-clinic-ink">{formatMoney(row.cobrado)}</td>
+                      <td className="px-5 py-3 text-right text-clinic-muted">
+                        {paraProf != null
+                          ? <><span className="font-semibold text-clinic-ink">{formatMoney(paraProf)}</span><span className="ml-1 text-xs text-clinic-muted">({shareLabel})</span></>
+                          : <span className="text-xs italic text-amber-600">Sin % configurado</span>
+                        }
+                      </td>
+                      <td className="px-5 py-3 text-right text-clinic-muted">
+                        {paraClinica != null
+                          ? <><span className="font-semibold text-clinic-ink">{formatMoney(paraClinica)}</span><span className="ml-1 text-xs text-clinic-muted">({clinicLabel})</span></>
+                          : <span className="text-xs italic text-clinic-muted">—</span>
+                        }
+                      </td>
+                      <td className="px-5 py-3 text-right text-clinic-muted">{formatMoney(row.senias)}</td>
+                      <td className="px-5 py-3 text-right text-clinic-muted">{formatMoney(row.pendiente)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

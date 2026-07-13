@@ -43,6 +43,7 @@ export type Professional = {
   avatar_url: string | null;
   consultation_minutes: number;
   active: boolean;
+  professional_share_percentage?: number | null;
   created_at: string;
   updated_at?: string;
 };
@@ -229,6 +230,7 @@ export type ProfessionalInput = {
   bio?: string | null;
   consultation_minutes?: number;
   active?: boolean;
+  professional_share_percentage?: number | null;
 };
 
 export type ServiceInput = {
