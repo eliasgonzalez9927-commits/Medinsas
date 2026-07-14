@@ -47,8 +47,6 @@ import {
   UserInvitation
 } from "../types/clinic";
 
-const DEFAULT_CLINIC_SLUG = "clinica-central";
-
 export class FriendlyDataError extends Error {
   constructor(message: string) {
     super(message);
@@ -82,7 +80,7 @@ export async function getDefaultClinic() {
   } catch (error) {
     console.error("Failed to resolve member clinic", error);
   }
-  return getClinicBySlug(DEFAULT_CLINIC_SLUG);
+  return null;
 }
 
 export async function getClinicBySlug(slug: string): Promise<Clinic | null> {
@@ -733,12 +731,13 @@ export async function searchPatients(clinicId: string, query: string): Promise<P
   }
 }
 
-export async function getPatientById(id: string): Promise<PatientWithAppointments | null> {
+export async function getPatientById(clinicId: string, patientId: string): Promise<PatientWithAppointments | null> {
   try {
     const { data, error } = await supabase
       .from("patients")
       .select("*, appointments(*)")
-      .eq("id", id)
+      .eq("id", patientId)
+      .eq("clinic_id", clinicId)
       .maybeSingle();
     if (error) throw error;
     return data ? mapPatient(data) : null;

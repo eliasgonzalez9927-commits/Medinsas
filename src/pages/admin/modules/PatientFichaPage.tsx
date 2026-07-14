@@ -35,7 +35,7 @@ export function PatientFichaPage() {
       const clinic = await getDefaultClinic();
       if (!clinic) throw new Error("No se encontró la clínica.");
       const [p, profsResult, servicesResult] = await Promise.all([
-        getPatientById(id),
+        getPatientById(clinic.id, id),
         getProfessionals(clinic.id),
         getServices(clinic.id),
       ]);
