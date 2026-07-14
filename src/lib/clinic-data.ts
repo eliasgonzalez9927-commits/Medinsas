@@ -424,12 +424,21 @@ const APPOINTMENT_PAYMENT_STATUS_RANK: Record<AppointmentPaymentStatus, number> 
 // payments as "Pago total" / "Seña" elsewhere (PaymentsPage.getPaymentKind,
 // backend resolvePaymentKind), so a manual payment is judged "full" the same
 // way the rest of the app already does.
+//
+// Known limitation: this only looks at the amount of the payment being
+// created, not the sum of all "approved" payments already on this
+// appointment_id. Two partial payments that together cover the price won't
+// be detected as "full" — each will independently classify as "deposit".
+// Fixing that properly means summing existing approved payments per
+// appointment before classifying, which is a bigger change than this PR;
+// left as a follow-up rather than expanding scope here.
 async function classifyManualPayment(payment: Payment): Promise<"full" | "deposit"> {
   if (!payment.service_id) return "full";
   const { data: service, error } = await supabase
     .from("services")
     .select("price, payment_required, deposit_required")
     .eq("id", payment.service_id)
+    .eq("clinic_id", payment.clinic_id)
     .maybeSingle();
   if (error) throw error;
 
@@ -451,12 +460,20 @@ async function syncAppointmentPaymentStatusAfterPayment(payment: Payment): Promi
     .from("appointments")
     .select("payment_status")
     .eq("id", payment.appointment_id)
+    .eq("clinic_id", payment.clinic_id)
     .maybeSingle();
   if (readError) throw readError;
+  if (!appointment) {
+    // Don't default to "unpaid" silently — a missing/cross-clinic appointment
+    // means we can't know the real state, so surface it instead of guessing.
+    throw new Error(
+      `Appointment ${payment.appointment_id} not found for clinic ${payment.clinic_id} while syncing payment ${payment.id}`
+    );
+  }
 
   const kind = await classifyManualPayment(payment);
   const nextStatus: AppointmentPaymentStatus = kind === "deposit" ? "deposit_paid" : "paid";
-  const currentStatus = (appointment?.payment_status ?? "unpaid") as AppointmentPaymentStatus;
+  const currentStatus = (appointment.payment_status ?? "unpaid") as AppointmentPaymentStatus;
 
   if (APPOINTMENT_PAYMENT_STATUS_RANK[nextStatus] <= APPOINTMENT_PAYMENT_STATUS_RANK[currentStatus]) {
     return;
@@ -465,7 +482,8 @@ async function syncAppointmentPaymentStatusAfterPayment(payment: Payment): Promi
   const { error: updateError } = await supabase
     .from("appointments")
     .update({ payment_status: nextStatus })
-    .eq("id", payment.appointment_id);
+    .eq("id", payment.appointment_id)
+    .eq("clinic_id", payment.clinic_id);
   if (updateError) throw updateError;
 }
 
