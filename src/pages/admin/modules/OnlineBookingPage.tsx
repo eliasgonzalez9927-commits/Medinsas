@@ -1,88 +1,87 @@
-import { Copy, ExternalLink, ToggleRight } from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Copy, Sparkles } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
 import { buildPublicUrl } from "../../../lib/public-url";
 import { AdminPageShell } from "./AdminPageShell";
 
+const UPCOMING_CAPABILITIES = [
+  "Disponibilidad pública",
+  "Servicios visibles para el paciente",
+  "Reglas de seña / pago online",
+  "Límites de anticipación mínima y máxima",
+  "Mensajes automáticos para pacientes",
+  "Link público de reserva"
+];
+
 export function OnlineBookingPage() {
-  const bookingLinks = [
-    buildPublicUrl("/reservar/clinica-central"),
-    buildPublicUrl("/reservar/clinica-central/odontologia"),
-    buildPublicUrl("/reservar/clinica-central/dr-laura-perez")
-  ];
+  const navigate = useNavigate();
+  const [copyNotice, setCopyNotice] = useState("");
+  const publicLink = buildPublicUrl("/reservar/clinica-central");
+
+  async function copyPublicLink() {
+    try {
+      await navigator.clipboard.writeText(publicLink);
+      setCopyNotice("Link copiado.");
+    } catch {
+      setCopyNotice(`No pudimos copiar el link. Usá: ${publicLink}`);
+    }
+  }
 
   return (
     <AdminPageShell
-      description="Controla que puede elegir el paciente, con cuanta anticipacion reserva y que datos son obligatorios."
-      eyebrow="Canal publico"
+      actionLabel="Ver agenda"
+      description="Estamos preparando este módulo para que puedas controlar cómo los pacientes reservan turnos online. Por ahora, la configuración desde esta pantalla todavía no está activa."
+      eyebrow="Canal público"
+      onAction={() => navigate("/admin/agenda")}
       title="Reservas online"
     >
-      <section className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-        <SectionCard className="p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="font-semibold text-clinic-ink">Link publico activo</h2>
-              <p className="mt-1 text-sm text-clinic-muted">
-                Los pacientes pueden solicitar turnos desde mobile y dejar sus datos de contacto.
-              </p>
-            </div>
-            <ToggleRight className="text-clinic-brand" size={34} />
-          </div>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <Setting label="Paciente puede elegir profesional" value="Activado" />
-            <Setting label="Paciente puede elegir especialidad" value="Activado" />
-            <Setting label="Confirmacion manual" value="Activada" />
-            <Setting label="Anticipacion minima" value="12 horas" />
-            <Setting label="Anticipacion maxima" value="45 dias" />
-            <Setting label="Datos obligatorios" value="Nombre, telefono, motivo" />
-          </div>
-        </SectionCard>
-        <SectionCard className="p-5">
-          <h2 className="font-semibold text-clinic-ink">Links disponibles</h2>
-          <div className="mt-4 space-y-3">
-            {bookingLinks.map((link) => (
-              <div key={link} className="rounded-lg border border-clinic-line bg-clinic-surface p-3">
-                <p className="truncate text-sm font-medium text-clinic-ink">{link}</p>
-                <div className="mt-3 flex gap-2">
-                  <Button icon={<Copy size={15} />}>Copiar</Button>
-                  <Button icon={<ExternalLink size={15} />}>Abrir</Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </SectionCard>
-      </section>
-      <SectionCard className="p-5">
-        <h2 className="font-semibold text-clinic-ink">Notificaciones automaticas</h2>
-        <p className="mt-1 text-sm text-clinic-muted">
-          Configuracion preparada para emails transaccionales de reservas. WhatsApp real queda para una integracion posterior.
+      <SectionCard className="max-w-2xl p-6">
+        <span className="grid h-11 w-11 place-items-center rounded-lg bg-teal-50 text-clinic-brand">
+          <Sparkles size={20} />
+        </span>
+        <h2 className="mt-4 text-lg font-semibold text-clinic-ink">Configuración avanzada próximamente</h2>
+        <p className="mt-2 text-sm leading-6 text-clinic-muted">
+          Cuando esté lista, vas a poder configurar desde acá:
         </p>
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
-          <Toggle label="Enviar email al paciente cuando solicita turno" checked />
-          <Toggle label="Enviar email cuando se confirma" checked />
-          <Toggle label="Enviar email cuando se cancela" checked />
-          <Toggle label="Enviar recordatorio por email" />
-          <Toggle label="Preparar WhatsApp futuro" />
+        <ul className="mt-3 space-y-1.5 text-sm text-clinic-muted">
+          {UPCOMING_CAPABILITIES.map((item) => (
+            <li key={item} className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-clinic-brand" />
+              {item}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-sm text-clinic-muted">
+          No se simulan acciones ni integraciones hasta que el flujo esté listo para operar.
+        </p>
+      </SectionCard>
+
+      <SectionCard className="max-w-2xl p-6">
+        <h2 className="font-semibold text-clinic-ink">Mientras tanto, podés gestionar los turnos desde Agenda.</h2>
+        <div className="mt-4">
+          <Button onClick={() => navigate("/admin/agenda")} variant="primary">
+            Ver agenda
+          </Button>
+        </div>
+      </SectionCard>
+
+      <SectionCard className="max-w-2xl p-6">
+        <h2 className="font-semibold text-clinic-ink">Link público de reserva</h2>
+        <p className="mt-1 text-sm text-clinic-muted">
+          Este es el link que ya podés compartir con pacientes para que soliciten turnos online.
+        </p>
+        <div className="mt-4 rounded-lg border border-clinic-line bg-clinic-surface p-3">
+          <p className="truncate text-sm font-medium text-clinic-ink">{publicLink}</p>
+          <div className="mt-3">
+            <Button icon={<Copy size={15} />} onClick={copyPublicLink}>
+              Copiar link público
+            </Button>
+          </div>
+          {copyNotice && <p className="mt-2 text-sm text-clinic-muted">{copyNotice}</p>}
         </div>
       </SectionCard>
     </AdminPageShell>
-  );
-}
-
-function Setting({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-clinic-line bg-clinic-surface p-4">
-      <p className="text-sm text-clinic-muted">{label}</p>
-      <p className="mt-1 font-semibold text-clinic-ink">{value}</p>
-    </div>
-  );
-}
-
-function Toggle({ label, checked = false }: { label: string; checked?: boolean }) {
-  return (
-    <label className="flex items-center justify-between rounded-lg border border-clinic-line bg-clinic-surface px-4 py-3">
-      <span className="text-sm font-medium text-clinic-ink">{label}</span>
-      <input defaultChecked={checked} type="checkbox" />
-    </label>
   );
 }
