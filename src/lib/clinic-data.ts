@@ -13,6 +13,7 @@ import {
   Appointment,
   AppointmentFilters,
   AppointmentInput,
+  AppointmentPaymentStatus,
   OverbookingInput,
   AppointmentStatus,
   AppointmentWithRelations,
@@ -51,6 +52,18 @@ export class FriendlyDataError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "FriendlyDataError";
+  }
+}
+
+// Thrown when a payment was created successfully but the linked appointment's
+// payment_status could not be synced. Kept distinct from FriendlyDataError so
+// callers can tell "payment failed" apart from "payment saved, sync failed".
+export class PaymentAppointmentSyncError extends Error {
+  payment: Payment;
+  constructor(payment: Payment) {
+    super("El pago se registró, pero no pudimos actualizar el estado de pago del turno.");
+    this.name = "PaymentAppointmentSyncError";
+    this.payment = payment;
   }
 }
 
@@ -380,7 +393,98 @@ export async function createPayment(data: ManualPaymentInput): Promise<Payment> 
     console.error("createPayment error", { code: error.code, message: error.message, details: error.details, hint: error.hint });
     throw error;
   }
-  return created as Payment;
+  const payment = created as Payment;
+
+  if (payment.status === "approved" && payment.appointment_id) {
+    try {
+      await syncAppointmentPaymentStatusAfterPayment(payment);
+    } catch (syncError) {
+      console.error("Failed to sync appointment payment_status after payment", syncError);
+      throw new PaymentAppointmentSyncError(payment);
+    }
+  }
+
+  return payment;
+}
+
+// Appointment payment_status values ordered by how "paid" they represent.
+// Used so a sync from a payment never downgrades a status that's already
+// as complete or more complete than what this payment implies.
+const APPOINTMENT_PAYMENT_STATUS_RANK: Record<AppointmentPaymentStatus, number> = {
+  unpaid: 0,
+  payment_failed: 0,
+  rejected: 0,
+  refunded: 0,
+  deposit_pending: 1,
+  deposit_paid: 2,
+  paid: 3
+};
+
+// Mirrors the amount-vs-service-price classification already used to label
+// payments as "Pago total" / "Seña" elsewhere (PaymentsPage.getPaymentKind,
+// backend resolvePaymentKind), so a manual payment is judged "full" the same
+// way the rest of the app already does.
+//
+// Known limitation: this only looks at the amount of the payment being
+// created, not the sum of all "approved" payments already on this
+// appointment_id. Two partial payments that together cover the price won't
+// be detected as "full" — each will independently classify as "deposit".
+// Fixing that properly means summing existing approved payments per
+// appointment before classifying, which is a bigger change than this PR;
+// left as a follow-up rather than expanding scope here.
+async function classifyManualPayment(payment: Payment): Promise<"full" | "deposit"> {
+  if (!payment.service_id) return "full";
+  const { data: service, error } = await supabase
+    .from("services")
+    .select("price, payment_required, deposit_required")
+    .eq("id", payment.service_id)
+    .eq("clinic_id", payment.clinic_id)
+    .maybeSingle();
+  if (error) throw error;
+
+  const price = Number(service?.price ?? 0);
+  const amount = Number(payment.amount ?? 0);
+  if (price > 0 && amount >= price) return "full";
+  if (service?.payment_required && !service?.deposit_required) return "full";
+  const notesLookLikeDeposit =
+    String(payment.notes ?? "").toLowerCase().includes("sena") ||
+    String(payment.notes ?? "").toLowerCase().includes("seña");
+  if (service?.deposit_required || notesLookLikeDeposit) return "deposit";
+  return "full";
+}
+
+async function syncAppointmentPaymentStatusAfterPayment(payment: Payment): Promise<void> {
+  if (!payment.appointment_id) return;
+
+  const { data: appointment, error: readError } = await supabase
+    .from("appointments")
+    .select("payment_status")
+    .eq("id", payment.appointment_id)
+    .eq("clinic_id", payment.clinic_id)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!appointment) {
+    // Don't default to "unpaid" silently — a missing/cross-clinic appointment
+    // means we can't know the real state, so surface it instead of guessing.
+    throw new Error(
+      `Appointment ${payment.appointment_id} not found for clinic ${payment.clinic_id} while syncing payment ${payment.id}`
+    );
+  }
+
+  const kind = await classifyManualPayment(payment);
+  const nextStatus: AppointmentPaymentStatus = kind === "deposit" ? "deposit_paid" : "paid";
+  const currentStatus = (appointment.payment_status ?? "unpaid") as AppointmentPaymentStatus;
+
+  if (APPOINTMENT_PAYMENT_STATUS_RANK[nextStatus] <= APPOINTMENT_PAYMENT_STATUS_RANK[currentStatus]) {
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from("appointments")
+    .update({ payment_status: nextStatus })
+    .eq("id", payment.appointment_id)
+    .eq("clinic_id", payment.clinic_id);
+  if (updateError) throw updateError;
 }
 
 export async function getPaymentEvents(paymentId: string): Promise<PaymentEvent[]> {

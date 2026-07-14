@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { Button } from "../ui/Button";
-import { createPayment } from "../../lib/clinic-data";
+import { createPayment, PaymentAppointmentSyncError } from "../../lib/clinic-data";
 import { PaymentKind, PaymentStatus } from "../../types/clinic";
 
 type DefaultValues = {
@@ -89,7 +89,16 @@ export function RegisterPaymentPanel({ open, onClose, onSaved, clinicId, default
       onSaved?.();
       onClose();
     } catch (err) {
-      setError("No pudimos registrar el pago. Revisá los datos e intentá nuevamente.");
+      if (err instanceof PaymentAppointmentSyncError) {
+        // The payment was saved; only the turno's payment_status failed to sync.
+        // Refresh the caller's data but keep the panel open so this isn't silent.
+        onSaved?.();
+        setError(
+          "El pago se registró, pero no pudimos actualizar el estado de pago del turno. Revisalo manualmente en la ficha del paciente o en Pagos."
+        );
+      } else {
+        setError("No pudimos registrar el pago. Revisá los datos e intentá nuevamente.");
+      }
     } finally {
       setSaving(false);
     }
