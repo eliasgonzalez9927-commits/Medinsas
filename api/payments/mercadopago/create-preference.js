@@ -6,6 +6,17 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 export default async function handler(req, res) {
   if (!allowOnly(req, res, ["POST"])) return;
 
+  // Feature gate: create-preference is implemented but there is no
+  // serverless webhook or sync endpoint yet to confirm payments after the
+  // fact. Fail closed — no Mercado Pago call, no Supabase read/write, no
+  // payment created — until this is explicitly turned on once those exist.
+  if (process.env.MERCADO_PAGO_CREATE_PREFERENCE_ENABLED !== "true") {
+    return res.status(503).json({
+      error: "MERCADO_PAGO_FLOW_DISABLED",
+      message: "Mercado Pago todavía no está habilitado para generar links."
+    });
+  }
+
   const { client, error, missing } = makeSupabase();
   if (error) return res.status(500).json({ error, missing });
 
