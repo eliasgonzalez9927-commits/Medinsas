@@ -15,6 +15,7 @@ import { OnlineBookingPage } from "./pages/admin/modules/OnlineBookingPage";
 import { OnboardingPage } from "./pages/admin/modules/OnboardingPage";
 import { PatientsPage } from "./pages/admin/modules/PatientsPage";
 import { PatientFichaPage } from "./pages/admin/modules/PatientFichaPage";
+import { PatientFichaProfessionalPage } from "./pages/admin/modules/PatientFichaProfessionalPage";
 import { PaymentDetailPage, PaymentSettingsPage, PaymentsPage } from "./pages/admin/modules/PaymentsPage";
 import { ProfessionalsPage } from "./pages/admin/modules/ProfessionalsPage";
 import { ProfessionalProfilePage } from "./pages/admin/modules/ProfessionalProfilePage";
@@ -122,6 +123,7 @@ export function App() {
       </Route>
       <Route element={<ProtectedRoute roles={PROFESSIONAL_ROLES} />}>
         <Route path="/admin/mi-agenda" element={<AgendaPage />} />
+        <Route path="/admin/mi-agenda/pacientes/:id" element={<PatientFichaProfessionalPage />} />
         <Route path="/medico" element={<Navigate to="/admin/mi-agenda" replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

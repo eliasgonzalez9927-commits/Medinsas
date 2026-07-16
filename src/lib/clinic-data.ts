@@ -360,6 +360,40 @@ export async function getPaymentsByPatient(clinicId: string, patientId: string):
   }
 }
 
+// Scoped production totals for the professional-role ficha. Deliberately
+// separate from getPaymentsByPatient: selects only amount/status (no payer
+// info, no notes, no payment method), and the !inner join on appointments
+// filtered by professional_id means a payment with no appointment_id, or
+// whose appointment belongs to another professional, is excluded by the
+// query itself rather than fetched and hidden in the UI.
+export async function getProfessionalPatientProduction(
+  clinicId: string,
+  patientId: string,
+  professionalId: string
+): Promise<{ totalCobrado: number; totalPendiente: number }> {
+  try {
+    const { data, error } = await supabase
+      .from("payments")
+      .select("amount, status, appointments!inner(id, patient_id, professional_id)")
+      .eq("clinic_id", clinicId)
+      .eq("patient_id", patientId)
+      .eq("appointments.professional_id", professionalId)
+      .eq("appointments.patient_id", patientId);
+    if (error) throw error;
+    const rows = (data ?? []) as Array<{ amount: number; status: string }>;
+    const totalCobrado = rows
+      .filter((row) => row.status === "approved")
+      .reduce((sum, row) => sum + (row.amount ?? 0), 0);
+    const totalPendiente = rows
+      .filter((row) => row.status === "pending" || row.status === "in_process")
+      .reduce((sum, row) => sum + (row.amount ?? 0), 0);
+    return { totalCobrado, totalPendiente };
+  } catch (error) {
+    console.error("Failed to load professional patient production", error);
+    throw new FriendlyDataError("No pudimos cargar la producción con este paciente.");
+  }
+}
+
 export async function createPayment(data: ManualPaymentInput): Promise<Payment> {
   const payload = {
     clinic_id: data.clinic_id,
@@ -848,6 +882,33 @@ export async function getPatientById(clinicId: string, patientId: string): Promi
   } catch (error) {
     console.error("Failed to load patient", error);
     throw new FriendlyDataError("No pudimos cargar el paciente.");
+  }
+}
+
+// Scoped read for the professional-role ficha (/admin/mi-agenda/pacientes/:id).
+// The !inner join + nested eq() means this returns null (not the patient with
+// an empty appointments array) when the patient has no appointment with this
+// professional_id — access is enforced by the query itself, not by hiding UI.
+// appointments come back pre-filtered to this professional only; payments are
+// never fetched here.
+export async function getPatientForProfessional(
+  clinicId: string,
+  patientId: string,
+  professionalId: string
+): Promise<PatientWithAppointments | null> {
+  try {
+    const { data, error } = await supabase
+      .from("patients")
+      .select("*, appointments!inner(*)")
+      .eq("id", patientId)
+      .eq("clinic_id", clinicId)
+      .eq("appointments.professional_id", professionalId)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? mapPatient(data) : null;
+  } catch (error) {
+    console.error("Failed to load patient for professional", error);
+    throw new FriendlyDataError("No pudimos cargar la ficha del paciente.");
   }
 }
 
