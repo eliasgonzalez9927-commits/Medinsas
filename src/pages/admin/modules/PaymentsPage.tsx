@@ -195,7 +195,16 @@ export function PaymentsPage() {
                       <td className="px-5 py-3 text-right text-clinic-muted">
                         {paraProf != null
                           ? <><span className="font-semibold text-clinic-ink">{formatMoney(paraProf)}</span><span className="ml-1 text-xs text-clinic-muted">({shareLabel})</span></>
-                          : <span className="text-xs italic text-amber-600">Sin % configurado</span>
+                          : (
+                            <span className="inline-flex items-center gap-2">
+                              <span className="text-xs italic text-amber-600">Sin % configurado</span>
+                              {row.profId && (
+                                <Link to={`/admin/profesionales/${row.profId}#rendicion`} className="text-xs font-semibold text-clinic-brand hover:underline">
+                                  Configurar %
+                                </Link>
+                              )}
+                            </span>
+                          )
                         }
                       </td>
                       <td className="px-5 py-3 text-right text-clinic-muted">

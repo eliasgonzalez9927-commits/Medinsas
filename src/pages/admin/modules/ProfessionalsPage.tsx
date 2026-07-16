@@ -254,6 +254,25 @@ export function ProfessionalsPage() {
                 <Info label="Duracion" value={`${professional.consultation_minutes} min`} />
                 <Info label="Servicios" value={String(professional.services.length)} />
               </dl>
+              <div className="mt-4 rounded-lg border border-clinic-line bg-clinic-surface px-3 py-2.5 text-sm">
+                {professional.professional_share_percentage != null ? (
+                  <p className="text-clinic-ink">
+                    Liquidación:{" "}
+                    <span className="font-semibold">
+                      {formatPercent(professional.professional_share_percentage)}% profesional
+                    </span>{" "}
+                    / {formatPercent(100 - professional.professional_share_percentage)}% clínica
+                  </p>
+                ) : (
+                  <p className="font-medium text-amber-700">Sin % de liquidación configurado</p>
+                )}
+                <Link
+                  to={`/admin/profesionales/${professional.slug ?? professional.id}#rendicion`}
+                  className="mt-1 inline-block text-sm font-semibold text-clinic-brand hover:underline"
+                >
+                  {professional.professional_share_percentage != null ? "Ver rendición" : "Configurar liquidación"}
+                </Link>
+              </div>
               <div className="mt-5 flex flex-wrap gap-2">
                 <Link
                   to={`/admin/profesionales/${professional.slug ?? professional.id}`}
@@ -303,6 +322,10 @@ function Input({
       />
     </label>
   );
+}
+
+function formatPercent(value: number): string {
+  return value % 1 === 0 ? String(value) : value.toFixed(2);
 }
 
 function Info({ label, value }: { label: string; value: string }) {
