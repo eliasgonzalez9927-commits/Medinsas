@@ -75,7 +75,9 @@ type DateAvailability = {
 const today = new Date().toISOString().slice(0, 10);
 
 export function AgendaPage() {
-  const { role, user } = useAuth();
+  const { role, user, clinicMembership } = useAuth();
+  const isProfessionalRole = role === "professional" || role === "doctor";
+  const myProfessionalId = isProfessionalRole ? (clinicMembership?.professional_id ?? null) : null;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [clinic, setClinic] = useState<Clinic | null>(null);
@@ -85,7 +87,7 @@ export function AgendaPage() {
   const [patients, setPatients] = useState<PatientWithAppointments[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [selectedDate, setSelectedDate] = useState(today);
-  const [professionalId, setProfessionalId] = useState("all");
+  const [professionalId, setProfessionalId] = useState(myProfessionalId ?? "all");
   const [serviceId, setServiceId] = useState("all");
   const [status, setStatus] = useState<"all" | AppointmentStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -172,6 +174,10 @@ export function AgendaPage() {
   }
 
   useEffect(() => {
+    if (isProfessionalRole && !myProfessionalId) {
+      setLoading(false);
+      return;
+    }
     loadBase();
   }, []);
 
@@ -571,6 +577,17 @@ export function AgendaPage() {
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   }
 
+  if (isProfessionalRole && !myProfessionalId) {
+    return (
+      <AdminPageShell description="" eyebrow="Agenda clinica" title="Mi agenda">
+        <Message tone="error">
+          Tu usuario no está vinculado a un profesional en esta clínica. Contactá al administrador para que
+          te asocie a tu perfil profesional y puedas ver tu agenda.
+        </Message>
+      </AdminPageShell>
+    );
+  }
+
   return (
     <AdminPageShell
       actionLabel="Crear turno manual"
@@ -776,14 +793,26 @@ export function AgendaPage() {
         </div>
         <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="today" onChange={(nextRange) => { setRange(nextRange); setSelectedDate(nextRange.dateFrom); }} />
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_180px]">
-          <Select label="Profesional" value={professionalId} onChange={setProfessionalId}>
-            <option value="all">Todos</option>
-            {professionals.map((professional) => (
-              <option key={professional.id} value={professional.id}>
-                Dr/a. {professional.name} {professional.last_name}
-              </option>
-            ))}
-          </Select>
+          {isProfessionalRole ? (
+            <label>
+              <span className="text-sm font-medium text-clinic-ink">Profesional</span>
+              <div className="mt-2 flex h-10 w-full items-center rounded-lg border border-clinic-line bg-clinic-surface px-3 text-sm text-clinic-ink">
+                {(() => {
+                  const mine = professionals.find((item) => item.id === myProfessionalId);
+                  return mine ? `Dr/a. ${mine.name} ${mine.last_name}` : "Tu perfil profesional";
+                })()}
+              </div>
+            </label>
+          ) : (
+            <Select label="Profesional" value={professionalId} onChange={setProfessionalId}>
+              <option value="all">Todos</option>
+              {professionals.map((professional) => (
+                <option key={professional.id} value={professional.id}>
+                  Dr/a. {professional.name} {professional.last_name}
+                </option>
+              ))}
+            </Select>
+          )}
           <Select label="Servicio" value={serviceId} onChange={setServiceId}>
             <option value="all">Todos</option>
             {services.map((service) => (
