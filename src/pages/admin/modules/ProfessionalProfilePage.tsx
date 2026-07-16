@@ -194,10 +194,11 @@ export function ProfessionalProfilePage() {
       </section>
 
       {/* Rendición */}
-      <SectionCard className="p-5">
+      <SectionCard className="scroll-mt-24 p-5" id="rendicion">
         <h2 className="text-lg font-semibold text-clinic-ink">Rendición</h2>
         <p className="mt-1 text-sm text-clinic-muted">
-          El porcentaje define cómo se reparte cada atención cobrada entre el profesional y la clínica.
+          El porcentaje define cómo se reparte cada atención cobrada entre el profesional y la clínica. Se usa
+          para estimar la liquidación del profesional en Ingresos/Pagos.
         </p>
 
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
