@@ -253,7 +253,13 @@ export function PaymentsPage() {
                         {formatDate(payment.paid_at ?? payment.created_at, payment.clinics?.timezone ?? undefined)}
                       </td>
                       <td className="px-4 py-3 font-medium text-clinic-ink">
-                        {payment.patients ? `${payment.patients.first_name} ${payment.patients.last_name}` : "—"}
+                        {payment.patients && payment.patient_id ? (
+                          <Link to={`/admin/pacientes/${payment.patient_id}`} className="hover:text-clinic-brand hover:underline">
+                            {payment.patients.first_name} {payment.patients.last_name}
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td className="px-4 py-3 text-clinic-muted">{profName}</td>
                       <td className="px-4 py-3 text-clinic-muted">{payment.services?.name ?? payment.notes ?? "—"}</td>
@@ -349,7 +355,15 @@ export function PaymentDetailPage() {
               </span>
               <div>
                 <h2 className="font-semibold text-clinic-ink">{formatMoney(payment.amount)}</h2>
-                <p className="mt-1 text-sm text-clinic-muted">{payment.patients ? `${payment.patients.first_name} ${payment.patients.last_name}` : "Sin paciente"}</p>
+                <p className="mt-1 text-sm text-clinic-muted">
+                  {payment.patients && payment.patient_id ? (
+                    <Link to={`/admin/pacientes/${payment.patient_id}`} className="font-semibold text-clinic-brand hover:underline">
+                      {payment.patients.first_name} {payment.patients.last_name}
+                    </Link>
+                  ) : (
+                    "Sin paciente"
+                  )}
+                </p>
               </div>
             </div>
             <dl className="mt-5 grid gap-3 text-sm">

@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { RegisterPaymentPanel } from "../../../components/admin/RegisterPaymentPanel";
@@ -838,11 +838,16 @@ export function AgendaPage() {
               >
                 <div className="font-semibold text-clinic-brand">{formatTime(appointment.starts_at, clinic?.timezone ?? undefined)}</div>
                 <div>
-                  <p className="font-semibold text-clinic-ink">
-                    {appointment.patient
-                      ? `${appointment.patient.first_name} ${appointment.patient.last_name}`
-                      : "Paciente sin vincular"}
-                  </p>
+                  {appointment.patient ? (
+                    <Link
+                      to={`/admin/pacientes/${appointment.patient_id}`}
+                      className="font-semibold text-clinic-ink hover:text-clinic-brand hover:underline"
+                    >
+                      {appointment.patient.first_name} {appointment.patient.last_name}
+                    </Link>
+                  ) : (
+                    <p className="font-semibold text-clinic-ink">Paciente sin vincular</p>
+                  )}
                   <p className="text-sm text-clinic-muted">
                     Origen: {sourceLabel(appointment.source)} · {appointment.appointment_type === "telemedicine" ? "Telemedicina" : "Presencial"}
                   </p>

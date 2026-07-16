@@ -4,10 +4,10 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { ADMIN_MODULES, ADMIN_NAVIGATION_GROUPS, AdminModuleDefinition } from "../../lib/admin-navigation";
 import { roleLabels } from "../../lib/auth-roles";
-import { getDefaultClinic } from "../../lib/clinic-data";
+import { getDefaultClinic, searchPatients } from "../../lib/clinic-data";
 import { BASE_MODULES } from "../../lib/modules";
 import { supabase } from "../../lib/supabase";
-import { Clinic } from "../../types/clinic";
+import { Clinic, PatientWithAppointments } from "../../types/clinic";
 import { Button } from "../ui/Button";
 
 export function AdminLayout({
@@ -25,6 +25,8 @@ export function AdminLayout({
   const [modules, setModules] = useState<Record<string, boolean>>({});
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
+  const [patientMatches, setPatientMatches] = useState<PatientWithAppointments[]>([]);
+  const [searchFocused, setSearchFocused] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [lastRefreshAt, setLastRefreshAt] = useState<Date>(() => new Date());
   const displayName = profile?.full_name ?? user?.email ?? "Equipo clínico";
@@ -56,11 +58,39 @@ export function AdminLayout({
     loadWorkspace();
   }, []);
 
+  useEffect(() => {
+    const query = globalSearch.trim();
+    if (!clinic || query.length < 2) {
+      setPatientMatches([]);
+      return;
+    }
+    let cancelled = false;
+    const timeout = window.setTimeout(async () => {
+      try {
+        const results = await searchPatients(clinic.id, query);
+        if (!cancelled) setPatientMatches(results.slice(0, 5));
+      } catch {
+        if (!cancelled) setPatientMatches([]);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [globalSearch, clinic]);
+
   function runGlobalSearch() {
     const query = globalSearch.trim();
     if (!query) return;
     setMobileNavOpen(false);
     navigate(`/admin/agenda?search=${encodeURIComponent(query)}`);
+  }
+
+  function goToPatientFicha(patientId: string) {
+    setGlobalSearch("");
+    setPatientMatches([]);
+    setMobileNavOpen(false);
+    navigate(`/admin/pacientes/${patientId}`);
   }
 
   function handleRefresh() {
@@ -202,7 +232,33 @@ export function AdminLayout({
 
             <form className="relative ml-auto hidden w-full max-w-xl md:block lg:ml-0" onSubmit={(event) => { event.preventDefault(); runGlobalSearch(); }}>
               <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-clinic-muted" />
-              <input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} placeholder="Buscar paciente, turno o profesional..." className="h-10 w-full rounded-xl border border-clinic-line bg-clinic-surface pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-clinic-brand focus:bg-white focus:ring-4 focus:ring-teal-100" />
+              <input
+                value={globalSearch}
+                onChange={(event) => setGlobalSearch(event.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => window.setTimeout(() => setSearchFocused(false), 150)}
+                placeholder="Buscar paciente, turno o profesional..."
+                className="h-10 w-full rounded-xl border border-clinic-line bg-clinic-surface pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-clinic-brand focus:bg-white focus:ring-4 focus:ring-teal-100"
+              />
+              {searchFocused && patientMatches.length > 0 && (
+                <div className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-clinic-line bg-white shadow-[0_18px_42px_rgba(13,54,66,0.12)]">
+                  <p className="border-b border-clinic-line px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">Pacientes</p>
+                  {patientMatches.map((patient) => (
+                    <button
+                      key={patient.id}
+                      type="button"
+                      onClick={() => goToPatientFicha(patient.id)}
+                      className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-clinic-surface"
+                    >
+                      <span className="min-w-0 truncate">
+                        <span className="font-medium text-clinic-ink">{patient.first_name} {patient.last_name}</span>
+                        <span className="ml-2 text-clinic-muted">{patient.phone}</span>
+                      </span>
+                      <span className="shrink-0 text-xs font-semibold text-clinic-brand">Ver ficha</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </form>
 
             <div className="ml-auto flex items-center gap-2">

@@ -254,7 +254,7 @@ export function PatientsPage() {
             {visiblePatients.map((patient) => {
               const nextAppointment = getNextAppointment(patient);
               return (
-                <article key={patient.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1fr_170px_170px_1fr_130px] lg:items-center">
+                <article key={patient.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1fr_170px_170px_1fr_220px] lg:items-center">
                   <div>
                     <Link
                       to={`/admin/pacientes/${patient.id}`}
@@ -274,9 +274,17 @@ export function PatientsPage() {
                       {(patient.appointments?.length ?? 0)} turnos registrados
                     </p>
                   </div>
-                  <Button icon={<Edit3 size={16} />} onClick={() => openEdit(patient)}>
-                    Editar
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      to={`/admin/pacientes/${patient.id}`}
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-clinic-line bg-white px-4 py-2 text-sm font-semibold text-clinic-ink shadow-[0_2px_8px_rgba(13,54,66,0.025)] transition hover:bg-[#e6f4f1]"
+                    >
+                      Ver ficha
+                    </Link>
+                    <Button icon={<Edit3 size={16} />} onClick={() => openEdit(patient)}>
+                      Editar
+                    </Button>
+                  </div>
                 </article>
               );
             })}
