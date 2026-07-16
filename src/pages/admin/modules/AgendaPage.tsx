@@ -590,11 +590,11 @@ export function AgendaPage() {
 
   return (
     <AdminPageShell
-      actionLabel="Crear turno manual"
+      actionLabel={isProfessionalRole ? undefined : "Crear turno manual"}
       description="Vista operativa para recepcion: confirma, cancela, marca ausencias y ocupa huecos libres."
       eyebrow="Agenda clinica"
-      onCreateAppointment={openCreate}
-      onAction={openCreate}
+      onCreateAppointment={isProfessionalRole ? undefined : openCreate}
+      onAction={isProfessionalRole ? undefined : openCreate}
       onRefresh={refreshAgenda}
       title="Agenda"
     >
@@ -787,7 +787,9 @@ export function AgendaPage() {
             <Button onClick={() => setAgendaPreset("this_month")}>Mes</Button>
             <Button onClick={() => setAgendaPreset("custom")}>Rango</Button>
             <Button icon={<RefreshCw size={16} />} onClick={refreshAgenda}>Actualizar</Button>
-            <Button icon={<Plus size={16} />} onClick={openCreate} variant="primary">Nuevo turno</Button>
+            {!isProfessionalRole && (
+              <Button icon={<Plus size={16} />} onClick={openCreate} variant="primary">Nuevo turno</Button>
+            )}
             {canCreateOverbooking(role) && <Button onClick={openOverbooking}>Sobreturno</Button>}
           </div>
         </div>
@@ -848,9 +850,11 @@ export function AgendaPage() {
       <SectionCard className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
           <h2 className="font-semibold text-clinic-ink">{range.preset === "today" ? "Turnos del día" : "Turnos del período"}</h2>
-          <Button icon={<Plus size={16} />} onClick={openCreate}>
-            Nuevo
-          </Button>
+          {!isProfessionalRole && (
+            <Button icon={<Plus size={16} />} onClick={openCreate}>
+              Nuevo
+            </Button>
+          )}
         </div>
         {loading ? (
           <div className="px-5 py-10 text-center text-sm text-clinic-muted">Cargando turnos...</div>
@@ -898,9 +902,11 @@ export function AgendaPage() {
                   <PaymentStatusBadge status={appointment.payment_status ?? "unpaid"} />
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button icon={<CreditCard size={16} />} onClick={() => setPaymentAppt(appointment)}>
-                    Registrar pago
-                  </Button>
+                  {!isProfessionalRole && (
+                    <Button icon={<CreditCard size={16} />} onClick={() => setPaymentAppt(appointment)}>
+                      Registrar pago
+                    </Button>
+                  )}
                   <Button icon={<CreditCard size={16} />} onClick={() => generatePaymentLink(appointment)}>
                     Generar link
                   </Button>
@@ -915,7 +921,7 @@ export function AgendaPage() {
                       Copiar link
                     </Button>
                   )}
-                  {appointment.status === "pending" && (
+                  {!isProfessionalRole && appointment.status === "pending" && (
                     <Button onClick={() => handleStatus(appointment.id, "confirm")}>Confirmar</Button>
                   )}
                   <Button
@@ -934,7 +940,7 @@ export function AgendaPage() {
                   >
                     Abrir WhatsApp
                   </Button>
-                  {!["cancelled", "completed"].includes(appointment.status) && (
+                  {!isProfessionalRole && !["cancelled", "completed"].includes(appointment.status) && (
                     <>
                       <Button onClick={() => handleStatus(appointment.id, "completed")}>Atendido</Button>
                       <Button onClick={() => handleStatus(appointment.id, "no_show")}>No asistio</Button>
