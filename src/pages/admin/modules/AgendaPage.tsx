@@ -869,7 +869,11 @@ export function AgendaPage() {
                 <div>
                   {appointment.patient ? (
                     <Link
-                      to={`/admin/pacientes/${appointment.patient_id}`}
+                      to={
+                        isProfessionalRole
+                          ? `/admin/mi-agenda/pacientes/${appointment.patient_id}`
+                          : `/admin/pacientes/${appointment.patient_id}`
+                      }
                       className="font-semibold text-clinic-ink hover:text-clinic-brand hover:underline"
                     >
                       {appointment.patient.first_name} {appointment.patient.last_name}
