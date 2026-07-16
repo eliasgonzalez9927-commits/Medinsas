@@ -20,6 +20,7 @@ export function AdminLayout({
   onCreateAppointment: () => void;
 }) {
   const { profile, role, signOut, user } = useAuth();
+  const isProfessionalRole = role === "professional" || role === "doctor";
   const navigate = useNavigate();
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [modules, setModules] = useState<Record<string, boolean>>({});
@@ -90,7 +91,7 @@ export function AdminLayout({
     setGlobalSearch("");
     setPatientMatches([]);
     setMobileNavOpen(false);
-    navigate(`/admin/pacientes/${patientId}`);
+    navigate(isProfessionalRole ? `/admin/mi-agenda/pacientes/${patientId}` : `/admin/pacientes/${patientId}`);
   }
 
   function handleRefresh() {
@@ -265,7 +266,7 @@ export function AdminLayout({
               <p className="hidden whitespace-nowrap text-xs text-clinic-muted xl:block">Última actualización: {formatRefreshLabel(lastRefreshAt)}</p>
               <div className="hidden min-w-0 text-right xl:block"><p className="truncate text-sm font-semibold text-clinic-ink">{clinic?.name ?? "Medin"}</p><p className="text-xs text-clinic-muted">{displayRole}</p></div>
               <Button className="hidden sm:inline-flex" onClick={handleRefresh} variant="secondary">Actualizar</Button>
-              <Button onClick={onCreateAppointment} variant="primary">Nuevo turno</Button>
+              {!isProfessionalRole && <Button onClick={onCreateAppointment} variant="primary">Nuevo turno</Button>}
               <div className="relative">
                 <button
                   type="button"
