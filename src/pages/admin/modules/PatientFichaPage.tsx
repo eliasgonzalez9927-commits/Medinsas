@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
@@ -79,6 +79,20 @@ export function PatientFichaPage() {
       .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())[0] ?? null;
   }, [patient]);
 
+  const lastAppointment = useMemo(() => {
+    const now = Date.now();
+    return (patient?.appointments ?? [])
+      .filter((a) => new Date(a.starts_at).getTime() < now)
+      .sort((a, b) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime())[0] ?? null;
+  }, [patient]);
+
+  const appointmentCounts = useMemo(() => {
+    const now = Date.now();
+    const all = patient?.appointments ?? [];
+    const upcoming = all.filter((a) => new Date(a.starts_at).getTime() >= now).length;
+    return { total: all.length, upcoming, past: all.length - upcoming };
+  }, [patient]);
+
   const active = useMemo(() => isPatientActive(patient?.appointments), [patient]);
 
   const paymentSummary = useMemo(() => {
@@ -155,19 +169,64 @@ export function PatientFichaPage() {
             >
               {active ? "Activo" : "Inactivo"}
             </span>
-            <p className="text-sm text-clinic-muted sm:text-right">
-              {nextAppointment ? (
-                <>
-                  Próximo turno:{" "}
-                  <span className="font-medium text-clinic-ink">
-                    {formatDate(nextAppointment.starts_at)}
-                  </span>
-                </>
-              ) : (
-                "Sin próximo turno"
-              )}
-            </p>
           </div>
+        </div>
+      </SectionCard>
+
+      {/* Resumen del paciente */}
+      <SectionCard className="mb-6">
+        <div className="border-b border-clinic-line px-5 py-4">
+          <h2 className="font-semibold text-clinic-ink">Resumen del paciente</h2>
+        </div>
+        <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryCard label="Último turno registrado">
+            {lastAppointment ? (
+              <>
+                <p className="font-medium text-clinic-ink">{formatDate(lastAppointment.starts_at)}</p>
+                <p className="text-clinic-muted">{serviceName(lastAppointment.service_id, serviceMap)}</p>
+                <p className="text-clinic-muted">{professionalName(lastAppointment.professional_id, profMap)}</p>
+                <ApptStatusBadge status={lastAppointment.status} />
+              </>
+            ) : (
+              <p className="text-clinic-muted">Sin turnos registrados</p>
+            )}
+          </SummaryCard>
+          <SummaryCard label="Próximo turno">
+            {nextAppointment ? (
+              <>
+                <p className="font-medium text-clinic-ink">{formatDate(nextAppointment.starts_at)}</p>
+                <p className="text-clinic-muted">{serviceName(nextAppointment.service_id, serviceMap)}</p>
+                <p className="text-clinic-muted">{professionalName(nextAppointment.professional_id, profMap)}</p>
+                <ApptStatusBadge status={nextAppointment.status} />
+              </>
+            ) : (
+              <p className="text-clinic-muted">Sin próximo turno</p>
+            )}
+          </SummaryCard>
+          <SummaryCard label="Turnos totales">
+            {appointmentCounts.total === 0 ? (
+              <p className="text-clinic-muted">Sin turnos registrados</p>
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-clinic-ink">{appointmentCounts.total}</p>
+                <p className="text-clinic-muted">
+                  {appointmentCounts.past} pasados · {appointmentCounts.upcoming} próximos
+                </p>
+              </>
+            )}
+          </SummaryCard>
+          <SummaryCard label="Ingresos">
+            {paymentsLoading ? (
+              <p className="text-clinic-muted">Cargando...</p>
+            ) : paymentSummary.count === 0 ? (
+              <p className="text-clinic-muted">Sin pagos registrados</p>
+            ) : (
+              <>
+                <p className="font-medium text-clinic-ink">{formatARS(paymentSummary.totalCobrado)} cobrado</p>
+                <p className="text-clinic-muted">{paymentSummary.count} movimientos</p>
+              </>
+            )}
+          </SummaryCard>
         </div>
       </SectionCard>
 
@@ -211,10 +270,10 @@ export function PatientFichaPage() {
                   <tr key={appt.id} className="hover:bg-clinic-surface">
                     <td className="px-5 py-3 text-clinic-ink">{formatDate(appt.starts_at)}</td>
                     <td className="px-5 py-3 text-clinic-muted">
-                      {appt.professional_id ? (profMap[appt.professional_id] ?? "—") : "—"}
+                      {professionalName(appt.professional_id, profMap)}
                     </td>
                     <td className="px-5 py-3 text-clinic-muted">
-                      {appt.service_id ? (serviceMap[appt.service_id] ?? "—") : "—"}
+                      {serviceName(appt.service_id, serviceMap)}
                     </td>
                     <td className="px-5 py-3">
                       <ApptStatusBadge status={appt.status} />
@@ -376,6 +435,23 @@ function formatARS(amount: number): string {
     currency: "ARS",
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+function serviceName(serviceId: string | null | undefined, serviceMap: Record<string, string>): string {
+  return serviceId ? (serviceMap[serviceId] ?? "—") : "—";
+}
+
+function professionalName(professionalId: string | null | undefined, profMap: Record<string, string>): string {
+  return professionalId ? (profMap[professionalId] ?? "—") : "—";
+}
+
+function SummaryCard({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-clinic-line bg-white p-4">
+      <p className="text-xs font-medium uppercase tracking-wider text-clinic-muted">{label}</p>
+      <div className="mt-2 space-y-1 text-sm">{children}</div>
+    </div>
+  );
 }
 
 function apptPaymentLabel(status?: AppointmentPaymentStatus): string {
