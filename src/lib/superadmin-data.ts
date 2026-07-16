@@ -288,9 +288,16 @@ export async function getOnboardingProgress(clinicId: string) {
     step("services", "Servicios", (services.count ?? 0) > 0, "/admin/servicios", `${services.count ?? 0} cargados`),
     step("availability", "Horarios y disponibilidad", (availability.count ?? 0) > 0, "/admin/disponibilidad", `${availability.count ?? 0} reglas activas`),
     step("online_booking", "Reserva online", Boolean(booking.data?.public_booking_enabled), "/admin/booking", booking.data?.public_booking_enabled ? "Activa" : "Inactiva"),
-    step("payments", "Pagos / Mercado Pago", Boolean(payments.data?.active), "/admin/pagos/configuracion", payments.data?.active ? "Configurado" : "Pendiente"),
-    step("finish", "Finalizar", false, "/admin", "Revisión final")
+    step("payments", "Pagos / Mercado Pago", Boolean(payments.data?.active), "/admin/pagos/configuracion", payments.data?.active ? "Configurado" : "Pendiente")
   ];
+  const readyToFinish = steps.every((item) => item.status === "completed");
+  steps.push(step(
+    "finish",
+    "Finalizar",
+    readyToFinish,
+    "/admin",
+    readyToFinish ? "Tu clínica ya está lista para operar." : "Completá los pasos anteriores para terminar."
+  ));
   const completed = steps.filter((item) => item.status === "completed").length;
   return { steps, percent: Math.round((completed / steps.length) * 100) };
 }
