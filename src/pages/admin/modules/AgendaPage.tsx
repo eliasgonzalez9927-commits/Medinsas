@@ -1,6 +1,6 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Copy, CreditCard, Clock3, MessageCircle, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
+import { Copy, CreditCard, Clock3, MessageCircle, MoreVertical, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { RegisterPaymentPanel } from "../../../components/admin/RegisterPaymentPanel";
 import { SectionCard } from "../../../components/admin/SectionCard";
@@ -103,6 +103,7 @@ export function AgendaPage() {
   const [error, setError] = useState("");
   const [paymentLinks, setPaymentLinks] = useState<Record<string, string>>({});
   const [paymentAppt, setPaymentAppt] = useState<AppointmentWithRelations | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [overbookingOpen, setOverbookingOpen] = useState(false);
   const [overbookingSaving, setOverbookingSaving] = useState(false);
   const [overbookingWarnings, setOverbookingWarnings] = useState<string[]>([]);
@@ -901,52 +902,109 @@ export function AgendaPage() {
                   <AppointmentStatusBadge status={appointment.status} />
                   <PaymentStatusBadge status={appointment.payment_status ?? "unpaid"} />
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {!isProfessionalRole && (
-                    <Button icon={<CreditCard size={16} />} onClick={() => setPaymentAppt(appointment)}>
-                      Registrar pago
-                    </Button>
-                  )}
-                  <Button icon={<CreditCard size={16} />} onClick={() => generatePaymentLink(appointment)}>
-                    Generar link
-                  </Button>
-                  {paymentLinks[appointment.id] && (
-                    <Button
-                      icon={<Copy size={16} />}
-                      onClick={() => {
-                        navigator.clipboard?.writeText(paymentLinks[appointment.id]);
-                        setNotice("Link copiado.");
-                      }}
-                    >
-                      Copiar link
-                    </Button>
-                  )}
+                <div className="flex flex-wrap items-center gap-2">
                   {!isProfessionalRole && appointment.status === "pending" && (
                     <Button onClick={() => handleStatus(appointment.id, "confirm")}>Confirmar</Button>
                   )}
-                  <Button
-                    icon={<Copy size={16} />}
-                    onClick={() => copyWhatsAppMessage(appointment)}
-                    title={appointment.patient?.phone ? "Copiar mensaje para WhatsApp" : "El paciente no tiene teléfono cargado."}
-                    disabled={!appointment.patient?.phone}
-                  >
-                    Copiar mensaje
-                  </Button>
-                  <Button
-                    icon={<MessageCircle size={16} />}
-                    onClick={() => openWhatsApp(appointment)}
-                    title={appointment.patient?.phone ? "Abrir WhatsApp" : "El paciente no tiene teléfono cargado."}
-                    disabled={!appointment.patient?.phone}
-                  >
-                    Abrir WhatsApp
-                  </Button>
                   {!isProfessionalRole && !["cancelled", "completed"].includes(appointment.status) && (
-                    <>
-                      <Button onClick={() => handleStatus(appointment.id, "completed")}>Atendido</Button>
-                      <Button onClick={() => handleStatus(appointment.id, "no_show")}>No asistio</Button>
-                      <Button onClick={() => handleStatus(appointment.id, "cancel")}>Cancelar</Button>
-                    </>
+                    <Button onClick={() => handleStatus(appointment.id, "completed")}>Atendido</Button>
                   )}
+                  {isProfessionalRole &&
+                    appointment.professional_id === myProfessionalId &&
+                    !["cancelled", "completed"].includes(appointment.status) && (
+                      <Button onClick={() => handleStatus(appointment.id, "completed")}>Atendido</Button>
+                    )}
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      aria-haspopup="menu"
+                      aria-expanded={openMenuId === appointment.id}
+                      aria-label="Más acciones"
+                      onClick={() => setOpenMenuId((current) => (current === appointment.id ? null : appointment.id))}
+                    >
+                      <MoreVertical size={16} />
+                    </Button>
+                    {openMenuId === appointment.id && (
+                      <div
+                        className="absolute right-0 top-11 z-20 w-56 rounded-xl border border-clinic-line bg-white p-1.5 shadow-[0_18px_42px_rgba(13,54,66,0.12)]"
+                        role="menu"
+                      >
+                        {!isProfessionalRole && (
+                          <AppointmentMenuItem
+                            icon={<CreditCard size={16} />}
+                            onClick={() => {
+                              setPaymentAppt(appointment);
+                              setOpenMenuId(null);
+                            }}
+                          >
+                            Registrar pago
+                          </AppointmentMenuItem>
+                        )}
+                        <AppointmentMenuItem
+                          icon={<CreditCard size={16} />}
+                          onClick={() => {
+                            generatePaymentLink(appointment);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          Generar link
+                        </AppointmentMenuItem>
+                        {paymentLinks[appointment.id] && (
+                          <AppointmentMenuItem
+                            icon={<Copy size={16} />}
+                            onClick={() => {
+                              navigator.clipboard?.writeText(paymentLinks[appointment.id]);
+                              setNotice("Link copiado.");
+                              setOpenMenuId(null);
+                            }}
+                          >
+                            Copiar link
+                          </AppointmentMenuItem>
+                        )}
+                        <AppointmentMenuItem
+                          icon={<Copy size={16} />}
+                          disabled={!appointment.patient?.phone}
+                          onClick={() => {
+                            copyWhatsAppMessage(appointment);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          Copiar mensaje
+                        </AppointmentMenuItem>
+                        <AppointmentMenuItem
+                          icon={<MessageCircle size={16} />}
+                          disabled={!appointment.patient?.phone}
+                          onClick={() => {
+                            openWhatsApp(appointment);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          Abrir WhatsApp
+                        </AppointmentMenuItem>
+                        {!isProfessionalRole && !["cancelled", "completed"].includes(appointment.status) && (
+                          <>
+                            <AppointmentMenuItem
+                              onClick={() => {
+                                handleStatus(appointment.id, "no_show");
+                                setOpenMenuId(null);
+                              }}
+                            >
+                              No asistio
+                            </AppointmentMenuItem>
+                            <AppointmentMenuItem
+                              tone="danger"
+                              onClick={() => {
+                                handleStatus(appointment.id, "cancel");
+                                setOpenMenuId(null);
+                              }}
+                            >
+                              Cancelar
+                            </AppointmentMenuItem>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </article>
             ))}
@@ -1118,6 +1176,35 @@ function PaymentStatusBadge({ status }: { status: string }) {
         ? "bg-red-50 text-red-700"
         : "bg-clinic-surface text-clinic-muted";
   return <span className={`rounded-lg px-2.5 py-1 text-center text-xs font-semibold ${tone}`}>{labels[status] ?? status}</span>;
+}
+
+function AppointmentMenuItem({
+  children,
+  icon,
+  onClick,
+  disabled,
+  tone = "default"
+}: {
+  children: ReactNode;
+  icon?: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "default" | "danger";
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        tone === "danger" ? "text-red-600 hover:bg-red-50" : "text-clinic-ink hover:bg-[#e6f4f1]"
+      }`}
+    >
+      {icon}
+      {children}
+    </button>
+  );
 }
 
 function Message({ tone, children }: { tone: "success" | "error"; children: string }) {
