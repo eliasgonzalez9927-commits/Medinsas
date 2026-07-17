@@ -9,7 +9,6 @@ import {
   getDefaultClinic,
   getPatientForProfessional,
   getProfessionalPatientProduction,
-  getProfessionals,
   getServices
 } from "../../../lib/clinic-data";
 import { PatientWithAppointments } from "../../../types/clinic";
@@ -23,7 +22,6 @@ export function PatientFichaProfessionalPage() {
 
   const [patient, setPatient] = useState<PatientWithAppointments | null>(null);
   const [serviceMap, setServiceMap] = useState<Record<string, string>>({});
-  const [sharePercentage, setSharePercentage] = useState<number | null>(null);
   const [production, setProduction] = useState<Production>({ totalCobrado: 0, totalPendiente: 0 });
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -42,10 +40,9 @@ export function PatientFichaProfessionalPage() {
       try {
         const clinic = await getDefaultClinic();
         if (!clinic) throw new Error("No se encontró la clínica.");
-        const [foundPatient, prod, professionalResult, servicesResult] = await Promise.all([
+        const [foundPatient, prod, servicesResult] = await Promise.all([
           getPatientForProfessional(clinic.id, id, myProfessionalId as string),
           getProfessionalPatientProduction(clinic.id, id, myProfessionalId as string),
-          getProfessionals(clinic.id),
           getServices(clinic.id)
         ]);
         if (cancelled) return;
@@ -55,8 +52,6 @@ export function PatientFichaProfessionalPage() {
         }
         setPatient(foundPatient);
         setProduction(prod);
-        const mine = professionalResult.data.find((item) => item.id === myProfessionalId);
-        setSharePercentage(mine?.professional_share_percentage ?? null);
         const sm: Record<string, string> = {};
         for (const svc of servicesResult.data ?? []) {
           sm[svc.id] = svc.name;
@@ -103,8 +98,6 @@ export function PatientFichaProfessionalPage() {
   }, [patient]);
 
   const active = useMemo(() => isPatientActive(patient?.appointments), [patient]);
-
-  const estimatedSettlement = sharePercentage != null ? production.totalCobrado * (sharePercentage / 100) : null;
 
   const fullName = patient ? `${patient.first_name} ${patient.last_name}` : "Paciente";
 
@@ -229,14 +222,6 @@ export function PatientFichaProfessionalPage() {
             </p>
             <p className="text-clinic-muted">
               Pendiente: <span className="font-medium text-clinic-ink">{formatARS(production.totalPendiente)}</span>
-            </p>
-            <p className="text-clinic-muted">
-              Liquidación estimada:{" "}
-              {estimatedSettlement != null ? (
-                <span className="font-medium text-clinic-ink">{formatARS(estimatedSettlement)}</span>
-              ) : (
-                <span className="font-medium text-amber-700">Sin % de liquidación configurado</span>
-              )}
             </p>
           </SummaryCard>
         </div>

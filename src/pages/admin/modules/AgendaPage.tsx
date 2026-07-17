@@ -924,6 +924,11 @@ export function AgendaPage() {
                   {!isProfessionalRole && appointment.status === "pending" && (
                     <Button onClick={() => handleStatus(appointment.id, "confirm")}>Confirmar</Button>
                   )}
+                  {isProfessionalRole &&
+                    appointment.professional_id === myProfessionalId &&
+                    !["cancelled", "completed"].includes(appointment.status) && (
+                      <Button onClick={() => handleStatus(appointment.id, "completed")}>Atendido</Button>
+                    )}
                   <Button
                     icon={<Copy size={16} />}
                     onClick={() => copyWhatsAppMessage(appointment)}
