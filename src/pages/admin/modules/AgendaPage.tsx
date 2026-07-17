@@ -918,7 +918,9 @@ export function AgendaPage() {
                   {isProfessionalRole &&
                     appointment.professional_id === myProfessionalId &&
                     !["cancelled", "completed"].includes(appointment.status) && (
-                      <Button onClick={() => handleStatus(appointment.id, "completed")}>Atendido</Button>
+                      <Button onClick={() => navigate(`/admin/mi-agenda/atencion/${appointment.id}`)} variant="primary">
+                        Iniciar atención
+                      </Button>
                     )}
                   <div className="relative">
                     <Button

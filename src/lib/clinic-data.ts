@@ -522,6 +522,98 @@ export async function updateMedicalRecord(id: string, notes: string): Promise<Me
   }
 }
 
+// Scoped the same way as getPatientForProfessional: filtered at the query
+// level by professional_id, not client-side, so a mismatched professional
+// gets null (and the caller shows a generic "no access" message) instead of
+// leaking whether the appointment exists for someone else.
+export async function getAppointmentForProfessionalAttention(
+  clinicId: string,
+  appointmentId: string,
+  professionalId: string
+): Promise<AppointmentWithRelations | null> {
+  try {
+    const { data, error } = await supabase
+      .from("appointments")
+      .select("*, patients(*), professionals(*), services(*)")
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .eq("professional_id", professionalId)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? mapAppointment(data) : null;
+  } catch (error) {
+    console.error("Failed to load appointment for attention", error);
+    throw new FriendlyDataError("No pudimos cargar el turno.");
+  }
+}
+
+export async function getMedicalRecordByAppointment(
+  clinicId: string,
+  appointmentId: string,
+  professionalId: string
+): Promise<MedicalRecord | null> {
+  try {
+    const { data, error } = await supabase
+      .from("medical_records")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .eq("appointment_id", appointmentId)
+      .eq("professional_id", professionalId)
+      .maybeSingle();
+    if (error) throw error;
+    return data as MedicalRecord | null;
+  } catch (error) {
+    console.error("Failed to load medical record for appointment", error);
+    throw new FriendlyDataError("No pudimos cargar la nota de este turno.");
+  }
+}
+
+// Find-then-write: one row per appointment, not one row per save. Looks up
+// by clinic_id + appointment_id + professional_id first; updates that row
+// if it exists, otherwise inserts. Callers must not fall back to a bare
+// createMedicalRecord() for the "Guardar borrador" flow, or every save
+// during the same attention would create a new row instead of amending one.
+export async function saveMedicalRecordDraft(input: {
+  clinicId: string;
+  patientId: string;
+  professionalId: string;
+  appointmentId: string;
+  notes: string;
+}): Promise<MedicalRecord> {
+  const existing = await getMedicalRecordByAppointment(input.clinicId, input.appointmentId, input.professionalId);
+  if (existing) {
+    return updateMedicalRecord(existing.id, input.notes);
+  }
+  return createMedicalRecord({
+    clinic_id: input.clinicId,
+    patient_id: input.patientId,
+    professional_id: input.professionalId,
+    appointment_id: input.appointmentId,
+    notes: input.notes
+  });
+}
+
+// Saves the note first, then marks the appointment completed. If the note
+// save fails, the caller sees that error and nothing else happens. If the
+// note saves but the status update fails, the note is NOT rolled back -
+// the professional's writing isn't lost, we just report the split outcome.
+export async function finalizeMedicalAttention(input: {
+  clinicId: string;
+  patientId: string;
+  professionalId: string;
+  appointmentId: string;
+  notes: string;
+}): Promise<MedicalRecord> {
+  const record = await saveMedicalRecordDraft(input);
+  try {
+    await markAppointmentCompleted(input.appointmentId);
+  } catch (error) {
+    console.error("Medical record saved but failed to mark appointment completed", error);
+    throw new FriendlyDataError("La evolución se guardó, pero no pudimos finalizar el turno.");
+  }
+  return record;
+}
+
 export async function createPayment(data: ManualPaymentInput): Promise<Payment> {
   const payload = {
     clinic_id: data.clinic_id,
