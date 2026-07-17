@@ -25,6 +25,8 @@ import {
   ClinicMemberWithProfile,
   Location,
   LocationInput,
+  MedicalRecord,
+  MedicalRecordInput,
   MessageLog,
   MessageTemplate,
   Patient,
@@ -455,6 +457,68 @@ export async function getProfessionalIncome(
   } catch (error) {
     console.error("Failed to load professional income", error);
     throw new FriendlyDataError("No pudimos cargar tus ingresos.");
+  }
+}
+
+// Historia clinica (Fase 1, texto). Real RLS on medical_records (migration
+// 032) already restricts reads/writes to the treating professional - the
+// professional_id filter here is defense in depth / query scoping, not the
+// security boundary itself.
+export async function getMedicalRecordsByPatient(
+  clinicId: string,
+  patientId: string,
+  professionalId: string
+): Promise<MedicalRecord[]> {
+  try {
+    const { data, error } = await supabase
+      .from("medical_records")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .eq("patient_id", patientId)
+      .eq("professional_id", professionalId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as MedicalRecord[];
+  } catch (error) {
+    console.error("Failed to load medical records", error);
+    throw new FriendlyDataError("No pudimos cargar la historia clinica.");
+  }
+}
+
+export async function createMedicalRecord(data: MedicalRecordInput): Promise<MedicalRecord> {
+  try {
+    const { data: created, error } = await supabase
+      .from("medical_records")
+      .insert({
+        clinic_id: data.clinic_id,
+        patient_id: data.patient_id,
+        professional_id: data.professional_id,
+        appointment_id: data.appointment_id ?? null,
+        notes: data.notes
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return created as MedicalRecord;
+  } catch (error) {
+    console.error("Failed to create medical record", error);
+    throw new FriendlyDataError("No pudimos guardar la nota.");
+  }
+}
+
+export async function updateMedicalRecord(id: string, notes: string): Promise<MedicalRecord> {
+  try {
+    const { data: updated, error } = await supabase
+      .from("medical_records")
+      .update({ notes, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return updated as MedicalRecord;
+  } catch (error) {
+    console.error("Failed to update medical record", error);
+    throw new FriendlyDataError("No pudimos actualizar la nota.");
   }
 }
 

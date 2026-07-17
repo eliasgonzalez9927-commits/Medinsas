@@ -3,15 +3,18 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { SectionCard } from "../../../components/admin/SectionCard";
+import { Button } from "../../../components/ui/Button";
 import { AdminPageShell } from "./AdminPageShell";
 import { useAuth } from "../../../contexts/AuthContext";
 import {
+  createMedicalRecord,
   getDefaultClinic,
+  getMedicalRecordsByPatient,
   getPatientForProfessional,
   getProfessionalPatientProduction,
   getServices
 } from "../../../lib/clinic-data";
-import { PatientWithAppointments } from "../../../types/clinic";
+import { MedicalRecord, PatientWithAppointments } from "../../../types/clinic";
 
 type Production = { totalCobrado: number; totalPendiente: number };
 
@@ -26,6 +29,10 @@ export function PatientFichaProfessionalPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState("");
+  const [records, setRecords] = useState<MedicalRecord[]>([]);
+  const [newNote, setNewNote] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteError, setNoteError] = useState("");
 
   useEffect(() => {
     if (!myProfessionalId) {
@@ -40,10 +47,11 @@ export function PatientFichaProfessionalPage() {
       try {
         const clinic = await getDefaultClinic();
         if (!clinic) throw new Error("No se encontró la clínica.");
-        const [foundPatient, prod, servicesResult] = await Promise.all([
+        const [foundPatient, prod, servicesResult, foundRecords] = await Promise.all([
           getPatientForProfessional(clinic.id, id, myProfessionalId as string),
           getProfessionalPatientProduction(clinic.id, id, myProfessionalId as string),
-          getServices(clinic.id)
+          getServices(clinic.id),
+          getMedicalRecordsByPatient(clinic.id, id, myProfessionalId as string)
         ]);
         if (cancelled) return;
         if (!foundPatient) {
@@ -52,6 +60,7 @@ export function PatientFichaProfessionalPage() {
         }
         setPatient(foundPatient);
         setProduction(prod);
+        setRecords(foundRecords);
         const sm: Record<string, string> = {};
         for (const svc of servicesResult.data ?? []) {
           sm[svc.id] = svc.name;
@@ -68,6 +77,28 @@ export function PatientFichaProfessionalPage() {
       cancelled = true;
     };
   }, [id, myProfessionalId]);
+
+  async function saveNote() {
+    if (!newNote.trim() || !myProfessionalId || !patient) return;
+    setSavingNote(true);
+    setNoteError("");
+    try {
+      const clinic = await getDefaultClinic();
+      if (!clinic) throw new Error("No se encontró la clínica.");
+      const created = await createMedicalRecord({
+        clinic_id: clinic.id,
+        patient_id: patient.id,
+        professional_id: myProfessionalId,
+        notes: newNote.trim()
+      });
+      setRecords((current) => [created, ...current]);
+      setNewNote("");
+    } catch (err) {
+      setNoteError(err instanceof Error ? err.message : "No pudimos guardar la nota.");
+    } finally {
+      setSavingNote(false);
+    }
+  }
 
   const appointments = useMemo(() => {
     if (!Array.isArray(patient?.appointments)) return [];
@@ -267,6 +298,46 @@ export function PatientFichaProfessionalPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard className="mt-6">
+        <div className="border-b border-clinic-line px-5 py-4">
+          <h2 className="font-semibold text-clinic-ink">Historia clínica</h2>
+          <p className="mt-1 text-sm text-clinic-muted">
+            Solo vos podés ver estas notas — ni administración, ni recepción, ni otros profesionales tienen acceso.
+          </p>
+        </div>
+        <div className="border-b border-clinic-line p-5">
+          {noteError && (
+            <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{noteError}</p>
+          )}
+          <textarea
+            value={newNote}
+            onChange={(event) => setNewNote(event.target.value)}
+            placeholder="Notas de la consulta, evolución, indicaciones..."
+            rows={4}
+            className="w-full rounded-lg border border-clinic-line px-3 py-2 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+          />
+          <div className="mt-3 flex justify-end">
+            <Button onClick={saveNote} disabled={savingNote || !newNote.trim()} variant="primary">
+              {savingNote ? "Guardando..." : "Guardar nota"}
+            </Button>
+          </div>
+        </div>
+        {records.length === 0 ? (
+          <div className="px-6 py-12 text-center">
+            <p className="text-sm text-clinic-muted">Todavía no cargaste notas para este paciente.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-clinic-line">
+            {records.map((record) => (
+              <div key={record.id} className="px-5 py-4">
+                <p className="text-xs font-medium uppercase tracking-wider text-clinic-muted">{formatDate(record.created_at)}</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-clinic-ink">{record.notes}</p>
+              </div>
+            ))}
           </div>
         )}
       </SectionCard>

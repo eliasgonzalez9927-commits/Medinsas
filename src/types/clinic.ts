@@ -198,6 +198,25 @@ export type PatientWithAppointments = Patient & {
   appointments?: AppointmentWithRelations[];
 };
 
+export type MedicalRecord = {
+  id: string;
+  clinic_id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  professional_id: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MedicalRecordInput = {
+  clinic_id: string;
+  patient_id: string;
+  professional_id: string;
+  appointment_id?: string | null;
+  notes: string;
+};
+
 export type ProfessionalWithRelations = Professional & {
   specialties: Specialty[];
   services: Service[];
