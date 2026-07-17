@@ -870,7 +870,10 @@ export function AgendaPage() {
                 key={appointment.id}
                 className="grid gap-4 px-5 py-4 lg:grid-cols-[90px_1fr_1fr_170px_360px] lg:items-center"
               >
-                <div className="font-semibold text-clinic-brand">{formatTime(appointment.starts_at, clinic?.timezone ?? undefined)}</div>
+                <div>
+                  <p className="font-semibold text-clinic-brand">{formatTime(appointment.starts_at, clinic?.timezone ?? undefined)}</p>
+                  {appointment.is_overbooking && <span className="mt-1 inline-flex rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">Sobreturno</span>}
+                </div>
                 <div>
                   {appointment.patient ? (
                     <Link
@@ -890,13 +893,16 @@ export function AgendaPage() {
                     Origen: {sourceLabel(appointment.source)} · {appointment.appointment_type === "telemedicine" ? "Telemedicina" : "Presencial"}
                   </p>
                   {appointment.public_code && <p className="mt-1 text-xs font-semibold text-clinic-brand">Código: {appointment.public_code}</p>}
-                  {appointment.is_overbooking && <span className="mt-2 inline-flex rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">Sobreturno</span>}
                 </div>
                 <div>
-                  <p className="font-medium text-clinic-ink">
-                    Dr/a. {appointment.professional?.name ?? ""} {appointment.professional?.last_name ?? ""}
+                  {!isProfessionalRole && (
+                    <p className="font-medium text-clinic-ink">
+                      Dr/a. {appointment.professional?.name ?? ""} {appointment.professional?.last_name ?? ""}
+                    </p>
+                  )}
+                  <p className={isProfessionalRole ? "font-medium text-clinic-ink" : "text-sm text-clinic-muted"}>
+                    {appointment.service?.name ?? appointment.reason}
                   </p>
-                  <p className="text-sm text-clinic-muted">{appointment.service?.name ?? appointment.reason}</p>
                 </div>
                 <div className="grid gap-2">
                   <AppointmentStatusBadge status={appointment.status} />
