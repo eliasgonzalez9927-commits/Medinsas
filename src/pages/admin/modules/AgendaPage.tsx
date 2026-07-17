@@ -848,7 +848,7 @@ export function AgendaPage() {
         </label>
       </SectionCard>
 
-      <SectionCard className="overflow-hidden">
+      <SectionCard className="overflow-visible">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
           <h2 className="font-semibold text-clinic-ink">{range.preset === "today" ? "Turnos del día" : "Turnos del período"}</h2>
           {!isProfessionalRole && (
