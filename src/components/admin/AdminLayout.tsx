@@ -37,7 +37,7 @@ export function AdminLayout({
     return ADMIN_MODULES.filter((item) => {
       if (item.status === "hidden") return false;
       if (item.allowedRoles && (!role || !item.allowedRoles.includes(role))) return false;
-      if (role === "professional" || role === "doctor") return item.key === "agenda";
+      if (role === "professional" || role === "doctor") return item.key === "agenda" || item.key === "my_income";
       if (!item.moduleFlag) return true;
       const moduleFlags = Array.isArray(item.moduleFlag) ? item.moduleFlag : [item.moduleFlag];
       if (moduleFlags.some((flag) => BASE_MODULES.includes(flag))) return true;

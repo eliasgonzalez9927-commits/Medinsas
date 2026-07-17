@@ -53,6 +53,7 @@ export const ADMIN_NAVIGATION_GROUPS: Array<{ key: AdminNavigationGroup; label: 
 export const ADMIN_MODULES: AdminModuleDefinition[] = [
   { key: "dashboard", label: "Dashboard", path: "/admin", icon: ClipboardList, group: "summary", status: "active" },
   { key: "agenda", label: "Agenda", path: "/admin/agenda", icon: CalendarDays, group: "clinical_management", status: "active", moduleFlag: "agenda" },
+  { key: "my_income", label: "Mis ingresos", path: "/admin/mi-agenda/ingresos", icon: WalletCards, group: "clinical_management", status: "active", allowedRoles: ["professional", "doctor"] },
   { key: "patients", label: "Pacientes", path: "/admin/pacientes", icon: UsersRound, group: "clinical_management", status: "active", moduleFlag: "pacientes" },
 
   { key: "professionals", label: "Profesionales", path: "/admin/profesionales", icon: Stethoscope, group: "clinical_management", status: "active", moduleFlag: "profesionales" },

@@ -394,6 +394,70 @@ export async function getProfessionalPatientProduction(
   }
 }
 
+export type ProfessionalIncomeRow = {
+  paymentId: string;
+  patientName: string;
+  serviceName: string;
+  amount: number;
+  status: string;
+  createdAt: string;
+};
+
+// Same data-minimization pattern as getProfessionalPatientProduction: the
+// !inner join on appointments filtered by professional_id excludes any
+// payment belonging to another professional at the query level. Selects
+// only the patient/service name fields needed to identify each row -
+// no payer contact info, no notes, no payment method.
+export async function getProfessionalIncome(
+  clinicId: string,
+  professionalId: string,
+  filters: PaymentFilters = {}
+): Promise<{ totalCobrado: number; totalPendiente: number; rows: ProfessionalIncomeRow[] }> {
+  try {
+    let query = supabase
+      .from("payments")
+      .select("id, amount, status, created_at, patients(first_name, last_name), services(name), appointments!inner(professional_id)")
+      .eq("clinic_id", clinicId)
+      .eq("appointments.professional_id", professionalId)
+      .order("created_at", { ascending: false });
+    if (filters.dateFrom) {
+      query = query.gte("created_at", zonedDateTimeToUtcIso(filters.dateFrom, "00:00", filters.timezone ?? "America/Argentina/Mendoza"));
+    }
+    if (filters.dateTo) {
+      query = query.lt("created_at", zonedDateTimeToUtcIso(addDaysToDateString(filters.dateTo, 1), "00:00", filters.timezone ?? "America/Argentina/Mendoza"));
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = (data ?? []) as unknown as Array<{
+      id: string;
+      amount: number;
+      status: string;
+      created_at: string;
+      patients: { first_name: string; last_name: string } | null;
+      services: { name: string } | null;
+    }>;
+    const totalCobrado = rows.filter((row) => row.status === "approved").reduce((sum, row) => sum + (row.amount ?? 0), 0);
+    const totalPendiente = rows
+      .filter((row) => row.status === "pending" || row.status === "in_process")
+      .reduce((sum, row) => sum + (row.amount ?? 0), 0);
+    return {
+      totalCobrado,
+      totalPendiente,
+      rows: rows.map((row) => ({
+        paymentId: row.id,
+        patientName: row.patients ? `${row.patients.first_name} ${row.patients.last_name}`.trim() : "Paciente sin vincular",
+        serviceName: row.services?.name ?? "—",
+        amount: row.amount ?? 0,
+        status: row.status,
+        createdAt: row.created_at
+      }))
+    };
+  } catch (error) {
+    console.error("Failed to load professional income", error);
+    throw new FriendlyDataError("No pudimos cargar tus ingresos.");
+  }
+}
+
 export async function createPayment(data: ManualPaymentInput): Promise<Payment> {
   const payload = {
     clinic_id: data.clinic_id,
