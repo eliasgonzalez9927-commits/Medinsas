@@ -26,7 +26,6 @@ import {
   Location,
   LocationInput,
   MedicalRecord,
-  MedicalRecordInput,
   MessageLog,
   MessageTemplate,
   Patient,
@@ -460,11 +459,13 @@ export async function getProfessionalIncome(
   }
 }
 
-// Historia clinica (Fase 1, texto). Real RLS on medical_records (migration
-// 032) already restricts reads/writes to the treating professional - the
-// professional_id filter here is defense in depth / query scoping, not the
-// security boundary itself.
-export async function getMedicalRecordsByPatient(
+// Historia clinica: timeline longitudinal del paciente. Incluye
+// evoluciones de turno (record_type = appointment_evolution) y registros
+// legado sin turno (legacy_clinical_record / standalone_clinical_note).
+// Real RLS on medical_records (migration 032) already restricts reads to
+// the treating professional - the professional_id filter here is defense
+// in depth / query scoping, not the security boundary itself.
+export async function getClinicalTimeline(
   clinicId: string,
   patientId: string,
   professionalId: string
@@ -480,45 +481,8 @@ export async function getMedicalRecordsByPatient(
     if (error) throw error;
     return (data ?? []) as MedicalRecord[];
   } catch (error) {
-    console.error("Failed to load medical records", error);
-    throw new FriendlyDataError("No pudimos cargar la historia clinica.");
-  }
-}
-
-export async function createMedicalRecord(data: MedicalRecordInput): Promise<MedicalRecord> {
-  try {
-    const { data: created, error } = await supabase
-      .from("medical_records")
-      .insert({
-        clinic_id: data.clinic_id,
-        patient_id: data.patient_id,
-        professional_id: data.professional_id,
-        appointment_id: data.appointment_id ?? null,
-        notes: data.notes
-      })
-      .select("*")
-      .single();
-    if (error) throw error;
-    return created as MedicalRecord;
-  } catch (error) {
-    console.error("Failed to create medical record", error);
-    throw new FriendlyDataError("No pudimos guardar la nota.");
-  }
-}
-
-export async function updateMedicalRecord(id: string, notes: string): Promise<MedicalRecord> {
-  try {
-    const { data: updated, error } = await supabase
-      .from("medical_records")
-      .update({ notes, updated_at: new Date().toISOString() })
-      .eq("id", id)
-      .select("*")
-      .single();
-    if (error) throw error;
-    return updated as MedicalRecord;
-  } catch (error) {
-    console.error("Failed to update medical record", error);
-    throw new FriendlyDataError("No pudimos actualizar la nota.");
+    console.error("Failed to load clinical timeline", error);
+    throw new FriendlyDataError("No pudimos cargar la historia clínica.");
   }
 }
 
@@ -547,7 +511,7 @@ export async function getAppointmentForProfessionalAttention(
   }
 }
 
-export async function getMedicalRecordByAppointment(
+export async function getClinicalEvolutionByAppointment(
   clinicId: string,
   appointmentId: string,
   professionalId: string
@@ -559,59 +523,80 @@ export async function getMedicalRecordByAppointment(
       .eq("clinic_id", clinicId)
       .eq("appointment_id", appointmentId)
       .eq("professional_id", professionalId)
+      .eq("record_type", "appointment_evolution")
       .maybeSingle();
     if (error) throw error;
     return data as MedicalRecord | null;
   } catch (error) {
-    console.error("Failed to load medical record for appointment", error);
-    throw new FriendlyDataError("No pudimos cargar la nota de este turno.");
+    console.error("Failed to load clinical evolution for appointment", error);
+    throw new FriendlyDataError("No pudimos cargar la evolución de este turno.");
   }
 }
 
-// Find-then-write: one row per appointment, not one row per save. Looks up
-// by clinic_id + appointment_id + professional_id first; updates that row
-// if it exists, otherwise inserts. Callers must not fall back to a bare
-// createMedicalRecord() for the "Guardar borrador" flow, or every save
-// during the same attention would create a new row instead of amending one.
-export async function saveMedicalRecordDraft(input: {
-  clinicId: string;
-  patientId: string;
-  professionalId: string;
-  appointmentId: string;
-  notes: string;
-}): Promise<MedicalRecord> {
-  const existing = await getMedicalRecordByAppointment(input.clinicId, input.appointmentId, input.professionalId);
-  if (existing) {
-    return updateMedicalRecord(existing.id, input.notes);
-  }
-  return createMedicalRecord({
-    clinic_id: input.clinicId,
-    patient_id: input.patientId,
-    professional_id: input.professionalId,
-    appointment_id: input.appointmentId,
-    notes: input.notes
-  });
+const MEDICAL_ATTENTION_ERROR_MESSAGES: Record<string, string> = {
+  UNAUTHORIZED: "Tu sesión expiró. Volvé a iniciar sesión.",
+  APPOINTMENT_NOT_FOUND: "No pudimos encontrar el turno.",
+  FORBIDDEN: "No tenés permiso para operar sobre este turno.",
+  APPOINTMENT_NOT_ACTIVE: "Este turno no está activo (cancelado o no asistido).",
+  ATTENTION_NOT_STARTED: "Todavía no iniciaste esta atención.",
+  EVOLUTION_ALREADY_FINAL: "Esta evolución ya fue finalizada y no se puede editar.",
+  EVOLUTION_CONTENT_REQUIRED: "Escribí la evolución antes de finalizar la atención.",
+  ALREADY_FINALIZED: "Este turno ya fue finalizado."
+};
+
+function friendlyMedicalAttentionError(error: unknown, fallback: string): FriendlyDataError {
+  const code = error instanceof Error ? error.message : "";
+  return new FriendlyDataError(MEDICAL_ATTENTION_ERROR_MESSAGES[code] ?? fallback);
 }
 
-// Saves the note first, then marks the appointment completed. If the note
-// save fails, the caller sees that error and nothing else happens. If the
-// note saves but the status update fails, the note is NOT rolled back -
-// the professional's writing isn't lost, we just report the split outcome.
-export async function finalizeMedicalAttention(input: {
-  clinicId: string;
-  patientId: string;
-  professionalId: string;
-  appointmentId: string;
-  notes: string;
-}): Promise<MedicalRecord> {
-  const record = await saveMedicalRecordDraft(input);
+// The 3 write operations of the attention flow go through SECURITY DEFINER
+// RPCs (migration 034), not direct table writes. Each RPC re-validates the
+// caller against clinic_members (own clinic_id + own professional_id)
+// server-side - this is the real security boundary, independent of the
+// general appointments RLS policy (which does not scope by
+// professional_id, see 034's header comment).
+
+export async function startMedicalAttention(
+  appointmentId: string
+): Promise<{ appointment_id: string; attention_started_at: string; attention_started_by: string }> {
   try {
-    await markAppointmentCompleted(input.appointmentId);
+    const { data, error } = await supabase.rpc("start_medical_attention", { p_appointment_id: appointmentId });
+    if (error) throw error;
+    return data;
   } catch (error) {
-    console.error("Medical record saved but failed to mark appointment completed", error);
-    throw new FriendlyDataError("La evolución se guardó, pero no pudimos finalizar el turno.");
+    console.error("Failed to start medical attention", error);
+    throw friendlyMedicalAttentionError(error, "No pudimos iniciar la atención.");
   }
-  return record;
+}
+
+export async function saveMedicalAttentionDraft(appointmentId: string, notes: string): Promise<void> {
+  try {
+    const { error } = await supabase.rpc("save_medical_attention_draft", {
+      p_appointment_id: appointmentId,
+      p_notes: notes
+    });
+    if (error) throw error;
+  } catch (error) {
+    console.error("Failed to save medical attention draft", error);
+    throw friendlyMedicalAttentionError(error, "No pudimos guardar el borrador.");
+  }
+}
+
+export async function finalizeMedicalAttention(
+  appointmentId: string,
+  notes: string
+): Promise<{ appointment_id: string; record_id: string; record_status: string; status: string }> {
+  try {
+    const { data, error } = await supabase.rpc("finalize_medical_attention", {
+      p_appointment_id: appointmentId,
+      p_notes: notes
+    });
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("Failed to finalize medical attention", error);
+    throw friendlyMedicalAttentionError(error, "No pudimos finalizar la atención.");
+  }
 }
 
 export async function createPayment(data: ManualPaymentInput): Promise<Payment> {

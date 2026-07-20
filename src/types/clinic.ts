@@ -137,6 +137,10 @@ export type Appointment = {
   payment_status?: AppointmentPaymentStatus;
   deposit_amount?: number | null;
   payment_required?: boolean;
+  attention_started_at?: string | null;
+  attention_started_by?: string | null;
+  attention_finished_at?: string | null;
+  attention_finished_by?: string | null;
   created_at: string;
   updated_at?: string;
 };
@@ -198,6 +202,9 @@ export type PatientWithAppointments = Patient & {
   appointments?: AppointmentWithRelations[];
 };
 
+export type MedicalRecordType = "appointment_evolution" | "standalone_clinical_note" | "legacy_clinical_record";
+export type MedicalRecordStatus = "draft" | "final" | "amended";
+
 export type MedicalRecord = {
   id: string;
   clinic_id: string;
@@ -205,16 +212,16 @@ export type MedicalRecord = {
   appointment_id: string | null;
   professional_id: string;
   notes: string;
+  record_type: MedicalRecordType;
+  record_status: MedicalRecordStatus;
   created_at: string;
+  created_by: string | null;
   updated_at: string;
-};
-
-export type MedicalRecordInput = {
-  clinic_id: string;
-  patient_id: string;
-  professional_id: string;
-  appointment_id?: string | null;
-  notes: string;
+  updated_by: string | null;
+  finalized_at: string | null;
+  finalized_by: string | null;
+  version: number;
+  parent_record_id: string | null;
 };
 
 export type ProfessionalWithRelations = Professional & {
