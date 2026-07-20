@@ -40,7 +40,8 @@ export default async function handler(req, res) {
         client_secret: process.env.MERCADO_PAGO_CLIENT_SECRET,
         grant_type: "authorization_code",
         code,
-        redirect_uri: redirectUri
+        redirect_uri: redirectUri,
+        code_verifier: payload.codeVerifier
       })
     });
     const tokenBody = await tokenResponse.json().catch(() => ({}));

@@ -1,4 +1,4 @@
-import crypto from "node:crypto";
+import { MercadoPagoConfig, Payment, WebhookSignatureValidator } from "mercadopago";
 import { makeSupabase } from "../../_lib/supabase.js";
 import { allowOnly, handleError } from "../../_lib/http.js";
 import { getClinicMercadoPagoAccessToken } from "../../_lib/mercadoPagoAccount.js";
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ignored: true });
     }
 
-    if (!verifySignature(req, paymentId)) {
+    if (!verifySignature(req)) {
       return res.status(401).json({ error: "INVALID_SIGNATURE" });
     }
 
@@ -72,50 +72,39 @@ function readFirst(value) {
   return Array.isArray(value) ? String(value[0] ?? "") : String(value ?? "");
 }
 
-// https://www.mercadopago.com.ar/developers/en/docs/checkout-pro/additional-content/notifications/webhooks#editor_5
-// manifest = "id:{data.id};request-id:{x-request-id};ts:{ts};" signed with
-// HMAC-SHA256 using the webhook secret from the Mercado Pago dashboard.
-// Fails closed: no secret configured means no signature can be trusted, so
-// nothing gets processed until MERCADO_PAGO_WEBHOOK_SECRET is set.
-function verifySignature(req, paymentId) {
+// Official SDK validator - recomputes the HMAC-SHA256 signature locally
+// (constant-time comparison) and also enforces a timestamp tolerance
+// against replay attacks, which the hand-rolled version this replaced did
+// not. Fails closed: no secret configured means no signature can be
+// trusted, so nothing gets processed until MERCADO_PAGO_WEBHOOK_SECRET is
+// set.
+function verifySignature(req) {
   const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET;
   if (!secret) return false;
-
-  const signatureHeader = req.headers["x-signature"];
-  const requestId = req.headers["x-request-id"];
-  if (!signatureHeader || !requestId) return false;
-
-  const parts = Object.fromEntries(
-    String(signatureHeader)
-      .split(",")
-      .map((part) => part.split("=").map((piece) => piece.trim()))
-      .filter((piece) => piece.length === 2)
-  );
-  const ts = parts.ts;
-  const v1 = parts.v1;
-  if (!ts || !v1) return false;
-
-  const dataIdForManifest = readFirst(req.query?.["data.id"]) || paymentId;
-  const manifest = `id:${dataIdForManifest.toLowerCase()};request-id:${requestId};ts:${ts};`;
-  const expected = crypto.createHmac("sha256", secret).update(manifest).digest("hex");
-
-  const expectedBuffer = Buffer.from(expected, "hex");
-  const actualBuffer = Buffer.from(String(v1), "hex");
-  if (expectedBuffer.length !== actualBuffer.length) return false;
-  return crypto.timingSafeEqual(expectedBuffer, actualBuffer);
+  try {
+    WebhookSignatureValidator.validate({
+      xSignature: req.headers["x-signature"],
+      xRequestId: req.headers["x-request-id"],
+      dataId: req.query?.["data.id"],
+      secret,
+      toleranceSeconds: 300
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function fetchMercadoPagoPayment(paymentId, accessToken) {
-  const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    const err = new Error(`Mercado Pago payment lookup failed (${response.status})`);
+  try {
+    const client = new MercadoPagoConfig({ accessToken });
+    return await new Payment(client).get({ id: paymentId });
+  } catch (mpError) {
+    if ((mpError?.status ?? mpError?.statusCode) === 404) return null;
+    const err = new Error(`Mercado Pago payment lookup failed (${mpError?.status ?? mpError?.statusCode ?? "unknown"})`);
     err.code = "MERCADO_PAGO_ERROR";
     throw err;
   }
-  return response.json();
 }
 
 // payment_events has a unique(provider, provider_event_id) constraint -
