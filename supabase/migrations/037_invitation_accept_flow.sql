@@ -26,7 +26,7 @@ create unique index if not exists user_invitations_token_idx
 -- columnas internas. Solo resuelve invitaciones pendientes (una vez
 -- aceptada o borrada por cancelacion, el link deja de servir).
 -- ----------------------------------------------------------------------------
-create or replace function public.get_invitation_by_token(p_token uuid)
+create or replace function public.get_invitation_by_token(p_token text)
 returns jsonb
 language plpgsql
 security definer
@@ -63,8 +63,8 @@ begin
 end;
 $$;
 
-revoke all on function public.get_invitation_by_token(uuid) from public;
-grant execute on function public.get_invitation_by_token(uuid) to anon, authenticated;
+revoke all on function public.get_invitation_by_token(text) from public;
+grant execute on function public.get_invitation_by_token(text) to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
 -- accept_user_invitation
@@ -74,7 +74,7 @@ grant execute on function public.get_invitation_by_token(uuid) to anon, authenti
 -- ser dueño de ese email), crea (o reactiva) la membresia y marca la
 -- invitacion como aceptada. Atomico: todo o nada.
 -- ----------------------------------------------------------------------------
-create or replace function public.accept_user_invitation(p_token uuid)
+create or replace function public.accept_user_invitation(p_token text)
 returns jsonb
 language plpgsql
 security definer
@@ -131,5 +131,5 @@ begin
 end;
 $$;
 
-revoke all on function public.accept_user_invitation(uuid) from public;
-grant execute on function public.accept_user_invitation(uuid) to authenticated;
+revoke all on function public.accept_user_invitation(text) from public;
+grant execute on function public.accept_user_invitation(text) to authenticated;
