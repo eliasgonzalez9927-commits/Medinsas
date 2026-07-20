@@ -286,6 +286,53 @@ export async function createUserInvitation(data: {
   }
 }
 
+type InvitationPreview = {
+  full_name: string;
+  email: string;
+  role: string;
+  clinic_name: string;
+  account_exists: boolean;
+};
+
+const INVITATION_ERROR_MESSAGES: Record<string, string> = {
+  UNAUTHORIZED: "Tu sesión expiró. Volvé a iniciar sesión.",
+  INVITATION_NOT_FOUND: "No encontramos esta invitación. Puede haber sido cancelada.",
+  INVITATION_NOT_PENDING: "Esta invitación ya no está disponible.",
+  FORBIDDEN: "Esta invitación es para otro email. Cerrá sesión e intentá de nuevo."
+};
+
+function friendlyInvitationError(error: unknown, fallback: string): FriendlyDataError {
+  const code = error instanceof Error ? error.message : "";
+  return new FriendlyDataError(INVITATION_ERROR_MESSAGES[code] ?? fallback);
+}
+
+// Ambas pasan por RPCs SECURITY DEFINER (migracion 037), no por la tabla
+// directamente - get_invitation_by_token es publica (sin sesion) y solo
+// devuelve los campos minimos necesarios; accept_user_invitation valida
+// server-side que el email de la sesion coincide con el de la invitacion
+// antes de crear la membresia.
+export async function getInvitationByToken(token: string): Promise<InvitationPreview> {
+  try {
+    const { data, error } = await supabase.rpc("get_invitation_by_token", { p_token: token });
+    if (error) throw error;
+    return data as InvitationPreview;
+  } catch (error) {
+    console.error("Failed to load invitation", error);
+    throw friendlyInvitationError(error, "No pudimos cargar la invitación.");
+  }
+}
+
+export async function acceptUserInvitation(token: string): Promise<{ clinic_name: string; role: string }> {
+  try {
+    const { data, error } = await supabase.rpc("accept_user_invitation", { p_token: token });
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("Failed to accept invitation", error);
+    throw friendlyInvitationError(error, "No pudimos aceptar la invitación.");
+  }
+}
+
 export async function cancelUserInvitation(id: string): Promise<void> {
   try {
     const { error } = await supabase.from("user_invitations").delete().eq("id", id);

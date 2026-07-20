@@ -122,6 +122,7 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
 
   const permissions = useMemo(() => ({
     manageClinic: canManageClinic(role),
@@ -220,6 +221,7 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
   }) {
     if (!clinic || !permissions.manageUsers) return;
     setSaving(true);
+    setInviteLink("");
     try {
       const invitation = await createUserInvitation({
         clinic_id: clinic.id,
@@ -228,7 +230,11 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
       });
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session) {
-        await fetch("/api/messages/send", {
+        // El envio de mail automatico todavia no funciona en produccion
+        // (no hay backend de Resend conectado) - este fetch queda como
+        // best-effort y no bloquea el flujo. Por eso mostramos el link
+        // abajo para que el admin lo comparta a mano mientras tanto.
+        fetch("/api/messages/send", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -238,14 +244,17 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
             clinicId: clinic.id,
             recipients: [{ email: data.email }],
             subject: "Te invitaron a Medin",
-            text: `Hola ${data.full_name}, te invitaron a Medin como ${roleLabels[data.role] ?? data.role}.`,
+            text: `Hola ${data.full_name}, te invitaron a Medin como ${roleLabels[data.role] ?? data.role}. Ingresá acá: ${window.location.origin}/invitacion/${invitation.invitation_token}`,
             template: "user_invitation",
             related_entity_type: "user_invitation",
             related_entity_id: invitation.id
           })
         }).catch(() => undefined);
       }
-      setNotice("Invitacion registrada. Si Resend esta configurado, se enviara el email.");
+      if (invitation.invitation_token) {
+        setInviteLink(`${window.location.origin}/invitacion/${invitation.invitation_token}`);
+      }
+      setNotice("Invitacion registrada.");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos invitar al usuario.");
@@ -311,11 +320,13 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
             <UsersPanel
               currentRole={role}
               disabled={!permissions.manageUsers || saving}
+              inviteLink={inviteLink}
               invitations={invitations}
               locations={locations}
               members={members}
               onCancelInvitation={cancelInvitation}
               onDeleteMember={deleteMember}
+              onDismissInviteLink={() => setInviteLink("")}
               onInvite={inviteUser}
               onRefresh={load}
               professionals={professionals}
@@ -482,28 +493,33 @@ function HourRow({ disabled, hour, onSave }: { disabled: boolean; hour: ClinicHo
 function UsersPanel({
   currentRole,
   disabled,
+  inviteLink,
   invitations,
   locations,
   members,
   onCancelInvitation,
   onDeleteMember,
+  onDismissInviteLink,
   onInvite,
   onRefresh,
   professionals
 }: {
   currentRole: UserRole | null;
   disabled: boolean;
+  inviteLink: string;
   invitations: UserInvitation[];
   locations: Location[];
   members: ClinicMemberWithProfile[];
   onCancelInvitation: (id: string) => void;
   onDeleteMember: (id: string, name: string) => void;
+  onDismissInviteLink: () => void;
   onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void;
   onRefresh: () => void;
   professionals: ProfessionalWithRelations[];
 }) {
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [form, setForm] = useState({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
   const pendingInvitations = invitations.filter((invitation) => invitation.status === "pending");
   const historyInvitations = invitations.filter((invitation) => invitation.status !== "pending");
@@ -513,10 +529,29 @@ function UsersPanel({
     setForm({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
     setShowInviteForm(false);
   }
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
   return (
     <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
       <SectionCard className="p-5">
-        <Header icon={<ShieldCheck size={20} />} title="Invitar usuario" text="Registra la invitacion y dispara email si Resend esta configurado." />
+        <Header icon={<ShieldCheck size={20} />} title="Invitar usuario" text="Registra la invitacion. El envio de mail automatico todavia no esta activo - compartí el link vos mismo." />
+        {inviteLink && (
+          <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-sm font-semibold text-emerald-800">Invitación creada. Compartí este link:</p>
+            <p className="mt-2 break-all rounded-lg bg-white px-3 py-2 text-xs text-clinic-ink">{inviteLink}</p>
+            <div className="mt-3 flex gap-2">
+              <Button onClick={copyLink} variant="primary">{copied ? "¡Copiado!" : "Copiar link"}</Button>
+              <Button onClick={onDismissInviteLink}>Cerrar</Button>
+            </div>
+          </div>
+        )}
         {showInviteForm ? (
           <form onSubmit={submit} className="mt-5 grid gap-4">
             <Input label="Email" type="email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} required />
