@@ -11,6 +11,7 @@ import {
   getPayments,
   getPaymentSettings,
   getProfessionals,
+  startMercadoPagoConnection,
   updatePaymentSettings
 } from "../../../lib/clinic-data";
 import { getPublicAppUrl } from "../../../lib/public-url";
@@ -21,10 +22,10 @@ import { AdminPageShell } from "./AdminPageShell";
 import { SettingsTabsNav } from "./SettingsPage";
 
 type EnvHealth = {
-  mercadoPagoAccessToken: boolean;
-  mercadoPagoPublicKey: boolean;
+  mercadoPagoClientId: boolean;
+  mercadoPagoClientSecret: boolean;
   mercadoPagoWebhookSecret: boolean;
-  mercadoPagoEnv: boolean;
+  paymentTokensEncryptionKey: boolean;
   appPublicUrl: boolean;
   supabaseUrl: boolean;
   supabaseServiceRoleKey: boolean;
@@ -465,6 +466,7 @@ export function PaymentSettingsPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [envHealth, setEnvHealth] = useState<EnvHealth | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   async function load() {
     try {
@@ -500,6 +502,37 @@ export function PaymentSettingsPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("mp_connect");
+    if (!status) return;
+    const messages: Record<string, { tone: "success" | "error"; text: string }> = {
+      success: { tone: "success", text: "Cuenta de Mercado Pago conectada correctamente." },
+      denied: { tone: "error", text: "Cancelaste la conexión con Mercado Pago." },
+      invalid: { tone: "error", text: "El link de conexión no es válido o venció. Probá de nuevo." },
+      failed: { tone: "error", text: "Mercado Pago no pudo completar la conexión." },
+      error: { tone: "error", text: "Ocurrió un error al conectar Mercado Pago. Probá de nuevo." }
+    };
+    const result = messages[status];
+    if (result?.tone === "success") setNotice(result.text);
+    else if (result) setError(result.text);
+    window.history.replaceState({}, "", window.location.pathname);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleConnect() {
+    setConnecting(true);
+    setError("");
+    try {
+      const url = await startMercadoPagoConnection();
+      window.location.href = url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos iniciar la conexión con Mercado Pago.");
+      setConnecting(false);
+    }
+  }
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!settings) return;
@@ -533,6 +566,33 @@ export function PaymentSettingsPage() {
       <SettingsTabsNav activeTab="payments" />
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
+
+      <SectionCard className="p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-blue-700">
+              <WalletCards size={20} />
+            </span>
+            <div>
+              <h2 className="font-semibold text-clinic-ink">Cuenta de Mercado Pago</h2>
+              {settings?.connected_at ? (
+                <p className="mt-1 text-sm text-clinic-muted">
+                  Conectada el {new Intl.DateTimeFormat("es-AR", { dateStyle: "medium" }).format(new Date(settings.connected_at))}.
+                  Los cobros entran directo a tu cuenta de Mercado Pago.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-clinic-muted">
+                  Todavía no conectaste tu cuenta de Mercado Pago. Sin conectar, no se pueden generar links de cobro.
+                </p>
+              )}
+            </div>
+          </div>
+          <Button disabled={connecting} onClick={handleConnect} variant="primary">
+            {connecting ? "Redirigiendo..." : settings?.connected_at ? "Reconectar" : "Conectar con Mercado Pago"}
+          </Button>
+        </div>
+      </SectionCard>
+
       <section className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
         <SectionCard className="p-5">
           <div className="flex items-start gap-3">
@@ -541,7 +601,7 @@ export function PaymentSettingsPage() {
             </span>
             <div>
               <h2 className="font-semibold text-clinic-ink">Mercado Pago</h2>
-              <p className="mt-1 text-sm text-clinic-muted">El access token se carga en Vercel. No se muestra ni se guarda plano desde la UI.</p>
+              <p className="mt-1 text-sm text-clinic-muted">Preferencias de cobro. La cuenta de Mercado Pago se conecta arriba — acá solo configurás cómo se ve el checkout.</p>
             </div>
           </div>
           <form onSubmit={save} className="mt-5 grid gap-4 md:grid-cols-2">
@@ -561,15 +621,15 @@ export function PaymentSettingsPage() {
 
         <SectionCard className="p-5">
           <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-blue-700"><WalletCards size={20} /></div>
-          <h2 className="mt-4 font-semibold text-clinic-ink">Estado de conexion</h2>
+          <h2 className="mt-4 font-semibold text-clinic-ink">Configuración de la plataforma</h2>
           <p className="mt-2 text-sm text-clinic-muted">
-            Estado UI: {settings?.active ? "conectado" : "no conectado"}. La conexion real depende de las variables backend.
+            Estas variables son globales (una sola vez para toda la plataforma, no por clínica) y habilitan que cualquier clínica pueda conectar su propia cuenta.
           </p>
           <div className="mt-4 grid gap-2">
-            <EnvRow label="Mercado Pago access token" ready={envHealth?.mercadoPagoAccessToken} />
-            <EnvRow label="Mercado Pago public key" ready={envHealth?.mercadoPagoPublicKey} />
+            <EnvRow label="Mercado Pago Client ID" ready={envHealth?.mercadoPagoClientId} />
+            <EnvRow label="Mercado Pago Client Secret" ready={envHealth?.mercadoPagoClientSecret} />
             <EnvRow label="Mercado Pago webhook secret" ready={envHealth?.mercadoPagoWebhookSecret} />
-            <EnvRow label={`Modo ${form.mode === "production" ? "produccion" : "sandbox"}`} ready={envHealth?.mercadoPagoEnv} />
+            <EnvRow label="Clave de encriptación de tokens" ready={envHealth?.paymentTokensEncryptionKey} />
             <EnvRow label="APP_PUBLIC_URL" ready={envHealth?.appPublicUrl} />
             <EnvRow label="Supabase server URL" ready={envHealth?.supabaseUrl} />
             <EnvRow label="Supabase service role key" ready={envHealth?.supabaseServiceRoleKey} />
@@ -579,7 +639,7 @@ export function PaymentSettingsPage() {
             <p className="mt-1 break-all text-clinic-muted">{getPublicAppUrl()}/api/payments/mercadopago/webhook</p>
           </div>
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            Variables requeridas en Vercel: MERCADO_PAGO_ACCESS_TOKEN, MERCADO_PAGO_PUBLIC_KEY, MERCADO_PAGO_WEBHOOK_SECRET, MERCADO_PAGO_ENV, APP_PUBLIC_URL, SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.
+            Variables requeridas en Vercel: MERCADO_PAGO_CLIENT_ID, MERCADO_PAGO_CLIENT_SECRET, MERCADO_PAGO_WEBHOOK_SECRET, PAYMENT_TOKENS_ENCRYPTION_KEY, APP_PUBLIC_URL, SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.
           </div>
         </SectionCard>
       </section>

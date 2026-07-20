@@ -1,15 +1,19 @@
 import { makeSupabase } from "../../_lib/supabase.js";
 import { allowOnly, handleError } from "../../_lib/http.js";
+import { getClinicMercadoPagoAccessToken } from "../../_lib/mercadoPagoAccount.js";
+
+const MARKETPLACE_FEE_PERCENTAGE = Number(process.env.MERCADO_PAGO_MARKETPLACE_FEE_PERCENTAGE ?? "3");
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export default async function handler(req, res) {
   if (!allowOnly(req, res, ["POST"])) return;
 
-  // Feature gate: create-preference is implemented but there is no
-  // serverless webhook or sync endpoint yet to confirm payments after the
-  // fact. Fail closed — no Mercado Pago call, no Supabase read/write, no
-  // payment created — until this is explicitly turned on once those exist.
+  // Feature gate: kept explicit even now that the webhook exists (see
+  // webhook.js), so this stays off until it's been verified end-to-end
+  // against a real Mercado Pago sandbox account. Each clinic also needs its
+  // own OAuth-connected Mercado Pago account (see oauth/start.js) - there is
+  // no shared platform token this falls back to.
   if (process.env.MERCADO_PAGO_CREATE_PREFERENCE_ENABLED !== "true") {
     return res.status(503).json({
       error: "MERCADO_PAGO_FLOW_DISABLED",
@@ -26,10 +30,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "INVALID_APPOINTMENT_ID" });
   }
 
-  if (!process.env.MERCADO_PAGO_ACCESS_TOKEN) {
-    return res.status(503).json({ error: "MERCADO_PAGO_NOT_CONFIGURED" });
-  }
-
   try {
     const appointment = await loadAppointment(client, appointmentId);
     if (!appointment) return res.status(404).json({ error: "APPOINTMENT_NOT_FOUND" });
@@ -40,6 +40,13 @@ export default async function handler(req, res) {
     }
     if (!auth && !isPublicPaymentAllowed(appointment)) {
       return res.status(403).json({ error: "PUBLIC_PAYMENT_NOT_ALLOWED" });
+    }
+
+    // Every clinic pays with its own connected Mercado Pago account - there
+    // is no shared platform token anymore. No connection, no payment link.
+    const clinicAccessToken = await getClinicMercadoPagoAccessToken(client, appointment.clinic_id);
+    if (!clinicAccessToken) {
+      return res.status(503).json({ error: "MERCADO_PAGO_NOT_CONNECTED" });
     }
 
     const amount = resolveAmount(appointment, amountType);
@@ -68,7 +75,7 @@ export default async function handler(req, res) {
     const expiresAt = await resolvePaymentExpiration(client, appointment.clinic_id);
     const payment = existing ?? (await createInternalPayment(client, { appointment, amount, amountType, expiresAt }));
 
-    const preference = await createMercadoPagoPreference({ appointment, payment, amount });
+    const preference = await createMercadoPagoPreference({ appointment, payment, amount, accessToken: clinicAccessToken });
     const checkoutUrl = preference.init_point ?? preference.sandbox_init_point ?? null;
 
     const { error: updateError } = await client
@@ -211,10 +218,16 @@ async function createInternalPayment(client, { appointment, amount, amountType, 
   return data;
 }
 
-async function createMercadoPagoPreference({ appointment, payment, amount }) {
+async function createMercadoPagoPreference({ appointment, payment, amount, accessToken }) {
   const publicUrl = (process.env.APP_PUBLIC_URL || "https://app.medin.com.ar").replace(/\/$/, "");
   const service = appointment.services;
   const patient = appointment.patients;
+  // marketplace_fee is an absolute amount (not a percentage) taken from the
+  // seller's (clinic's) payment and deposited into the marketplace
+  // application owner's own Mercado Pago account - Mercado Pago splits it
+  // automatically because this preference is created with the clinic's own
+  // OAuth-connected access token.
+  const marketplaceFee = Math.round(Number(amount) * (MARKETPLACE_FEE_PERCENTAGE / 100) * 100) / 100;
   const preferencePayload = {
     items: [
       {
@@ -230,6 +243,7 @@ async function createMercadoPagoPreference({ appointment, payment, amount }) {
       email: patient?.email ?? undefined
     },
     external_reference: payment.external_reference,
+    marketplace_fee: marketplaceFee,
     back_urls: {
       success: `${publicUrl}/pago/exitoso?payment_id=${payment.id}`,
       failure: `${publicUrl}/pago/fallido?payment_id=${payment.id}`,
@@ -238,7 +252,11 @@ async function createMercadoPagoPreference({ appointment, payment, amount }) {
     expires: Boolean(payment.expires_at),
     expiration_date_from: payment.expires_at ? new Date().toISOString() : undefined,
     expiration_date_to: payment.expires_at ?? undefined,
-    notification_url: `${publicUrl}/api/payments/mercadopago/webhook`,
+    // clinic_id in the query string is how the webhook (a single shared
+    // endpoint for every connected clinic) knows whose Mercado Pago token to
+    // use to look up the payment - it has no other way to resolve that
+    // before making the API call.
+    notification_url: `${publicUrl}/api/payments/mercadopago/webhook?clinic_id=${appointment.clinic_id}`,
     metadata: {
       clinic_id: appointment.clinic_id,
       patient_id: appointment.patient_id,
@@ -251,7 +269,7 @@ async function createMercadoPagoPreference({ appointment, payment, amount }) {
   const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify(preferencePayload)
