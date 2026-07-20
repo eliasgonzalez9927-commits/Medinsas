@@ -4,6 +4,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ADMIN_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-roles";
 import { Login } from "./pages/auth/Login";
 import { Register } from "./pages/auth/Register";
+import { AcceptInvitationPage } from "./pages/auth/AcceptInvitationPage";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { AgendaPage } from "./pages/admin/modules/AgendaPage";
 import { AppointmentRequestsPage } from "./pages/admin/modules/AppointmentRequestsPage";
@@ -66,6 +67,7 @@ export function App() {
       <Route path="/pago/pendiente" element={<PaymentPendingPage />} />
       <Route path="/pago/fallido" element={<PaymentFailurePage />} />
       <Route path="/mi-turno/:token" element={<PublicAppointmentPage />} />
+      <Route path="/invitacion/:token" element={<AcceptInvitationPage />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<HomeRedirect />} />
       </Route>
