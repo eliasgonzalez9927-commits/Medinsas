@@ -286,16 +286,10 @@ export async function createUserInvitation(data: {
   }
 }
 
-export async function cancelUserInvitation(id: string): Promise<UserInvitation> {
+export async function cancelUserInvitation(id: string): Promise<void> {
   try {
-    const { data, error } = await supabase
-      .from("user_invitations")
-      .update({ status: "cancelled", updated_at: new Date().toISOString() })
-      .eq("id", id)
-      .select("*")
-      .single();
+    const { error } = await supabase.from("user_invitations").delete().eq("id", id);
     if (error) throw error;
-    return data as UserInvitation;
   } catch (error) {
     console.error("Failed to cancel invitation", error);
     throw new FriendlyDataError("No pudimos cancelar la invitacion.");

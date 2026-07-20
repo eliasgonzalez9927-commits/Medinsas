@@ -503,7 +503,10 @@ function UsersPanel({
   professionals: ProfessionalWithRelations[];
 }) {
   const [showInviteForm, setShowInviteForm] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [form, setForm] = useState({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
+  const pendingInvitations = invitations.filter((invitation) => invitation.status === "pending");
+  const historyInvitations = invitations.filter((invitation) => invitation.status !== "pending");
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onInvite({ ...form, location_id: form.location_id || null, professional_id: form.professional_id || null });
@@ -535,7 +538,14 @@ function UsersPanel({
       <SectionCard className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
           <h2 className="font-semibold">Usuarios y permisos</h2>
-          <Button onClick={onRefresh}>Actualizar</Button>
+          <div className="flex gap-2">
+            {historyInvitations.length > 0 && (
+              <Button onClick={() => setShowHistory((current) => !current)}>
+                {showHistory ? "Ocultar historial" : `Historial (${historyInvitations.length})`}
+              </Button>
+            )}
+            <Button onClick={onRefresh}>Actualizar</Button>
+          </div>
         </div>
         <div className="divide-y divide-clinic-line">
           {members.map((member) => (
@@ -550,14 +560,27 @@ function UsersPanel({
               professionals={professionals}
             />
           ))}
-          {invitations.map((invitation) => (
+          {pendingInvitations.map((invitation) => (
             <article key={invitation.id} className="grid gap-3 bg-amber-50/40 px-5 py-4 md:grid-cols-[1fr_130px_120px_110px] md:items-center">
               <div><p className="font-semibold">{invitation.full_name}</p><p className="text-sm text-clinic-muted">{invitation.email}</p></div>
               <span className="text-sm font-medium">{roleLabels[invitation.role] ?? invitation.role}</span>
               <span className="rounded-lg bg-white px-3 py-2 text-center text-xs font-semibold text-amber-700">{invitation.status}</span>
-              {invitation.status === "pending" && (
-                <Button disabled={disabled} onClick={() => onCancelInvitation(invitation.id)}>Cancelar</Button>
-              )}
+              <Button
+                aria-label="Cancelar invitacion"
+                className="justify-self-start text-red-500 hover:bg-red-50 hover:text-red-600"
+                disabled={disabled}
+                onClick={() => onCancelInvitation(invitation.id)}
+                title="Cancelar invitacion"
+              >
+                <X size={16} />
+              </Button>
+            </article>
+          ))}
+          {showHistory && historyInvitations.map((invitation) => (
+            <article key={invitation.id} className="grid gap-3 bg-slate-50 px-5 py-4 md:grid-cols-[1fr_130px_120px] md:items-center">
+              <div><p className="font-semibold">{invitation.full_name}</p><p className="text-sm text-clinic-muted">{invitation.email}</p></div>
+              <span className="text-sm font-medium">{roleLabels[invitation.role] ?? invitation.role}</span>
+              <span className="rounded-lg bg-white px-3 py-2 text-center text-xs font-semibold text-clinic-muted">{invitation.status}</span>
             </article>
           ))}
         </div>
