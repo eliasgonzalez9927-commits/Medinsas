@@ -1,3 +1,4 @@
+import { MercadoPagoConfig, Preference } from "mercadopago";
 import { makeSupabase } from "../../_lib/supabase.js";
 import { allowOnly, handleError } from "../../_lib/http.js";
 import { getClinicMercadoPagoAccessToken } from "../../_lib/mercadoPagoAccount.js";
@@ -266,20 +267,13 @@ async function createMercadoPagoPreference({ appointment, payment, amount, acces
     }
   };
 
-  const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(preferencePayload)
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
+  try {
+    const client = new MercadoPagoConfig({ accessToken });
+    return await new Preference(client).create({ body: preferencePayload });
+  } catch (mpError) {
     const err = new Error("Mercado Pago preference failed");
-    err.statusCode = response.status;
+    err.statusCode = mpError?.status ?? mpError?.statusCode ?? 502;
     err.code = "MERCADO_PAGO_ERROR";
     throw err;
   }
-  return body;
 }

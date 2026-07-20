@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { makeSupabase } from "../../../_lib/supabase.js";
 import { allowOnly, handleError } from "../../../_lib/http.js";
-import { signState } from "../_oauthState.js";
+import { createPkcePair, signState } from "../_oauthState.js";
 
 // Returns the Mercado Pago authorization URL for the caller's own clinic.
 // The frontend does window.location.href = url - a plain link/redirect
@@ -27,7 +27,8 @@ export default async function handler(req, res) {
     }
 
     const appUrl = (process.env.APP_PUBLIC_URL || "https://app.medin.com.ar").replace(/\/$/, "");
-    const state = signState({ clinicId: auth.clinicId, nonce: crypto.randomBytes(12).toString("hex") });
+    const { codeVerifier, codeChallenge } = createPkcePair();
+    const state = signState({ clinicId: auth.clinicId, nonce: crypto.randomBytes(12).toString("hex"), codeVerifier });
 
     const url = new URL("https://auth.mercadopago.com.ar/authorization");
     url.searchParams.set("client_id", process.env.MERCADO_PAGO_CLIENT_ID);
@@ -35,6 +36,8 @@ export default async function handler(req, res) {
     url.searchParams.set("platform_id", "mp");
     url.searchParams.set("state", state);
     url.searchParams.set("redirect_uri", `${appUrl}/api/payments/mercadopago/oauth/callback`);
+    url.searchParams.set("code_challenge", codeChallenge);
+    url.searchParams.set("code_challenge_method", "S256");
 
     return res.status(200).json({ url: url.toString() });
   } catch (err) {

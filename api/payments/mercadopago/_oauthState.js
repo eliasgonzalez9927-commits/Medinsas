@@ -14,11 +14,24 @@ function getSecret() {
   return secret;
 }
 
-export function signState({ clinicId, nonce }) {
-  const payload = JSON.stringify({ clinicId, nonce, exp: Date.now() + TTL_MS });
+export function signState({ clinicId, nonce, codeVerifier }) {
+  const payload = JSON.stringify({ clinicId, nonce, codeVerifier, exp: Date.now() + TTL_MS });
   const payloadB64 = Buffer.from(payload).toString("base64url");
   const signature = crypto.createHmac("sha256", getSecret()).update(payloadB64).digest("base64url");
   return `${payloadB64}.${signature}`;
+}
+
+// PKCE (RFC 7636): even though this is a confidential client (the token
+// exchange happens server-side with client_secret, never in the browser),
+// current OAuth best practice recommends PKCE for every client as defense
+// in depth against authorization-code interception. code_verifier travels
+// inside the signed state (round-tripped via Mercado Pago) since this is a
+// stateless serverless function with nowhere else to keep it between the
+// start and callback requests.
+export function createPkcePair() {
+  const codeVerifier = crypto.randomBytes(32).toString("base64url");
+  const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url");
+  return { codeVerifier, codeChallenge };
 }
 
 export function verifyState(state) {
