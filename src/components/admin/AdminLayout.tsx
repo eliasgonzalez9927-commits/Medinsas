@@ -2,12 +2,12 @@ import { Building2, ChevronDown, CirclePlus, LogOut, Menu, Search, UserRound, X 
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import { useWorkspace } from "../../contexts/WorkspaceContext";
 import { ADMIN_MODULES, ADMIN_NAVIGATION_GROUPS, AdminModuleDefinition } from "../../lib/admin-navigation";
 import { roleLabels } from "../../lib/auth-roles";
-import { getDefaultClinic, searchPatients } from "../../lib/clinic-data";
+import { searchPatients } from "../../lib/clinic-data";
 import { BASE_MODULES } from "../../lib/modules";
-import { supabase } from "../../lib/supabase";
-import { Clinic, PatientWithAppointments } from "../../types/clinic";
+import { PatientWithAppointments } from "../../types/clinic";
 import { Button } from "../ui/Button";
 
 export function AdminLayout({
@@ -20,10 +20,9 @@ export function AdminLayout({
   onCreateAppointment: () => void;
 }) {
   const { profile, role, signOut, user } = useAuth();
+  const { clinic, modules } = useWorkspace();
   const isProfessionalRole = role === "professional" || role === "doctor";
   const navigate = useNavigate();
-  const [clinic, setClinic] = useState<Clinic | null>(null);
-  const [modules, setModules] = useState<Record<string, boolean>>({});
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [patientMatches, setPatientMatches] = useState<PatientWithAppointments[]>([]);
@@ -44,20 +43,6 @@ export function AdminLayout({
       return moduleFlags.some((flag) => modules[flag] ?? false);
     });
   }, [modules, role]);
-
-  useEffect(() => {
-    async function loadWorkspace() {
-      const currentClinic = await getDefaultClinic().catch(() => null);
-      setClinic(currentClinic);
-      if (!currentClinic) return;
-      const { data } = await supabase
-        .from("clinic_modules")
-        .select("module_key, enabled")
-        .eq("clinic_id", currentClinic.id);
-      setModules(Object.fromEntries((data ?? []).map((item: { module_key: string; enabled: boolean }) => [item.module_key, item.enabled])));
-    }
-    loadWorkspace();
-  }, []);
 
   useEffect(() => {
     const query = globalSearch.trim();
