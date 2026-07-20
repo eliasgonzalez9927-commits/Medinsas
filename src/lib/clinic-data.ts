@@ -838,6 +838,23 @@ export async function getPaymentSettings(clinicId: string): Promise<PaymentSetti
   }
 }
 
+export async function startMercadoPagoConnection(): Promise<string> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) throw new FriendlyDataError("Tu sesión expiró. Volvé a iniciar sesión.");
+  const response = await fetch("/api/payments/mercadopago/oauth/start", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionData.session.access_token}` }
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (body?.error === "MERCADO_PAGO_OAUTH_NOT_CONFIGURED") {
+      throw new FriendlyDataError("Mercado Pago todavía no está configurado en la plataforma.");
+    }
+    throw new FriendlyDataError("No pudimos iniciar la conexión con Mercado Pago.");
+  }
+  return body.url as string;
+}
+
 export async function updatePaymentSettings(id: string, data: Partial<PaymentSettings>): Promise<PaymentSettings> {
   try {
     const { data: updated, error } = await supabase

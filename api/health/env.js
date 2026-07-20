@@ -8,10 +8,10 @@ export default async function handler(req, res) {
   if (!allowOnly(req, res, ["GET"])) return;
 
   return res.status(200).json({
-    mercadoPagoAccessToken: Boolean(process.env.MERCADO_PAGO_ACCESS_TOKEN),
-    mercadoPagoPublicKey: Boolean(process.env.MERCADO_PAGO_PUBLIC_KEY),
+    mercadoPagoClientId: Boolean(process.env.MERCADO_PAGO_CLIENT_ID),
+    mercadoPagoClientSecret: Boolean(process.env.MERCADO_PAGO_CLIENT_SECRET),
     mercadoPagoWebhookSecret: Boolean(process.env.MERCADO_PAGO_WEBHOOK_SECRET),
-    mercadoPagoEnv: Boolean(process.env.MERCADO_PAGO_ENV),
+    paymentTokensEncryptionKey: Boolean(process.env.PAYMENT_TOKENS_ENCRYPTION_KEY),
     appPublicUrl: Boolean(process.env.APP_PUBLIC_URL),
     supabaseUrl: Boolean(process.env.SUPABASE_URL),
     supabaseServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)

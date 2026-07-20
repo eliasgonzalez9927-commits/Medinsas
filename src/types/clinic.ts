@@ -500,6 +500,9 @@ export type PaymentSettings = {
   public_key: string | null;
   access_token_encrypted: string | null;
   webhook_secret: string | null;
+  mp_user_id: string | null;
+  token_expires_at: string | null;
+  connected_at: string | null;
   default_currency: string;
   checkout_public_name: string | null;
   collect_deposit_online: boolean;

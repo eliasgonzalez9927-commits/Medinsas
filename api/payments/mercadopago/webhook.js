@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { makeSupabase } from "../../_lib/supabase.js";
 import { allowOnly, handleError } from "../../_lib/http.js";
+import { getClinicMercadoPagoAccessToken } from "../../_lib/mercadoPagoAccount.js";
 
 // Mercado Pago calls this URL every time a payment's status changes. This is
 // the piece create-preference.js was waiting on (see the comment and feature
@@ -29,7 +30,17 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: "INVALID_SIGNATURE" });
     }
 
-    const mpPayment = await fetchMercadoPagoPayment(paymentId);
+    // Every clinic pays into its own Mercado Pago account, so looking up a
+    // payment requires that clinic's own token - create-preference.js puts
+    // clinic_id on the notification_url query string precisely so this
+    // shared endpoint can resolve it before calling Mercado Pago's API.
+    const clinicId = readFirst(req.query?.clinic_id);
+    if (!clinicId) return res.status(200).json({ ignored: true });
+
+    const accessToken = await getClinicMercadoPagoAccessToken(client, clinicId);
+    if (!accessToken) return res.status(200).json({ ignored: true });
+
+    const mpPayment = await fetchMercadoPagoPayment(paymentId, accessToken);
     if (!mpPayment) return res.status(200).json({ ignored: true });
 
     const isNewEvent = await recordEvent(client, paymentId, mpPayment);
@@ -94,9 +105,9 @@ function verifySignature(req, paymentId) {
   return crypto.timingSafeEqual(expectedBuffer, actualBuffer);
 }
 
-async function fetchMercadoPagoPayment(paymentId) {
+async function fetchMercadoPagoPayment(paymentId, accessToken) {
   const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-    headers: { Authorization: `Bearer ${process.env.MERCADO_PAGO_ACCESS_TOKEN}` }
+    headers: { Authorization: `Bearer ${accessToken}` }
   });
   if (response.status === 404) return null;
   if (!response.ok) {
