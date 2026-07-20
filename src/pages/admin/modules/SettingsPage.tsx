@@ -35,7 +35,7 @@ import {
 import { UserRole } from "../../../types/database";
 import { AdminPageShell } from "./AdminPageShell";
 
-type SettingsTab =
+export type SettingsTab =
   | "clinic"
   | "locations"
   | "hours"
@@ -59,6 +59,26 @@ const tabs: Array<{ id: SettingsTab; label: string; to: string }> = [
   { id: "fiscal", label: "Datos fiscales", to: "/admin/facturacion/configuracion" },
   { id: "integrations", label: "Integraciones", to: "/admin/configuracion#integraciones" }
 ];
+
+export function SettingsTabsNav({ activeTab }: { activeTab: SettingsTab }) {
+  return (
+    <SectionCard className="p-3">
+      <div className="flex gap-2 overflow-x-auto">
+        {tabs.map((tab) => (
+          <Link
+            key={tab.id}
+            to={tab.to}
+            className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold ${
+              activeTab === tab.id ? "bg-teal-50 text-clinic-brand" : "text-clinic-muted hover:bg-clinic-surface"
+            }`}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
 
 const roles: UserRole[] = ["platform_admin", "clinic_admin", "receptionist", "professional"];
 const roleLabels: Record<string, string> = {
@@ -241,22 +261,7 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
         <Message tone="warning">Tu rol no permite editar configuracion general.</Message>
       )}
 
-      <SectionCard className="p-3">
-        <div className="flex gap-2 overflow-x-auto">
-          {tabs.map((tab) => (
-            <Link
-              key={tab.id}
-              to={tab.to}
-              onClick={() => setActiveTab(tab.id)}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold ${
-                activeTab === tab.id ? "bg-teal-50 text-clinic-brand" : "text-clinic-muted hover:bg-clinic-surface"
-              }`}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </div>
-      </SectionCard>
+      <SettingsTabsNav activeTab={activeTab} />
 
       {loading ? (
         <SectionCard className="p-8 text-center text-clinic-muted">Cargando configuracion...</SectionCard>

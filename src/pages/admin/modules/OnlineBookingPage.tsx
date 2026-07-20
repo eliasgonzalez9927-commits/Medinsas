@@ -5,6 +5,7 @@ import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
 import { buildPublicUrl } from "../../../lib/public-url";
 import { AdminPageShell } from "./AdminPageShell";
+import { SettingsTabsNav } from "./SettingsPage";
 
 const UPCOMING_CAPABILITIES = [
   "Disponibilidad pública",
@@ -37,6 +38,7 @@ export function OnlineBookingPage() {
       onAction={() => navigate("/admin/agenda")}
       title="Reservas online"
     >
+      <SettingsTabsNav activeTab="booking" />
       <SectionCard className="max-w-2xl p-6">
         <span className="grid h-11 w-11 place-items-center rounded-lg bg-teal-50 text-clinic-brand">
           <Sparkles size={20} />
