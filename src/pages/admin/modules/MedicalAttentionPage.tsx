@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
@@ -9,11 +9,14 @@ import { useAuth } from "../../../contexts/AuthContext";
 import {
   finalizeMedicalAttention,
   getAppointmentForProfessionalAttention,
+  getClinicalEvolutionByAppointment,
   getDefaultClinic,
-  getMedicalRecordByAppointment,
-  saveMedicalRecordDraft
+  saveMedicalAttentionDraft,
+  startMedicalAttention
 } from "../../../lib/clinic-data";
 import { AppointmentWithRelations } from "../../../types/clinic";
+
+const INACTIVE_STATUSES = ["cancelled", "no_show"];
 
 export function MedicalAttentionPage() {
   const { appointmentId = "" } = useParams();
@@ -21,7 +24,6 @@ export function MedicalAttentionPage() {
   const myProfessionalId = clinicMembership?.professional_id ?? null;
   const navigate = useNavigate();
 
-  const [clinicId, setClinicId] = useState<string | null>(null);
   const [appointment, setAppointment] = useState<AppointmentWithRelations | null>(null);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
@@ -34,9 +36,12 @@ export function MedicalAttentionPage() {
 
   const [finalizing, setFinalizing] = useState(false);
   const [finalizeError, setFinalizeError] = useState("");
-  const [finalized, setFinalized] = useState(false);
 
-  const startedAtRef = useRef(Date.now());
+  // Real elapsed time, computed every second from the DB-persisted
+  // attention_started_at - never from a client-side Date.now() origin.
+  // Reloading, closing the tab and coming back, or a second authorized
+  // session all see the same number, because they all read the same
+  // timestamp from Postgres.
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
@@ -53,8 +58,7 @@ export function MedicalAttentionPage() {
         const clinic = await getDefaultClinic();
         if (!clinic) throw new Error("No se encontró la clínica.");
         if (cancelled) return;
-        setClinicId(clinic.id);
-        const foundAppointment = await getAppointmentForProfessionalAttention(
+        let foundAppointment = await getAppointmentForProfessionalAttention(
           clinic.id,
           appointmentId,
           myProfessionalId as string
@@ -64,11 +68,24 @@ export function MedicalAttentionPage() {
           setNotFound(true);
           return;
         }
+
+        if (foundAppointment.status !== "completed" && !INACTIVE_STATUSES.includes(foundAppointment.status)) {
+          // Idempotent: persists attention_started_at only the first time,
+          // creates the draft evolution row if it doesn't exist yet, and
+          // never touches either if this attention was already started.
+          await startMedicalAttention(appointmentId);
+          foundAppointment = await getAppointmentForProfessionalAttention(
+            clinic.id,
+            appointmentId,
+            myProfessionalId as string
+          );
+          if (cancelled || !foundAppointment) return;
+        }
+
         setAppointment(foundAppointment);
-        setFinalized(foundAppointment.status === "completed");
-        const record = await getMedicalRecordByAppointment(clinic.id, appointmentId, myProfessionalId as string);
+        const evolution = await getClinicalEvolutionByAppointment(clinic.id, appointmentId, myProfessionalId as string);
         if (cancelled) return;
-        setNotes(record?.notes ?? "");
+        setNotes(evolution?.notes ?? "");
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "No pudimos cargar la atención.");
       } finally {
@@ -82,46 +99,42 @@ export function MedicalAttentionPage() {
   }, [appointmentId, myProfessionalId]);
 
   useEffect(() => {
-    if (finalized) return;
+    const startedAt = appointment?.attention_started_at;
+    const finishedAt = appointment?.attention_finished_at;
+    if (!startedAt || finishedAt) return;
+    const origin = new Date(startedAt).getTime();
+    setElapsedSeconds(Math.max(0, Math.floor((Date.now() - origin) / 1000)));
     const timer = window.setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startedAtRef.current) / 1000));
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - origin) / 1000)));
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [finalized]);
+  }, [appointment?.attention_started_at, appointment?.attention_finished_at]);
 
   async function handleSaveDraft() {
-    if (!clinicId || !appointment || !myProfessionalId) return;
+    if (!appointment) return;
     setSavingDraft(true);
     setDraftError("");
     try {
-      await saveMedicalRecordDraft({
-        clinicId,
-        patientId: appointment.patient_id,
-        professionalId: myProfessionalId,
-        appointmentId,
-        notes
-      });
+      await saveMedicalAttentionDraft(appointmentId, notes);
       setDraftSavedAt(new Date());
     } catch (err) {
-      setDraftError(err instanceof Error ? err.message : "No pudimos guardar la nota.");
+      setDraftError(err instanceof Error ? err.message : "No pudimos guardar el borrador.");
     } finally {
       setSavingDraft(false);
     }
   }
 
   async function handleFinalize() {
-    if (!clinicId || !appointment || !myProfessionalId) return;
+    if (!appointment || !myProfessionalId) return;
     setFinalizing(true);
     setFinalizeError("");
     try {
-      await finalizeMedicalAttention({
-        clinicId,
-        patientId: appointment.patient_id,
-        professionalId: myProfessionalId,
-        appointmentId,
-        notes
-      });
-      setFinalized(true);
+      await finalizeMedicalAttention(appointmentId, notes);
+      const clinic = await getDefaultClinic();
+      if (clinic) {
+        const refreshed = await getAppointmentForProfessionalAttention(clinic.id, appointmentId, myProfessionalId);
+        if (refreshed) setAppointment(refreshed);
+      }
     } catch (err) {
       setFinalizeError(err instanceof Error ? err.message : "No pudimos finalizar la atención.");
     } finally {
@@ -165,6 +178,8 @@ export function MedicalAttentionPage() {
   }
 
   const patientName = appointment.patient ? `${appointment.patient.first_name} ${appointment.patient.last_name}` : "Paciente sin vincular";
+  const finalized = appointment.status === "completed";
+  const inactive = INACTIVE_STATUSES.includes(appointment.status);
 
   return (
     <AdminPageShell title="Atención médica" description="Registro de atención para este turno.">
@@ -186,55 +201,61 @@ export function MedicalAttentionPage() {
             <AppointmentStatusBadge status={appointment.status} />
           </div>
         </div>
-      </SectionCard>
-
-      {!finalized && (
-        <SectionCard className="mb-6">
-          <div className="flex items-center justify-between p-5">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-clinic-muted">Tiempo de atención</p>
-              <p className="mt-1 text-2xl font-bold tabular-nums text-clinic-ink">{formatElapsed(elapsedSeconds)}</p>
-            </div>
-          </div>
-        </SectionCard>
-      )}
-
-      <SectionCard>
-        <div className="border-b border-clinic-line px-5 py-4">
-          <h2 className="font-semibold text-clinic-ink">Evolución</h2>
-          <p className="mt-1 text-sm text-clinic-muted">
-            Notas de esta atención. Solo vos podés verlas.
-          </p>
-        </div>
-        <div className="p-5">
-          {finalized ? (
-            <p className="whitespace-pre-wrap text-sm text-clinic-ink">{notes || "Sin notas cargadas."}</p>
+        <div className="border-t border-clinic-line px-6 py-3 text-sm text-clinic-muted">
+          {finalized && appointment.attention_started_at && appointment.attention_finished_at ? (
+            <span>Finalizada · Duración {formatDuration(appointment.attention_started_at, appointment.attention_finished_at)}</span>
+          ) : finalized ? (
+            <span>Atención finalizada.</span>
+          ) : inactive ? (
+            <span>Atención no iniciada.</span>
           ) : (
-            <>
-              {draftError && <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{draftError}</p>}
-              {finalizeError && <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{finalizeError}</p>}
-              <textarea
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                placeholder="Motivo de consulta, evolución, indicaciones..."
-                rows={8}
-                className="w-full rounded-lg border border-clinic-line px-3 py-2 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
-              />
-              {draftSavedAt && (
-                <p className="mt-2 text-xs text-clinic-muted">Borrador guardado a las {formatTime(draftSavedAt)}.</p>
-              )}
-              <div className="mt-4 flex flex-wrap justify-end gap-2">
-                <Button onClick={handleSaveDraft} disabled={savingDraft || finalizing}>
-                  {savingDraft ? "Guardando..." : "Guardar borrador"}
-                </Button>
-                <Button onClick={handleFinalize} disabled={savingDraft || finalizing} variant="primary">
-                  {finalizing ? "Finalizando..." : "Finalizar atención"}
-                </Button>
-              </div>
-            </>
+            <span>En atención · <span className="tabular-nums font-medium text-clinic-ink">{formatElapsed(elapsedSeconds)}</span></span>
           )}
         </div>
       </SectionCard>
+
+      {inactive && !finalized ? (
+        <SectionCard>
+          <Message>Este turno no está activo (cancelado o no asistido) — no se puede iniciar ni finalizar atención.</Message>
+        </SectionCard>
+      ) : (
+        <SectionCard>
+          <div className="border-b border-clinic-line px-5 py-4">
+            <h2 className="font-semibold text-clinic-ink">Evolución clínica</h2>
+            <p className="mt-1 text-sm text-clinic-muted">
+              Registro de esta atención. Solo vos podés verla.
+            </p>
+          </div>
+          <div className="p-5">
+            {finalized ? (
+              <p className="whitespace-pre-wrap text-sm text-clinic-ink">{notes || "Sin evolución cargada."}</p>
+            ) : (
+              <>
+                {draftError && <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{draftError}</p>}
+                {finalizeError && <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{finalizeError}</p>}
+                <textarea
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder="Motivo de consulta, evolución, indicaciones..."
+                  rows={8}
+                  className="w-full rounded-lg border border-clinic-line px-3 py-2 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+                />
+                {draftSavedAt && (
+                  <p className="mt-2 text-xs text-clinic-muted">Borrador guardado a las {formatTime(draftSavedAt)}.</p>
+                )}
+                <div className="mt-4 flex flex-wrap justify-end gap-2">
+                  <Button onClick={handleSaveDraft} disabled={savingDraft || finalizing}>
+                    {savingDraft ? "Guardando..." : "Guardar borrador"}
+                  </Button>
+                  <Button onClick={handleFinalize} disabled={savingDraft || finalizing} variant="primary">
+                    {finalizing ? "Finalizando..." : "Finalizar atención"}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </SectionCard>
+      )}
 
       {finalized && (
         <div className="mt-6 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
@@ -266,9 +287,17 @@ function formatTime(value: Date): string {
 }
 
 function formatElapsed(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return hours > 0 ? `${String(hours).padStart(2, "0")}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function formatDuration(startIso: string, endIso: string): string {
+  const minutes = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000);
+  return `${minutes} min`;
 }
 
 function Message({ children }: { children: string }) {

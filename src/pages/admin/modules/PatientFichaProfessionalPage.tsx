@@ -3,18 +3,16 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { SectionCard } from "../../../components/admin/SectionCard";
-import { Button } from "../../../components/ui/Button";
 import { AdminPageShell } from "./AdminPageShell";
 import { useAuth } from "../../../contexts/AuthContext";
 import {
-  createMedicalRecord,
+  getClinicalTimeline,
   getDefaultClinic,
-  getMedicalRecordsByPatient,
   getPatientForProfessional,
   getProfessionalPatientProduction,
   getServices
 } from "../../../lib/clinic-data";
-import { MedicalRecord, PatientWithAppointments } from "../../../types/clinic";
+import { MedicalRecord, MedicalRecordType, PatientWithAppointments } from "../../../types/clinic";
 
 type Production = { totalCobrado: number; totalPendiente: number };
 
@@ -29,10 +27,7 @@ export function PatientFichaProfessionalPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState("");
-  const [records, setRecords] = useState<MedicalRecord[]>([]);
-  const [newNote, setNewNote] = useState("");
-  const [savingNote, setSavingNote] = useState(false);
-  const [noteError, setNoteError] = useState("");
+  const [timeline, setTimeline] = useState<MedicalRecord[]>([]);
 
   useEffect(() => {
     if (!myProfessionalId) {
@@ -47,11 +42,11 @@ export function PatientFichaProfessionalPage() {
       try {
         const clinic = await getDefaultClinic();
         if (!clinic) throw new Error("No se encontró la clínica.");
-        const [foundPatient, prod, servicesResult, foundRecords] = await Promise.all([
+        const [foundPatient, prod, servicesResult, foundTimeline] = await Promise.all([
           getPatientForProfessional(clinic.id, id, myProfessionalId as string),
           getProfessionalPatientProduction(clinic.id, id, myProfessionalId as string),
           getServices(clinic.id),
-          getMedicalRecordsByPatient(clinic.id, id, myProfessionalId as string)
+          getClinicalTimeline(clinic.id, id, myProfessionalId as string)
         ]);
         if (cancelled) return;
         if (!foundPatient) {
@@ -60,7 +55,7 @@ export function PatientFichaProfessionalPage() {
         }
         setPatient(foundPatient);
         setProduction(prod);
-        setRecords(foundRecords);
+        setTimeline(foundTimeline);
         const sm: Record<string, string> = {};
         for (const svc of servicesResult.data ?? []) {
           sm[svc.id] = svc.name;
@@ -77,28 +72,6 @@ export function PatientFichaProfessionalPage() {
       cancelled = true;
     };
   }, [id, myProfessionalId]);
-
-  async function saveNote() {
-    if (!newNote.trim() || !myProfessionalId || !patient) return;
-    setSavingNote(true);
-    setNoteError("");
-    try {
-      const clinic = await getDefaultClinic();
-      if (!clinic) throw new Error("No se encontró la clínica.");
-      const created = await createMedicalRecord({
-        clinic_id: clinic.id,
-        patient_id: patient.id,
-        professional_id: myProfessionalId,
-        notes: newNote.trim()
-      });
-      setRecords((current) => [created, ...current]);
-      setNewNote("");
-    } catch (err) {
-      setNoteError(err instanceof Error ? err.message : "No pudimos guardar la nota.");
-    } finally {
-      setSavingNote(false);
-    }
-  }
 
   const appointments = useMemo(() => {
     if (!Array.isArray(patient?.appointments)) return [];
@@ -306,36 +279,32 @@ export function PatientFichaProfessionalPage() {
         <div className="border-b border-clinic-line px-5 py-4">
           <h2 className="font-semibold text-clinic-ink">Historia clínica</h2>
           <p className="mt-1 text-sm text-clinic-muted">
-            Solo vos podés ver estas notas — ni administración, ni recepción, ni otros profesionales tienen acceso.
+            Línea de tiempo clínica de este paciente — solo vos podés verla, ni administración, ni recepción, ni
+            otros profesionales tienen acceso. Las evoluciones se cargan desde "Iniciar atención" en tu agenda.
           </p>
         </div>
-        <div className="border-b border-clinic-line p-5">
-          {noteError && (
-            <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{noteError}</p>
-          )}
-          <textarea
-            value={newNote}
-            onChange={(event) => setNewNote(event.target.value)}
-            placeholder="Notas de la consulta, evolución, indicaciones..."
-            rows={4}
-            className="w-full rounded-lg border border-clinic-line px-3 py-2 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
-          />
-          <div className="mt-3 flex justify-end">
-            <Button onClick={saveNote} disabled={savingNote || !newNote.trim()} variant="primary">
-              {savingNote ? "Guardando..." : "Guardar nota"}
-            </Button>
-          </div>
-        </div>
-        {records.length === 0 ? (
+        {timeline.length === 0 ? (
           <div className="px-6 py-12 text-center">
-            <p className="text-sm text-clinic-muted">Todavía no cargaste notas para este paciente.</p>
+            <p className="text-sm text-clinic-muted">Todavía no hay registros clínicos para este paciente.</p>
           </div>
         ) : (
           <div className="divide-y divide-clinic-line">
-            {records.map((record) => (
+            {timeline.map((record) => (
               <div key={record.id} className="px-5 py-4">
-                <p className="text-xs font-medium uppercase tracking-wider text-clinic-muted">{formatDate(record.created_at)}</p>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-clinic-ink">{record.notes}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={recordTypeBadgeClass(record.record_type)}>{recordTypeLabel(record.record_type)}</span>
+                  <span className={recordStatusBadgeClass(record)}>{recordStatusLabel(record)}</span>
+                  <span className="text-xs text-clinic-muted">{formatDate(record.created_at)}</span>
+                </div>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-clinic-ink">{record.notes || "Sin contenido."}</p>
+                {record.appointment_id && (
+                  <Link
+                    to={`/admin/mi-agenda/atencion/${record.appointment_id}`}
+                    className="mt-2 inline-block text-xs font-semibold text-clinic-brand hover:underline"
+                  >
+                    Ver turno relacionado
+                  </Link>
+                )}
               </div>
             ))}
           </div>
@@ -343,6 +312,33 @@ export function PatientFichaProfessionalPage() {
       </SectionCard>
     </AdminPageShell>
   );
+}
+
+function recordTypeLabel(type: MedicalRecordType): string {
+  if (type === "appointment_evolution") return "Evolución de consulta";
+  if (type === "standalone_clinical_note") return "Nota clínica sin turno";
+  return "Registro clínico anterior";
+}
+
+function recordTypeBadgeClass(type: MedicalRecordType): string {
+  const base = "rounded-full px-2.5 py-0.5 text-xs font-semibold";
+  if (type === "appointment_evolution") return `${base} bg-teal-50 text-teal-700`;
+  if (type === "standalone_clinical_note") return `${base} bg-amber-50 text-amber-700`;
+  return `${base} bg-slate-100 text-slate-500`;
+}
+
+function recordStatusLabel(record: MedicalRecord): string {
+  if (record.record_type === "legacy_clinical_record") return "Registro legado";
+  if (record.record_status === "draft") return "Borrador";
+  if (record.record_status === "amended") return "Corregida";
+  return "Finalizada";
+}
+
+function recordStatusBadgeClass(record: MedicalRecord): string {
+  const base = "rounded-full px-2.5 py-0.5 text-xs font-semibold";
+  if (record.record_type === "legacy_clinical_record") return `${base} bg-slate-100 text-slate-500`;
+  if (record.record_status === "draft") return `${base} bg-amber-50 text-amber-700`;
+  return `${base} bg-emerald-50 text-emerald-700`;
 }
 
 function isPatientActive(appointments: PatientWithAppointments["appointments"]): boolean {
