@@ -1,12 +1,14 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Building2, CalendarClock, Mail, MapPin, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { Building2, CalendarClock, Mail, MapPin, ShieldCheck, SlidersHorizontal, X } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
 import { useAuth } from "../../../contexts/AuthContext";
 import {
+  cancelUserInvitation,
   createLocation,
   createUserInvitation,
+  deleteClinicMember,
   getClinicHours,
   getClinicMembers,
   getDefaultClinic,
@@ -127,7 +129,11 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
   }), [role]);
 
   async function load() {
-    setLoading(true);
+    // Only show the full-page loading state on the very first load. On
+    // refetches after a save (invite, edit, cancel, toggle), keep the
+    // current content visible and just swap it in place once it resolves -
+    // otherwise every small action makes the whole tab flash blank.
+    if (!clinic) setLoading(true);
     setError("");
     try {
       const loadedClinic = await getDefaultClinic();
@@ -248,6 +254,35 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
     }
   }
 
+  async function cancelInvitation(id: string) {
+    if (!permissions.manageUsers) return;
+    setSaving(true);
+    try {
+      await cancelUserInvitation(id);
+      setNotice("Invitacion cancelada.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos cancelar la invitacion.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteMember(id: string, name: string) {
+    if (role !== "platform_admin") return;
+    if (!window.confirm(`Vas a borrar a ${name} de esta clínica. Esta acción no se puede deshacer. ¿Continuar?`)) return;
+    setSaving(true);
+    try {
+      await deleteClinicMember(id);
+      setNotice("Usuario borrado de la clínica.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos borrar el usuario.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <AdminPageShell
       description="Centro de administracion para datos de clinica, sedes, usuarios, notificaciones e integraciones."
@@ -274,10 +309,13 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
           {activeTab === "hours" && <HoursPanel disabled={!permissions.manageClinic || saving} hours={hours} clinicId={clinic.id} onSave={saveHour} />}
           {activeTab === "users" && (
             <UsersPanel
+              currentRole={role}
               disabled={!permissions.manageUsers || saving}
               invitations={invitations}
               locations={locations}
               members={members}
+              onCancelInvitation={cancelInvitation}
+              onDeleteMember={deleteMember}
               onInvite={inviteUser}
               onRefresh={load}
               professionals={professionals}
@@ -441,25 +479,58 @@ function HourRow({ disabled, hour, onSave }: { disabled: boolean; hour: ClinicHo
   );
 }
 
-function UsersPanel({ disabled, invitations, locations, members, onInvite, onRefresh, professionals }: { disabled: boolean; invitations: UserInvitation[]; locations: Location[]; members: ClinicMemberWithProfile[]; onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void; onRefresh: () => void; professionals: ProfessionalWithRelations[] }) {
+function UsersPanel({
+  currentRole,
+  disabled,
+  invitations,
+  locations,
+  members,
+  onCancelInvitation,
+  onDeleteMember,
+  onInvite,
+  onRefresh,
+  professionals
+}: {
+  currentRole: UserRole | null;
+  disabled: boolean;
+  invitations: UserInvitation[];
+  locations: Location[];
+  members: ClinicMemberWithProfile[];
+  onCancelInvitation: (id: string) => void;
+  onDeleteMember: (id: string, name: string) => void;
+  onInvite: (data: { email: string; full_name: string; role: string; location_id?: string | null; professional_id?: string | null }) => void;
+  onRefresh: () => void;
+  professionals: ProfessionalWithRelations[];
+}) {
+  const [showInviteForm, setShowInviteForm] = useState(false);
   const [form, setForm] = useState({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onInvite({ ...form, location_id: form.location_id || null, professional_id: form.professional_id || null });
     setForm({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
+    setShowInviteForm(false);
   }
   return (
     <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
       <SectionCard className="p-5">
         <Header icon={<ShieldCheck size={20} />} title="Invitar usuario" text="Registra la invitacion y dispara email si Resend esta configurado." />
-        <form onSubmit={submit} className="mt-5 grid gap-4">
-          <Input label="Email" type="email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} required />
-          <Input label="Nombre" value={form.full_name} onChange={(value) => setForm({ ...form, full_name: value })} required />
-          <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value })} options={roles.map((item) => ({ value: item, label: roleLabels[item] }))} />
-          <Select label="Sede opcional" value={form.location_id} onChange={(value) => setForm({ ...form, location_id: value })} options={[{ value: "", label: "Sin sede asignada" }, ...locations.map((item) => ({ value: item.id, label: item.name }))]} />
-          <Select label="Profesional asociado" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} options={[{ value: "", label: "Sin profesional" }, ...professionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))]} />
-          <Button disabled={disabled} type="submit" variant="primary">Enviar invitacion</Button>
-        </form>
+        {showInviteForm ? (
+          <form onSubmit={submit} className="mt-5 grid gap-4">
+            <Input label="Email" type="email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} required />
+            <Input label="Nombre" value={form.full_name} onChange={(value) => setForm({ ...form, full_name: value })} required />
+            <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value })} options={roles.map((item) => ({ value: item, label: roleLabels[item] }))} />
+            <Select label="Sede opcional" value={form.location_id} onChange={(value) => setForm({ ...form, location_id: value })} options={[{ value: "", label: "Sin sede asignada" }, ...locations.map((item) => ({ value: item.id, label: item.name }))]} />
+            <Select label="Profesional asociado" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} options={[{ value: "", label: "Sin profesional" }, ...professionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))]} />
+            <div className="flex gap-2">
+              <Button disabled={disabled} type="submit" variant="primary">Enviar invitacion</Button>
+              <Button type="button" onClick={() => setShowInviteForm(false)}>Cancelar</Button>
+            </div>
+          </form>
+        ) : (
+          <div className="mt-5">
+            <Button disabled={disabled} onClick={() => setShowInviteForm(true)} variant="primary">Invitar usuario</Button>
+          </div>
+        )}
       </SectionCard>
       <SectionCard className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
@@ -467,12 +538,26 @@ function UsersPanel({ disabled, invitations, locations, members, onInvite, onRef
           <Button onClick={onRefresh}>Actualizar</Button>
         </div>
         <div className="divide-y divide-clinic-line">
-          {members.map((member) => <MemberRow key={member.id} disabled={disabled} member={member} onRefresh={onRefresh} />)}
+          {members.map((member) => (
+            <MemberRow
+              key={member.id}
+              canDelete={currentRole === "platform_admin"}
+              disabled={disabled}
+              locations={locations}
+              member={member}
+              onDelete={onDeleteMember}
+              onRefresh={onRefresh}
+              professionals={professionals}
+            />
+          ))}
           {invitations.map((invitation) => (
-            <article key={invitation.id} className="grid gap-3 bg-amber-50/40 px-5 py-4 md:grid-cols-[1fr_130px_120px] md:items-center">
+            <article key={invitation.id} className="grid gap-3 bg-amber-50/40 px-5 py-4 md:grid-cols-[1fr_130px_120px_110px] md:items-center">
               <div><p className="font-semibold">{invitation.full_name}</p><p className="text-sm text-clinic-muted">{invitation.email}</p></div>
               <span className="text-sm font-medium">{roleLabels[invitation.role] ?? invitation.role}</span>
               <span className="rounded-lg bg-white px-3 py-2 text-center text-xs font-semibold text-amber-700">{invitation.status}</span>
+              {invitation.status === "pending" && (
+                <Button disabled={disabled} onClick={() => onCancelInvitation(invitation.id)}>Cancelar</Button>
+              )}
             </article>
           ))}
         </div>
@@ -481,19 +566,90 @@ function UsersPanel({ disabled, invitations, locations, members, onInvite, onRef
   );
 }
 
-function MemberRow({ disabled, member, onRefresh }: { disabled: boolean; member: ClinicMemberWithProfile; onRefresh: () => void }) {
+function MemberRow({
+  canDelete,
+  disabled,
+  locations,
+  member,
+  onDelete,
+  onRefresh,
+  professionals
+}: {
+  canDelete: boolean;
+  disabled: boolean;
+  locations: Location[];
+  member: ClinicMemberWithProfile;
+  onDelete: (id: string, name: string) => void;
+  onRefresh: () => void;
+  professionals: ProfessionalWithRelations[];
+}) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    role: member.role,
+    location_id: member.location_id ?? "",
+    professional_id: member.professional_id ?? ""
+  });
+
   async function toggle() {
     await updateClinicMember(member.id, { active: !member.active });
     onRefresh();
   }
-  return (
-    <article className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_140px_120px] md:items-center">
-      <div>
+
+  async function saveEdit() {
+    setSaving(true);
+    try {
+      await updateClinicMember(member.id, {
+        role: form.role,
+        location_id: form.location_id || null,
+        professional_id: form.professional_id || null
+      });
+      setEditing(false);
+      onRefresh();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <article className="grid gap-3 px-5 py-4">
         <p className="font-semibold text-clinic-ink">{member.profiles?.full_name ?? member.user_id}</p>
+        <div className="grid gap-3 md:grid-cols-3">
+          <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value })} options={roles.map((item) => ({ value: item, label: roleLabels[item] }))} />
+          <Select label="Sede" value={form.location_id} onChange={(value) => setForm({ ...form, location_id: value })} options={[{ value: "", label: "Sin sede asignada" }, ...locations.map((item) => ({ value: item.id, label: item.name }))]} />
+          <Select label="Profesional asociado" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} options={[{ value: "", label: "Sin profesional" }, ...professionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))]} />
+        </div>
+        <div className="flex gap-2">
+          <Button disabled={disabled || saving} onClick={saveEdit} variant="primary">{saving ? "Guardando..." : "Guardar cambios"}</Button>
+          <Button disabled={saving} onClick={() => setEditing(false)}>Cancelar</Button>
+        </div>
+      </article>
+    );
+  }
+
+  const memberName = member.profiles?.full_name ?? member.user_id;
+
+  return (
+    <article className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_140px_100px_100px_100px] md:items-center">
+      <div>
+        <p className="font-semibold text-clinic-ink">{memberName}</p>
         <p className="text-sm text-clinic-muted">{member.locations?.name ?? "Sin sede"} · {member.professionals ? `${member.professionals.name} ${member.professionals.last_name}` : "Sin profesional asociado"}</p>
       </div>
       <span className="text-sm font-medium">{roleLabels[member.role] ?? member.role}</span>
+      <Button disabled={disabled} onClick={() => setEditing(true)}>Editar</Button>
       <Button disabled={disabled} onClick={toggle}>{member.active ? "Desactivar" : "Activar"}</Button>
+      {canDelete && (
+        <Button
+          aria-label="Borrar usuario"
+          className="justify-self-start text-red-500 hover:bg-red-50 hover:text-red-600"
+          disabled={disabled}
+          onClick={() => onDelete(member.id, memberName)}
+          title="Borrar usuario"
+        >
+          <X size={16} />
+        </Button>
+      )}
     </article>
   );
 }

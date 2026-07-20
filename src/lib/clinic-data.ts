@@ -239,6 +239,30 @@ export async function updateClinicMember(
   }
 }
 
+const DELETE_MEMBER_ERROR_MESSAGES: Record<string, string> = {
+  UNAUTHORIZED: "Tu sesión expiró. Volvé a iniciar sesión.",
+  FORBIDDEN: "Solo el superadmin puede borrar usuarios.",
+  MEMBER_NOT_FOUND: "No pudimos encontrar ese usuario.",
+  CANNOT_DELETE_SELF: "No podés borrarte a vos mismo."
+};
+
+// Borrado real (no desactivar) de una membresia. Pasa por una RPC
+// SECURITY DEFINER (migracion 035) que valida server-side que quien
+// llama es platform_admin - la policy general de clinic_members es
+// demasiado amplia para confiar en un chequeo de rol solo en el
+// frontend (ver comentario en la migracion).
+export async function deleteClinicMember(id: string): Promise<{ id: string; clinic_id: string }> {
+  try {
+    const { data, error } = await supabase.rpc("delete_clinic_member", { p_member_id: id });
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("Failed to delete clinic member", error);
+    const code = error instanceof Error ? error.message : "";
+    throw new FriendlyDataError(DELETE_MEMBER_ERROR_MESSAGES[code] ?? "No pudimos borrar el usuario.");
+  }
+}
+
 export async function createUserInvitation(data: {
   clinic_id: string;
   email: string;
@@ -259,6 +283,22 @@ export async function createUserInvitation(data: {
   } catch (error) {
     console.error("Failed to create user invitation", error);
     throw new FriendlyDataError("No pudimos crear la invitacion.");
+  }
+}
+
+export async function cancelUserInvitation(id: string): Promise<UserInvitation> {
+  try {
+    const { data, error } = await supabase
+      .from("user_invitations")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return data as UserInvitation;
+  } catch (error) {
+    console.error("Failed to cancel invitation", error);
+    throw new FriendlyDataError("No pudimos cancelar la invitacion.");
   }
 }
 
