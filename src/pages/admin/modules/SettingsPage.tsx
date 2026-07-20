@@ -90,6 +90,11 @@ const roleLabels: Record<string, string> = {
   professional: "Profesional"
 };
 
+const invitationStatusLabels: Record<string, string> = {
+  pending: "Esperando respuesta",
+  accepted: "Aceptada"
+};
+
 const days = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
 
 export function SettingsPage() {
@@ -599,7 +604,7 @@ function UsersPanel({
             <article key={invitation.id} className="grid gap-3 bg-amber-50/40 px-5 py-4 md:grid-cols-[1fr_130px_120px_110px] md:items-center">
               <div><p className="font-semibold">{invitation.full_name}</p><p className="text-sm text-clinic-muted">{invitation.email}</p></div>
               <span className="text-sm font-medium">{roleLabels[invitation.role] ?? invitation.role}</span>
-              <span className="rounded-lg bg-white px-3 py-2 text-center text-xs font-semibold text-amber-700">{invitation.status}</span>
+              <span className="rounded-lg bg-white px-3 py-2 text-center text-xs font-semibold text-amber-700">{invitationStatusLabels[invitation.status] ?? invitation.status}</span>
               <Button
                 aria-label="Cancelar invitacion"
                 className="justify-self-start text-red-500 hover:bg-red-50 hover:text-red-600"
@@ -615,7 +620,7 @@ function UsersPanel({
             <article key={invitation.id} className="grid gap-3 bg-slate-50 px-5 py-4 md:grid-cols-[1fr_130px_120px] md:items-center">
               <div><p className="font-semibold">{invitation.full_name}</p><p className="text-sm text-clinic-muted">{invitation.email}</p></div>
               <span className="text-sm font-medium">{roleLabels[invitation.role] ?? invitation.role}</span>
-              <span className="rounded-lg bg-white px-3 py-2 text-center text-xs font-semibold text-clinic-muted">{invitation.status}</span>
+              <span className="rounded-lg bg-white px-3 py-2 text-center text-xs font-semibold text-clinic-muted">{invitationStatusLabels[invitation.status] ?? invitation.status}</span>
             </article>
           ))}
         </div>
