@@ -1,6 +1,6 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Building2, CalendarClock, Mail, MapPin, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { Building2, CalendarClock, Mail, MapPin, ShieldCheck, SlidersHorizontal, X } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
 import { useAuth } from "../../../contexts/AuthContext";
@@ -129,7 +129,11 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
   }), [role]);
 
   async function load() {
-    setLoading(true);
+    // Only show the full-page loading state on the very first load. On
+    // refetches after a save (invite, edit, cancel, toggle), keep the
+    // current content visible and just swap it in place once it resolves -
+    // otherwise every small action makes the whole tab flash blank.
+    if (!clinic) setLoading(true);
     setError("");
     try {
       const loadedClinic = await getDefaultClinic();
@@ -498,24 +502,35 @@ function UsersPanel({
   onRefresh: () => void;
   professionals: ProfessionalWithRelations[];
 }) {
+  const [showInviteForm, setShowInviteForm] = useState(false);
   const [form, setForm] = useState({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onInvite({ ...form, location_id: form.location_id || null, professional_id: form.professional_id || null });
     setForm({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
+    setShowInviteForm(false);
   }
   return (
     <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
       <SectionCard className="p-5">
         <Header icon={<ShieldCheck size={20} />} title="Invitar usuario" text="Registra la invitacion y dispara email si Resend esta configurado." />
-        <form onSubmit={submit} className="mt-5 grid gap-4">
-          <Input label="Email" type="email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} required />
-          <Input label="Nombre" value={form.full_name} onChange={(value) => setForm({ ...form, full_name: value })} required />
-          <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value })} options={roles.map((item) => ({ value: item, label: roleLabels[item] }))} />
-          <Select label="Sede opcional" value={form.location_id} onChange={(value) => setForm({ ...form, location_id: value })} options={[{ value: "", label: "Sin sede asignada" }, ...locations.map((item) => ({ value: item.id, label: item.name }))]} />
-          <Select label="Profesional asociado" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} options={[{ value: "", label: "Sin profesional" }, ...professionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))]} />
-          <Button disabled={disabled} type="submit" variant="primary">Enviar invitacion</Button>
-        </form>
+        {showInviteForm ? (
+          <form onSubmit={submit} className="mt-5 grid gap-4">
+            <Input label="Email" type="email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} required />
+            <Input label="Nombre" value={form.full_name} onChange={(value) => setForm({ ...form, full_name: value })} required />
+            <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value })} options={roles.map((item) => ({ value: item, label: roleLabels[item] }))} />
+            <Select label="Sede opcional" value={form.location_id} onChange={(value) => setForm({ ...form, location_id: value })} options={[{ value: "", label: "Sin sede asignada" }, ...locations.map((item) => ({ value: item.id, label: item.name }))]} />
+            <Select label="Profesional asociado" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} options={[{ value: "", label: "Sin profesional" }, ...professionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))]} />
+            <div className="flex gap-2">
+              <Button disabled={disabled} type="submit" variant="primary">Enviar invitacion</Button>
+              <Button type="button" onClick={() => setShowInviteForm(false)}>Cancelar</Button>
+            </div>
+          </form>
+        ) : (
+          <div className="mt-5">
+            <Button disabled={disabled} onClick={() => setShowInviteForm(true)} variant="primary">Invitar usuario</Button>
+          </div>
+        )}
       </SectionCard>
       <SectionCard className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
@@ -625,7 +640,15 @@ function MemberRow({
       <Button disabled={disabled} onClick={() => setEditing(true)}>Editar</Button>
       <Button disabled={disabled} onClick={toggle}>{member.active ? "Desactivar" : "Activar"}</Button>
       {canDelete && (
-        <Button disabled={disabled} onClick={() => onDelete(member.id, memberName)}>Borrar</Button>
+        <Button
+          aria-label="Borrar usuario"
+          className="justify-self-start text-red-500 hover:bg-red-50 hover:text-red-600"
+          disabled={disabled}
+          onClick={() => onDelete(member.id, memberName)}
+          title="Borrar usuario"
+        >
+          <X size={16} />
+        </Button>
       )}
     </article>
   );
