@@ -1,10 +1,20 @@
 import { Sparkles } from "lucide-react";
 import { AdminPageShell } from "./AdminPageShell";
 import { SectionCard } from "../../../components/admin/SectionCard";
+import { SettingsTab, SettingsTabsNav } from "./SettingsPage";
 
-export function ComingSoonPage({ title, description }: { title: string; description: string }) {
+export function ComingSoonPage({
+  title,
+  description,
+  settingsTab
+}: {
+  title: string;
+  description: string;
+  settingsTab?: SettingsTab;
+}) {
   return (
     <AdminPageShell title={title} eyebrow="Próximamente" description="Este módulo está en preparación.">
+      {settingsTab && <SettingsTabsNav activeTab={settingsTab} />}
       <SectionCard className="max-w-2xl p-6">
         <span className="grid h-11 w-11 place-items-center rounded-lg bg-teal-50 text-clinic-brand">
           <Sparkles size={20} />

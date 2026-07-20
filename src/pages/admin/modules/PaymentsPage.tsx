@@ -18,6 +18,7 @@ import { DateRangeValue, resolveDateRange } from "../../../lib/date-range";
 import { supabase } from "../../../lib/supabase";
 import { Clinic, PaymentEvent, PaymentSettings, PaymentWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
+import { SettingsTabsNav } from "./SettingsPage";
 
 type EnvHealth = {
   mercadoPagoAccessToken: boolean;
@@ -529,6 +530,7 @@ export function PaymentSettingsPage() {
       onRefresh={load}
       title="Configuracion Mercado Pago"
     >
+      <SettingsTabsNav activeTab="payments" />
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
       <section className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
