@@ -4,6 +4,7 @@ import { ChevronDown, CreditCard, ExternalLink, RefreshCw, Settings, WalletCards
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { Button } from "../../../components/ui/Button";
+import { useAuth } from "../../../contexts/AuthContext";
 import {
   getDefaultClinic,
   getPaymentById,
@@ -449,6 +450,7 @@ export function PaymentDetailPage() {
 }
 
 export function PaymentSettingsPage() {
+  const { role } = useAuth();
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
   const [form, setForm] = useState({
@@ -475,9 +477,11 @@ export function PaymentSettingsPage() {
       if (!loadedClinic) return;
       const loadedSettings = await getPaymentSettings(loadedClinic.id);
       setSettings(loadedSettings);
-      const healthResponse = await fetch("/api/health/env");
-      if (healthResponse.ok) {
-        setEnvHealth(await healthResponse.json());
+      if (role === "platform_admin") {
+        const healthResponse = await fetch("/api/health/env");
+        if (healthResponse.ok) {
+          setEnvHealth(await healthResponse.json());
+        }
       }
       if (loadedSettings) {
         setForm({
@@ -593,7 +597,7 @@ export function PaymentSettingsPage() {
         </div>
       </SectionCard>
 
-      <section className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
+      <section className={`grid gap-6 ${role === "platform_admin" ? "xl:grid-cols-[1fr_0.8fr]" : ""}`}>
         <SectionCard className="p-5">
           <div className="flex items-start gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-lg bg-teal-50 text-clinic-brand">
@@ -619,29 +623,31 @@ export function PaymentSettingsPage() {
           </form>
         </SectionCard>
 
-        <SectionCard className="p-5">
-          <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-blue-700"><WalletCards size={20} /></div>
-          <h2 className="mt-4 font-semibold text-clinic-ink">Configuración de la plataforma</h2>
-          <p className="mt-2 text-sm text-clinic-muted">
-            Estas variables son globales (una sola vez para toda la plataforma, no por clínica) y habilitan que cualquier clínica pueda conectar su propia cuenta.
-          </p>
-          <div className="mt-4 grid gap-2">
-            <EnvRow label="Mercado Pago Client ID" ready={envHealth?.mercadoPagoClientId} />
-            <EnvRow label="Mercado Pago Client Secret" ready={envHealth?.mercadoPagoClientSecret} />
-            <EnvRow label="Mercado Pago webhook secret" ready={envHealth?.mercadoPagoWebhookSecret} />
-            <EnvRow label="Clave de encriptación de tokens" ready={envHealth?.paymentTokensEncryptionKey} />
-            <EnvRow label="APP_PUBLIC_URL" ready={envHealth?.appPublicUrl} />
-            <EnvRow label="Supabase server URL" ready={envHealth?.supabaseUrl} />
-            <EnvRow label="Supabase service role key" ready={envHealth?.supabaseServiceRoleKey} />
-          </div>
-          <div className="mt-4 rounded-lg bg-clinic-surface p-3 text-sm">
-            <p className="font-semibold text-clinic-ink">Webhook URL</p>
-            <p className="mt-1 break-all text-clinic-muted">{getPublicAppUrl()}/api/payments/mercadopago/webhook</p>
-          </div>
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            Variables requeridas en Vercel: MERCADO_PAGO_CLIENT_ID, MERCADO_PAGO_CLIENT_SECRET, MERCADO_PAGO_WEBHOOK_SECRET, PAYMENT_TOKENS_ENCRYPTION_KEY, APP_PUBLIC_URL, SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.
-          </div>
-        </SectionCard>
+        {role === "platform_admin" && (
+          <SectionCard className="p-5">
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-blue-700"><WalletCards size={20} /></div>
+            <h2 className="mt-4 font-semibold text-clinic-ink">Configuración de la plataforma</h2>
+            <p className="mt-2 text-sm text-clinic-muted">
+              Solo vos ves esto (platform admin). Estas variables son globales (una sola vez para toda la plataforma, no por clínica) y habilitan que cualquier clínica pueda conectar su propia cuenta.
+            </p>
+            <div className="mt-4 grid gap-2">
+              <EnvRow label="Mercado Pago Client ID" ready={envHealth?.mercadoPagoClientId} />
+              <EnvRow label="Mercado Pago Client Secret" ready={envHealth?.mercadoPagoClientSecret} />
+              <EnvRow label="Mercado Pago webhook secret" ready={envHealth?.mercadoPagoWebhookSecret} />
+              <EnvRow label="Clave de encriptación de tokens" ready={envHealth?.paymentTokensEncryptionKey} />
+              <EnvRow label="APP_PUBLIC_URL" ready={envHealth?.appPublicUrl} />
+              <EnvRow label="Supabase server URL" ready={envHealth?.supabaseUrl} />
+              <EnvRow label="Supabase service role key" ready={envHealth?.supabaseServiceRoleKey} />
+            </div>
+            <div className="mt-4 rounded-lg bg-clinic-surface p-3 text-sm">
+              <p className="font-semibold text-clinic-ink">Webhook URL</p>
+              <p className="mt-1 break-all text-clinic-muted">{getPublicAppUrl()}/api/payments/mercadopago/webhook</p>
+            </div>
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              Variables requeridas en Vercel: MERCADO_PAGO_CLIENT_ID, MERCADO_PAGO_CLIENT_SECRET, MERCADO_PAGO_WEBHOOK_SECRET, PAYMENT_TOKENS_ENCRYPTION_KEY, APP_PUBLIC_URL, SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.
+            </div>
+          </SectionCard>
+        )}
       </section>
     </AdminPageShell>
   );
