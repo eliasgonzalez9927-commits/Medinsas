@@ -931,9 +931,12 @@ export function AgendaPage() {
                 </div>
               </div>
 
-              {form.professional_id && !professionals.find((item) => item.id === form.professional_id)?.availability_rules?.length && !availabilityLoading && (
+              {!availabilityLoading && availableDates.length === 0 && (
                 <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  Este profesional no tiene disponibilidad configurada.
+                  Este profesional no tiene disponibilidad configurada.{" "}
+                  <button type="button" onClick={() => navigate("/admin/disponibilidad")} className="font-semibold underline">
+                    Configurar disponibilidad
+                  </button>
                 </div>
               )}
 
