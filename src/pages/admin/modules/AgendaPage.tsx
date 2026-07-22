@@ -1,6 +1,19 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Copy, CreditCard, Clock3, MessageCircle, MoreVertical, Plus, RefreshCw, Search, UserCheck, UserX } from "lucide-react";
+import {
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Copy,
+  CreditCard,
+  MessageCircle,
+  MoreVertical,
+  Plus,
+  Search,
+  UserCheck,
+  UserX
+} from "lucide-react";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { RegisterPaymentPanel } from "../../../components/admin/RegisterPaymentPanel";
 import { SectionCard } from "../../../components/admin/SectionCard";
@@ -24,8 +37,7 @@ import {
   ,zonedDateTimeToUtcIso
 } from "../../../lib/clinic-data";
 import { supabase } from "../../../lib/supabase";
-import { DateRangeValue, resolveDateRange } from "../../../lib/date-range";
-import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
+import { addDays, getDateInTimeZone } from "../../../lib/date-range";
 import { useAuth } from "../../../contexts/AuthContext";
 import { canCreateOverbooking } from "../../../lib/permissions";
 import {
@@ -37,6 +49,7 @@ import {
   Location,
   PatientWithAppointments,
   ProfessionalWithRelations,
+  Service,
   ServiceWithRelations
 } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
@@ -72,6 +85,14 @@ type DateAvailability = {
   slots: AvailableSlot[];
 };
 
+type ViewMode = "day" | "week" | "month";
+
+type HuecoSlot = AvailableSlot & { professional: ProfessionalWithRelations; service: Service };
+
+type TimelineEntry =
+  | { kind: "appointment"; startsAt: string; appointment: AppointmentWithRelations }
+  | { kind: "hueco"; startsAt: string; hueco: HuecoSlot };
+
 const today = new Date().toISOString().slice(0, 10);
 
 export function AgendaPage() {
@@ -79,19 +100,18 @@ export function AgendaPage() {
   const isProfessionalRole = role === "professional" || role === "doctor";
   const myProfessionalId = isProfessionalRole ? (clinicMembership?.professional_id ?? null) : null;
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [appointments, setAppointments] = useState<AppointmentWithRelations[]>([]);
   const [professionals, setProfessionals] = useState<ProfessionalWithRelations[]>([]);
   const [services, setServices] = useState<ServiceWithRelations[]>([]);
   const [patients, setPatients] = useState<PatientWithAppointments[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>("day");
   const [selectedDate, setSelectedDate] = useState(today);
   const [professionalId, setProfessionalId] = useState(myProfessionalId ?? "all");
-  const [serviceId, setServiceId] = useState("all");
   const [status, setStatus] = useState<"all" | AppointmentStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [range, setRange] = useState<DateRangeValue>(() => resolveDateRange("today"));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -110,6 +130,10 @@ export function AgendaPage() {
   const [quickPatientOpen, setQuickPatientOpen] = useState(false);
   const [quickPatient, setQuickPatient] = useState({ first_name: "", last_name: "", phone: "" });
   const [members, setMembers] = useState<Array<{ user_id: string; profiles: { full_name: string } | null }>>([]);
+  const [huecos, setHuecos] = useState<HuecoSlot[]>([]);
+  const [huecosLoading, setHuecosLoading] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => today.slice(0, 7));
+  const [monthActivity, setMonthActivity] = useState<Record<string, number>>({});
   const [overbookingForm, setOverbookingForm] = useState<OverbookingForm>({ patient_id: "", professional_id: "", service_id: "", location_id: "", date: today, time: "09:00", duration_minutes: "30", reason: "", authorized_by: "", notes: "", confirmed: false });
   const [form, setForm] = useState<AppointmentForm>({
     patient_id: "",
@@ -122,6 +146,21 @@ export function AgendaPage() {
     reason: "",
     notes: ""
   });
+
+  const timezone = clinic?.timezone ?? "America/Argentina/Mendoza";
+
+  const range = useMemo(() => {
+    if (viewMode === "day") {
+      return { dateFrom: selectedDate, dateTo: selectedDate };
+    }
+    if (viewMode === "week") {
+      const from = mondayOf(selectedDate);
+      return { dateFrom: from, dateTo: addDays(from, 6) };
+    }
+    const monthKey = selectedDate.slice(0, 7);
+    const from = `${monthKey}-01`;
+    return { dateFrom: from, dateTo: endOfMonthOf(from) };
+  }, [viewMode, selectedDate]);
 
   async function loadBase() {
     setLoading(true);
@@ -161,14 +200,13 @@ export function AgendaPage() {
     }
   }
 
-  async function loadAppointments(clinicId = clinic?.id, timezone = clinic?.timezone ?? "America/Argentina/Mendoza") {
+  async function loadAppointments(clinicId = clinic?.id, tz = timezone) {
     if (!clinicId) return;
     const loadedAppointments = await getAppointments(clinicId, {
       dateFrom: range.dateFrom,
       dateTo: range.dateTo,
-      timezone,
+      timezone: tz,
       professionalId,
-      serviceId,
       status
     });
     setAppointments(loadedAppointments);
@@ -180,10 +218,12 @@ export function AgendaPage() {
       return;
     }
     loadBase();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    setSearchQuery(searchParams.get("search") ?? "");
+    const fromSearch = searchParams.get("search");
+    if (fromSearch) setSearchQuery(fromSearch);
   }, [searchParams]);
 
   useEffect(() => {
@@ -192,7 +232,76 @@ export function AgendaPage() {
     loadAppointments(clinic.id)
       .catch((err) => setError(err instanceof Error ? err.message : "No pudimos cargar la agenda."))
       .finally(() => setLoading(false));
-  }, [range.dateFrom, range.dateTo, professionalId, serviceId, status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range.dateFrom, range.dateTo, professionalId, status]);
+
+  // Huecos libres reales del dia seleccionado: se calculan por profesional a partir
+  // de su disponibilidad cargada (availability_rules), nunca se inventan horarios.
+  useEffect(() => {
+    if (!clinic || viewMode !== "day" || professionals.length === 0) {
+      setHuecos([]);
+      return;
+    }
+    let cancelled = false;
+    async function loadHuecos() {
+      setHuecosLoading(true);
+      try {
+        const targets = professionalId === "all" ? professionals : professionals.filter((item) => item.id === professionalId);
+        const results = await Promise.all(
+          targets.map(async (professional) => {
+            const service = professional.services?.[0];
+            if (!service) return [] as HuecoSlot[];
+            try {
+              const available = await getAvailableSlots({
+                clinicId: clinic!.id,
+                professionalId: professional.id,
+                serviceId: service.id,
+                locationId: null,
+                date: selectedDate,
+                timezone
+              });
+              return available.map((slot) => ({ ...slot, professional, service }));
+            } catch {
+              return [] as HuecoSlot[];
+            }
+          })
+        );
+        if (cancelled) return;
+        setHuecos(results.flat().sort((a, b) => a.startsAt.localeCompare(b.startsAt)));
+      } finally {
+        if (!cancelled) setHuecosLoading(false);
+      }
+    }
+    loadHuecos();
+    return () => {
+      cancelled = true;
+    };
+  }, [clinic, viewMode, professionals, professionalId, selectedDate, timezone]);
+
+  // Puntitos de actividad del mini calendario: se basan en turnos reales del mes visible.
+  useEffect(() => {
+    if (!clinic) return;
+    let cancelled = false;
+    const dateFrom = `${calendarMonth}-01`;
+    const dateTo = endOfMonthOf(dateFrom);
+    getAppointments(clinic.id, { dateFrom, dateTo, timezone })
+      .then((rows) => {
+        if (cancelled) return;
+        const counts: Record<string, number> = {};
+        rows.forEach((appointment) => {
+          if (appointment.status === "cancelled") return;
+          const day = getDateInTimeZone(new Date(appointment.starts_at), timezone);
+          counts[day] = (counts[day] ?? 0) + 1;
+        });
+        setMonthActivity(counts);
+      })
+      .catch(() => {
+        if (!cancelled) setMonthActivity({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clinic, calendarMonth, timezone]);
 
   useEffect(() => {
     if (!clinic || !form.professional_id || !form.service_id || !form.date) {
@@ -206,7 +315,7 @@ export function AgendaPage() {
       serviceId: form.service_id,
       locationId: form.location_id || null,
       date: form.date,
-      timezone: clinic.timezone ?? "America/Argentina/Mendoza"
+      timezone
     })
       .then((available) => {
         if (cancelled) return;
@@ -227,7 +336,7 @@ export function AgendaPage() {
     return () => {
       cancelled = true;
     };
-  }, [clinic?.id, form.professional_id, form.service_id, form.location_id, form.date]);
+  }, [clinic, form.professional_id, form.service_id, form.location_id, form.date, timezone]);
 
   useEffect(() => {
     if (!clinic || !form.professional_id || !form.service_id) {
@@ -289,16 +398,16 @@ export function AgendaPage() {
     return () => {
       cancelled = true;
     };
-  }, [clinic?.id, form.professional_id, form.service_id, form.location_id]);
+  }, [clinic, form.professional_id, form.service_id, form.location_id]);
 
   const metrics = useMemo(() => {
     return {
       pending: appointments.filter((item) => item.status === "pending").length,
       noShow: appointments.filter((item) => item.status === "no_show").length,
       whatsapp: appointments.filter((item) => item.whatsapp_status === "pending").length,
-      freeSlots: slots.length
+      freeSlots: huecos.length
     };
-  }, [appointments, slots]);
+  }, [appointments, huecos]);
 
   const visibleAppointments = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -319,6 +428,27 @@ export function AgendaPage() {
     });
   }, [appointments, searchQuery]);
 
+  const dayTimeline = useMemo<TimelineEntry[]>(() => {
+    if (viewMode !== "day") return [];
+    const appointmentEntries: TimelineEntry[] = visibleAppointments.map((appointment) => ({
+      kind: "appointment",
+      startsAt: appointment.starts_at,
+      appointment
+    }));
+    const huecoEntries: TimelineEntry[] =
+      status === "all" && !searchQuery.trim()
+        ? huecos.map((hueco) => ({ kind: "hueco", startsAt: hueco.startsAt, hueco }))
+        : [];
+    return [...appointmentEntries, ...huecoEntries].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  }, [viewMode, visibleAppointments, huecos, status, searchQuery]);
+
+  const nextAppointment = useMemo(() => {
+    const now = Date.now();
+    return [...visibleAppointments]
+      .filter((item) => ["pending", "confirmed", "urgent", "rescheduled"].includes(item.status) && new Date(item.starts_at).getTime() >= now)
+      .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())[0] ?? null;
+  }, [visibleAppointments]);
+
   function openCreate() {
     setFormOpen(true);
     setNotice("");
@@ -331,6 +461,21 @@ export function AgendaPage() {
       service_id: current.service_id || services[0]?.id || "",
       location_id: current.location_id || locations[0]?.id || "",
       reason: current.reason || services[0]?.name || ""
+    }));
+  }
+
+  function occupySlot(hueco: HuecoSlot) {
+    setFormOpen(true);
+    setNotice("");
+    setForm((current) => ({
+      ...current,
+      patient_id: current.patient_id || patients[0]?.id || "",
+      professional_id: hueco.professional.id,
+      service_id: hueco.service.id,
+      location_id: current.location_id || locations[0]?.id || "",
+      date: selectedDate,
+      slot_starts_at: hueco.startsAt,
+      reason: hueco.service.name
     }));
   }
 
@@ -452,16 +597,6 @@ export function AgendaPage() {
     }
   }
 
-  function setAgendaPreset(preset: "today" | "this_week" | "this_month" | "custom") {
-    const next = new URLSearchParams(searchParams);
-    next.set("preset", preset);
-    if (preset !== "custom") {
-      next.delete("from");
-      next.delete("to");
-    }
-    setSearchParams(next, { replace: true });
-  }
-
   async function refreshAgenda() {
     setLoading(true);
     setError("");
@@ -491,7 +626,7 @@ export function AgendaPage() {
         serviceId: form.service_id,
         locationId: form.location_id || null,
         date: form.date,
-        timezone: clinic.timezone ?? "America/Argentina/Mendoza"
+        timezone
       });
       if (!freshSlots.some((slot) => slot.startsAt === selectedSlot.startsAt)) {
         setSlots(freshSlots);
@@ -578,6 +713,26 @@ export function AgendaPage() {
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   }
 
+  function goToDate(date: string) {
+    setSelectedDate(date);
+    setCalendarMonth(date.slice(0, 7));
+    setViewMode("day");
+  }
+
+  function stepDay(delta: number) {
+    setSelectedDate((current) => addDays(current, delta));
+  }
+
+  const dateLabel = useMemo(() => {
+    const isToday = selectedDate === today;
+    const weekday = new Intl.DateTimeFormat("es-AR", { weekday: "long", timeZone: "UTC" }).format(new Date(`${selectedDate}T12:00:00Z`));
+    const short = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${selectedDate}T12:00:00Z`));
+    return {
+      primary: isToday ? `Hoy, ${short}` : short,
+      secondary: capitalize(weekday)
+    };
+  }, [selectedDate]);
+
   if (isProfessionalRole && !myProfessionalId) {
     return (
       <AdminPageShell description="" eyebrow="Agenda clinica" title="Mi agenda">
@@ -591,23 +746,14 @@ export function AgendaPage() {
 
   return (
     <AdminPageShell
-      actionLabel={isProfessionalRole ? undefined : "Crear turno manual"}
       description="Vista operativa para recepcion: confirma, cancela, marca ausencias y ocupa huecos libres."
       eyebrow="Agenda clinica"
       onCreateAppointment={isProfessionalRole ? undefined : openCreate}
-      onAction={isProfessionalRole ? undefined : openCreate}
       onRefresh={refreshAgenda}
       title="Agenda"
     >
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
-
-      <section className="grid gap-4 md:grid-cols-4">
-        <QuickAction icon={<Clock3 size={18} />} label={`${metrics.pending} turnos sin confirmar`} />
-        <QuickAction icon={<UserX size={18} />} label={`${metrics.noShow} pacientes no asistieron`} />
-        <QuickAction icon={<MessageCircle size={18} />} label={`${metrics.whatsapp} recordatorios pendientes`} />
-        <QuickAction icon={<UserCheck size={18} />} label={`${metrics.freeSlots} huecos disponibles`} />
-      </section>
 
       {clinic && (
         <RegisterPaymentPanel
@@ -634,6 +780,104 @@ export function AgendaPage() {
           } : undefined}
         />
       )}
+
+      {/* Barra compacta de control de agenda */}
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-clinic-line bg-white px-4 py-3 shadow-[0_2px_10px_rgba(13,54,66,0.03)]">
+        <div className="flex items-center gap-1">
+          <IconButton label="Día anterior" onClick={() => stepDay(-1)}>
+            <ChevronLeft size={17} />
+          </IconButton>
+          <div className="flex items-center gap-2 rounded-xl border border-clinic-line px-3 py-1.5">
+            <CalendarIcon size={16} className="text-clinic-brand" />
+            <div className="leading-tight">
+              <p className="text-sm font-semibold text-clinic-ink">{dateLabel.primary}</p>
+              <p className="text-xs text-clinic-muted">{dateLabel.secondary}</p>
+            </div>
+          </div>
+          <IconButton label="Día siguiente" onClick={() => stepDay(1)}>
+            <ChevronRight size={17} />
+          </IconButton>
+        </div>
+
+        <div className="flex rounded-xl border border-clinic-line p-1">
+          {(["day", "week", "month"] as ViewMode[]).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewMode(mode)}
+              className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition ${
+                viewMode === mode ? "bg-clinic-brand text-white" : "text-clinic-muted hover:text-clinic-ink"
+              }`}
+            >
+              {mode === "day" ? "Día" : mode === "week" ? "Semana" : "Mes"}
+            </button>
+          ))}
+        </div>
+
+        {!isProfessionalRole && (
+          <label className="flex items-center gap-2 text-sm">
+            <span className="font-medium text-clinic-muted">Profesional</span>
+            <select
+              value={professionalId}
+              onChange={(event) => setProfessionalId(event.target.value)}
+              className="h-9 rounded-lg border border-clinic-line bg-white px-2 text-sm text-clinic-ink outline-none focus:border-clinic-brand"
+            >
+              <option value="all">Todos</option>
+              {professionals.map((professional) => (
+                <option key={professional.id} value={professional.id}>
+                  Dr/a. {professional.name} {professional.last_name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <label className="flex items-center gap-2 text-sm">
+          <span className="font-medium text-clinic-muted">Estado</span>
+          <select
+            value={status}
+            onChange={(event) => setStatus(event.target.value as "all" | AppointmentStatus)}
+            className="h-9 rounded-lg border border-clinic-line bg-white px-2 text-sm text-clinic-ink outline-none focus:border-clinic-brand"
+          >
+            <option value="all">Todos</option>
+            <option value="pending">Pendiente</option>
+            <option value="confirmed">Confirmado</option>
+            <option value="cancelled">Cancelado</option>
+            <option value="rescheduled">Reprogramado</option>
+            <option value="completed">Atendido</option>
+            <option value="no_show">No asistió</option>
+          </select>
+        </label>
+
+        <div className="relative min-w-[180px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-clinic-muted" size={15} />
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Buscar turno..."
+            className="h-9 w-full rounded-lg border border-clinic-line py-2 pl-8 pr-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+          />
+        </div>
+
+        <div className="ml-auto flex gap-2">
+          {canCreateOverbooking(role) && (
+            <Button onClick={openOverbooking}>Sobreturno</Button>
+          )}
+          {!isProfessionalRole && (
+            <Button icon={<Plus size={16} />} onClick={openCreate} variant="primary">
+              Nuevo turno
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Mini KPIs operativos */}
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiChip icon={<Clock3 size={16} />} tone="amber" value={metrics.pending} label="Sin confirmar" />
+        <KpiChip icon={<MessageCircle size={16} />} tone="mint" value={metrics.whatsapp} label="Recordatorios pendientes" />
+        <KpiChip icon={<UserCheck size={16} />} tone="mint" value={huecosLoading ? "…" : metrics.freeSlots} label="Huecos libres" />
+        <KpiChip icon={<UserX size={16} />} tone="red" value={metrics.noShow} label="Ausencias hoy" />
+      </section>
 
       {formOpen && (
         <SectionCard className="p-5">
@@ -682,10 +926,16 @@ export function AgendaPage() {
                   </Button>
                   {canCreateOverbooking(role) && <Button onClick={openOverbooking}>Crear sobreturno</Button>}
                   <Button onClick={() => navigate("/admin/disponibilidad")}>
-                    Gestionar disponibilidad
+                    Configurar disponibilidad
                   </Button>
                 </div>
               </div>
+
+              {form.professional_id && !professionals.find((item) => item.id === form.professional_id)?.availability_rules?.length && !availabilityLoading && (
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  Este profesional no tiene disponibilidad configurada.
+                </div>
+              )}
 
               <div className="mt-4 rounded-lg border border-[#dcebea] bg-white px-4 py-3 text-sm font-medium text-clinic-ink">
                 {availabilityLoading ? "Buscando disponibilidad..." : availabilityMessage || "Seleccioná profesional, servicio y sede para ver disponibilidad."}
@@ -776,251 +1026,530 @@ export function AgendaPage() {
         </SectionCard>
       )}
 
-      <SectionCard className="p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="font-semibold text-clinic-ink">Vista de agenda</h2>
-            <p className="text-sm text-clinic-muted">{range.label}. Filtrá, actualizá y creá turnos desde la misma agenda.</p>
+      {/* Layout principal: agenda + columna lateral */}
+      <section className="grid gap-6 xl:grid-cols-[1fr_360px]">
+        <SectionCard className="overflow-visible p-0">
+          <div className="border-b border-clinic-line px-5 py-4">
+            <h2 className="font-semibold capitalize text-clinic-ink">
+              {viewMode === "day"
+                ? `${dateLabel.secondary} ${formatDateNoWeekday(selectedDate)}`
+                : viewMode === "week"
+                  ? `Semana del ${formatShortDateLabel(range.dateFrom)} al ${formatShortDateLabel(range.dateTo)}`
+                  : formatMonthLabel(selectedDate)}
+            </h2>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setAgendaPreset("today")}>Día</Button>
-            <Button onClick={() => setAgendaPreset("this_week")}>Semana</Button>
-            <Button onClick={() => setAgendaPreset("this_month")}>Mes</Button>
-            <Button onClick={() => setAgendaPreset("custom")}>Rango</Button>
-            <Button icon={<RefreshCw size={16} />} onClick={refreshAgenda}>Actualizar</Button>
-            {!isProfessionalRole && (
-              <Button icon={<Plus size={16} />} onClick={openCreate} variant="primary">Nuevo turno</Button>
-            )}
-            {canCreateOverbooking(role) && <Button onClick={openOverbooking}>Sobreturno</Button>}
-          </div>
-        </div>
-        <DateRangeFilter timezone={clinic?.timezone ?? "America/Argentina/Mendoza"} defaultPreset="today" onChange={(nextRange) => { setRange(nextRange); setSelectedDate(nextRange.dateFrom); }} />
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_180px]">
-          {isProfessionalRole ? (
-            <label>
-              <span className="text-sm font-medium text-clinic-ink">Profesional</span>
-              <div className="mt-2 flex h-10 w-full items-center rounded-lg border border-clinic-line bg-clinic-surface px-3 text-sm text-clinic-ink">
-                {(() => {
-                  const mine = professionals.find((item) => item.id === myProfessionalId);
-                  return mine ? `Dr/a. ${mine.name} ${mine.last_name}` : "Tu perfil profesional";
-                })()}
-              </div>
-            </label>
-          ) : (
-            <Select label="Profesional" value={professionalId} onChange={setProfessionalId}>
-              <option value="all">Todos</option>
-              {professionals.map((professional) => (
-                <option key={professional.id} value={professional.id}>
-                  Dr/a. {professional.name} {professional.last_name}
-                </option>
-              ))}
-            </Select>
-          )}
-          <Select label="Servicio" value={serviceId} onChange={setServiceId}>
-            <option value="all">Todos</option>
-            {services.map((service) => (
-              <option key={service.id} value={service.id}>
-                {service.name}
-              </option>
-            ))}
-          </Select>
-          <Select label="Estado" value={status} onChange={(value) => setStatus(value as "all" | AppointmentStatus)}>
-            <option value="all">Todos</option>
-            <option value="pending">Pendiente</option>
-            <option value="confirmed">Confirmado</option>
-            <option value="cancelled">Cancelado</option>
-            <option value="rescheduled">Reprogramado</option>
-            <option value="completed">Atendido</option>
-            <option value="no_show">No asistio</option>
-          </Select>
-        </div>
-        <label className="mt-4 block">
-          <span className="text-sm font-medium text-clinic-ink">Buscar turno</span>
-          <div className="relative mt-2">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-clinic-muted" size={16} />
-            <input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Código MED, paciente, DNI, teléfono, profesional o servicio"
-              className="h-10 w-full rounded-lg border border-clinic-line py-2 pl-9 pr-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
-            />
-          </div>
-        </label>
-      </SectionCard>
 
-      <SectionCard className="overflow-visible">
-        <div className="flex items-center justify-between border-b border-clinic-line px-5 py-4">
-          <h2 className="font-semibold text-clinic-ink">{range.preset === "today" ? "Turnos del día" : "Turnos del período"}</h2>
-          {!isProfessionalRole && (
-            <Button icon={<Plus size={16} />} onClick={openCreate}>
-              Nuevo
-            </Button>
-          )}
-        </div>
-        {loading ? (
-          <div className="px-5 py-10 text-center text-sm text-clinic-muted">Cargando turnos...</div>
-        ) : visibleAppointments.length === 0 ? (
-          <div className="px-5 py-10 text-center text-sm text-clinic-muted">
-            No hay turnos que coincidan con los filtros o la búsqueda.
-          </div>
-        ) : (
-          <div className="divide-y divide-clinic-line">
-            {visibleAppointments.map((appointment) => (
-              <article
-                key={appointment.id}
-                className="grid gap-4 px-5 py-4 lg:grid-cols-[90px_1fr_1fr_170px_360px] lg:items-center"
-              >
-                <div>
-                  <p className="font-semibold text-clinic-brand">{formatTime(appointment.starts_at, clinic?.timezone ?? undefined)}</p>
-                  {appointment.is_overbooking && <span className="mt-1 inline-flex rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">Sobreturno</span>}
-                </div>
-                <div>
-                  {appointment.patient ? (
-                    <Link
-                      to={
-                        isProfessionalRole
-                          ? `/admin/mi-agenda/pacientes/${appointment.patient_id}`
-                          : `/admin/pacientes/${appointment.patient_id}`
-                      }
-                      className="font-semibold text-clinic-ink hover:text-clinic-brand hover:underline"
-                    >
-                      {appointment.patient.first_name} {appointment.patient.last_name}
-                    </Link>
+          {loading ? (
+            <div className="px-5 py-10 text-center text-sm text-clinic-muted">Cargando turnos...</div>
+          ) : viewMode === "day" ? (
+            dayTimeline.length === 0 ? (
+              appointments.length === 0 && huecos.length === 0 ? (
+                <EmptyState
+                  title="No hay turnos programados para este día."
+                  description="Creá un nuevo turno o revisá la disponibilidad para ocupar horarios libres."
+                  actions={
+                    <>
+                      {!isProfessionalRole && <Button variant="primary" onClick={openCreate}>Nuevo turno</Button>}
+                      <Button onClick={() => navigate("/admin/disponibilidad")}>Ver disponibilidad</Button>
+                    </>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  title="No encontramos turnos con esos filtros."
+                  description="Probá cambiar el profesional, estado o búsqueda."
+                  actions={<Button onClick={() => { setProfessionalId("all"); setStatus("all"); setSearchQuery(""); }}>Limpiar filtros</Button>}
+                />
+              )
+            ) : (
+              <div className="divide-y divide-clinic-line">
+                {dayTimeline.map((entry) =>
+                  entry.kind === "appointment" ? (
+                    <TimelineRow key={entry.appointment.id} time={formatTime(entry.startsAt, timezone)}>
+                      <AppointmentCard
+                        appointment={entry.appointment}
+                        isProfessionalRole={isProfessionalRole}
+                        myProfessionalId={myProfessionalId}
+                        openMenuId={openMenuId}
+                        setOpenMenuId={setOpenMenuId}
+                        paymentLinks={paymentLinks}
+                        onConfirm={() => handleStatus(entry.appointment.id, "confirm")}
+                        onComplete={() => handleStatus(entry.appointment.id, "completed")}
+                        onNoShow={() => handleStatus(entry.appointment.id, "no_show")}
+                        onCancel={() => handleStatus(entry.appointment.id, "cancel")}
+                        onRegisterPayment={() => setPaymentAppt(entry.appointment)}
+                        onGeneratePaymentLink={() => generatePaymentLink(entry.appointment)}
+                        onCopyLink={() => {
+                          navigator.clipboard?.writeText(paymentLinks[entry.appointment.id]);
+                          setNotice("Link copiado.");
+                        }}
+                        onCopyMessage={() => copyWhatsAppMessage(entry.appointment)}
+                        onOpenWhatsApp={() => openWhatsApp(entry.appointment)}
+                        onStartAttention={() => navigate(`/admin/mi-agenda/atencion/${entry.appointment.id}`)}
+                      />
+                    </TimelineRow>
                   ) : (
-                    <p className="font-semibold text-clinic-ink">Paciente sin vincular</p>
-                  )}
-                  <p className="text-sm text-clinic-muted">
-                    Origen: {sourceLabel(appointment.source)} · {appointment.appointment_type === "telemedicine" ? "Telemedicina" : "Presencial"}
-                  </p>
-                  {appointment.public_code && <p className="mt-1 text-xs font-semibold text-clinic-brand">Código: {appointment.public_code}</p>}
+                    <TimelineRow key={`hueco-${entry.hueco.professional.id}-${entry.startsAt}`} time={formatTime(entry.startsAt, timezone)}>
+                      <HuecoCard hueco={entry.hueco} onOcupar={() => occupySlot(entry.hueco)} disabled={isProfessionalRole} />
+                    </TimelineRow>
+                  )
+                )}
+              </div>
+            )
+          ) : viewMode === "week" ? (
+            <WeekView
+              dateFrom={range.dateFrom}
+              dateTo={range.dateTo}
+              appointments={visibleAppointments}
+              timezone={timezone}
+              onSelectDay={goToDate}
+            />
+          ) : (
+            <MonthGrid
+              month={selectedDate.slice(0, 7)}
+              selectedDate={selectedDate}
+              activity={monthActivity}
+              onSelectDay={goToDate}
+            />
+          )}
+        </SectionCard>
+
+        {/* Columna derecha */}
+        <div className="grid gap-4">
+          <SectionCard className="border-[#cfe9e4] bg-[#f3faf9] p-4">
+            <p className="text-sm font-semibold text-clinic-ink">Próximo turno</p>
+            {nextAppointment ? (
+              <div className="mt-3">
+                <div className="flex items-baseline justify-between">
+                  <p className="text-2xl font-semibold text-clinic-brand">{formatTime(nextAppointment.starts_at, timezone)}</p>
+                  <span className="text-xs font-semibold text-clinic-muted">{minutesUntilLabel(nextAppointment.starts_at)}</span>
                 </div>
-                <div>
-                  {!isProfessionalRole && (
-                    <p className="font-medium text-clinic-ink">
-                      Dr/a. {appointment.professional?.name ?? ""} {appointment.professional?.last_name ?? ""}
-                    </p>
-                  )}
-                  <p className={isProfessionalRole ? "font-medium text-clinic-ink" : "text-sm text-clinic-muted"}>
-                    {appointment.service?.name ?? appointment.reason}
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <AppointmentStatusBadge status={appointment.status} />
-                  <PaymentStatusBadge status={appointment.payment_status ?? "unpaid"} />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {!isProfessionalRole && appointment.status === "pending" && (
-                    <Button onClick={() => handleStatus(appointment.id, "confirm")}>Confirmar</Button>
-                  )}
-                  {!isProfessionalRole && !["cancelled", "completed"].includes(appointment.status) && (
-                    <Button onClick={() => handleStatus(appointment.id, "completed")}>Atendido</Button>
-                  )}
-                  {isProfessionalRole &&
-                    appointment.professional_id === myProfessionalId &&
-                    !["cancelled", "completed"].includes(appointment.status) && (
-                      <Button onClick={() => navigate(`/admin/mi-agenda/atencion/${appointment.id}`)} variant="primary">
-                        Iniciar atención
-                      </Button>
-                    )}
-                  <div className="relative">
-                    <Button
-                      variant="ghost"
-                      aria-haspopup="menu"
-                      aria-expanded={openMenuId === appointment.id}
-                      aria-label="Más acciones"
-                      onClick={() => setOpenMenuId((current) => (current === appointment.id ? null : appointment.id))}
-                    >
-                      <MoreVertical size={16} />
-                    </Button>
-                    {openMenuId === appointment.id && (
-                      <div
-                        className="absolute right-0 top-11 z-20 w-56 rounded-xl border border-clinic-line bg-white p-1.5 shadow-[0_18px_42px_rgba(13,54,66,0.12)]"
-                        role="menu"
-                      >
-                        {!isProfessionalRole && (
-                          <AppointmentMenuItem
-                            icon={<CreditCard size={16} />}
-                            onClick={() => {
-                              setPaymentAppt(appointment);
-                              setOpenMenuId(null);
-                            }}
-                          >
-                            Registrar pago
-                          </AppointmentMenuItem>
-                        )}
-                        <AppointmentMenuItem
-                          icon={<CreditCard size={16} />}
-                          onClick={() => {
-                            generatePaymentLink(appointment);
-                            setOpenMenuId(null);
-                          }}
-                        >
-                          Generar link
-                        </AppointmentMenuItem>
-                        {paymentLinks[appointment.id] && (
-                          <AppointmentMenuItem
-                            icon={<Copy size={16} />}
-                            onClick={() => {
-                              navigator.clipboard?.writeText(paymentLinks[appointment.id]);
-                              setNotice("Link copiado.");
-                              setOpenMenuId(null);
-                            }}
-                          >
-                            Copiar link
-                          </AppointmentMenuItem>
-                        )}
-                        <AppointmentMenuItem
-                          icon={<Copy size={16} />}
-                          disabled={!appointment.patient?.phone}
-                          onClick={() => {
-                            copyWhatsAppMessage(appointment);
-                            setOpenMenuId(null);
-                          }}
-                        >
-                          Copiar mensaje
-                        </AppointmentMenuItem>
-                        <AppointmentMenuItem
-                          icon={<MessageCircle size={16} />}
-                          disabled={!appointment.patient?.phone}
-                          onClick={() => {
-                            openWhatsApp(appointment);
-                            setOpenMenuId(null);
-                          }}
-                        >
-                          Abrir WhatsApp
-                        </AppointmentMenuItem>
-                        {!isProfessionalRole && !["cancelled", "completed"].includes(appointment.status) && (
-                          <>
-                            <AppointmentMenuItem
-                              onClick={() => {
-                                handleStatus(appointment.id, "no_show");
-                                setOpenMenuId(null);
-                              }}
-                            >
-                              No asistio
-                            </AppointmentMenuItem>
-                            <AppointmentMenuItem
-                              tone="danger"
-                              onClick={() => {
-                                handleStatus(appointment.id, "cancel");
-                                setOpenMenuId(null);
-                              }}
-                            >
-                              Cancelar
-                            </AppointmentMenuItem>
-                          </>
-                        )}
-                      </div>
+                <p className="mt-2 font-semibold text-clinic-ink">
+                  {nextAppointment.patient ? `${nextAppointment.patient.first_name} ${nextAppointment.patient.last_name}` : "Paciente sin vincular"}
+                </p>
+                <p className="text-sm text-clinic-muted">
+                  Dr/a. {nextAppointment.professional?.name} {nextAppointment.professional?.last_name}
+                </p>
+                <p className="text-sm text-clinic-muted">{nextAppointment.service?.name ?? nextAppointment.reason}</p>
+                <div className="mt-2"><AppointmentStatusBadge status={nextAppointment.status} /></div>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-clinic-muted">Sin próximos turnos en la vista actual.</p>
+            )}
+          </SectionCard>
+
+          <SectionCard className="p-4">
+            <MiniCalendar
+              month={calendarMonth}
+              selectedDate={selectedDate}
+              activity={monthActivity}
+              onMonthChange={setCalendarMonth}
+              onSelectDate={goToDate}
+            />
+          </SectionCard>
+
+          <SectionCard className="p-4">
+            <p className="text-sm font-semibold text-clinic-ink">Huecos disponibles hoy</p>
+            <div className="mt-3 grid gap-2">
+              {huecosLoading ? (
+                <p className="text-sm text-clinic-muted">Buscando huecos...</p>
+              ) : huecos.length === 0 ? (
+                <p className="text-sm text-clinic-muted">No hay huecos libres para este día.</p>
+              ) : (
+                huecos.slice(0, 5).map((hueco) => (
+                  <div key={`${hueco.professional.id}-${hueco.startsAt}`} className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-[#8FD2C6] bg-white px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-clinic-ink">
+                        {hueco.time} · Dr/a. {hueco.professional.name} {hueco.professional.last_name}
+                      </p>
+                      <p className="truncate text-xs text-clinic-muted">{hueco.professional.specialties?.[0]?.name ?? hueco.service.name}</p>
+                    </div>
+                    {!isProfessionalRole && (
+                      <Button className="shrink-0" onClick={() => occupySlot(hueco)}>Ocupar</Button>
                     )}
                   </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </SectionCard>
+                ))
+              )}
+            </div>
+            {huecos.length > 5 && (
+              <button type="button" onClick={() => navigate("/admin/disponibilidad")} className="mt-3 text-sm font-semibold text-clinic-brand">
+                Ver todos los huecos
+              </button>
+            )}
+          </SectionCard>
+        </div>
+      </section>
     </AdminPageShell>
   );
+}
+
+function TimelineRow({ time, children }: { time: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[64px_1fr] gap-3 px-5 py-3 sm:grid-cols-[76px_1fr]">
+      <p className="pt-3 text-sm font-semibold text-clinic-brand">{time}</p>
+      {children}
+    </div>
+  );
+}
+
+function AppointmentCard({
+  appointment,
+  isProfessionalRole,
+  myProfessionalId,
+  openMenuId,
+  setOpenMenuId,
+  paymentLinks,
+  onConfirm,
+  onComplete,
+  onNoShow,
+  onCancel,
+  onRegisterPayment,
+  onGeneratePaymentLink,
+  onCopyLink,
+  onCopyMessage,
+  onOpenWhatsApp,
+  onStartAttention
+}: {
+  appointment: AppointmentWithRelations;
+  isProfessionalRole: boolean;
+  myProfessionalId: string | null;
+  openMenuId: string | null;
+  setOpenMenuId: (value: string | null) => void;
+  paymentLinks: Record<string, string>;
+  onConfirm: () => void;
+  onComplete: () => void;
+  onNoShow: () => void;
+  onCancel: () => void;
+  onRegisterPayment: () => void;
+  onGeneratePaymentLink: () => void;
+  onCopyLink: () => void;
+  onCopyMessage: () => void;
+  onOpenWhatsApp: () => void;
+  onStartAttention: () => void;
+}) {
+  const tone =
+    appointment.status === "pending"
+      ? "border-l-amber-400 bg-amber-50/40"
+      : appointment.status === "cancelled" || appointment.status === "no_show"
+        ? "border-l-red-300 bg-red-50/40"
+        : appointment.is_overbooking
+          ? "border-l-clinic-brand bg-[#E6F4F1]/50"
+          : "border-l-[#8FD2C6] bg-[#F3FAF9]";
+
+  return (
+    <article className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border border-l-4 border-clinic-line ${tone} px-4 py-3`}>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          {appointment.patient ? (
+            <Link
+              to={isProfessionalRole ? `/admin/mi-agenda/pacientes/${appointment.patient_id}` : `/admin/pacientes/${appointment.patient_id}`}
+              className="font-semibold text-clinic-ink hover:text-clinic-brand hover:underline"
+            >
+              {appointment.patient.first_name} {appointment.patient.last_name}
+            </Link>
+          ) : (
+            <p className="font-semibold text-clinic-ink">Paciente sin vincular</p>
+          )}
+          {appointment.is_overbooking && <span className="rounded-md bg-[#E6F4F1] px-2 py-0.5 text-xs font-semibold text-clinic-brand">Sobreturno</span>}
+        </div>
+        <p className="mt-0.5 text-xs text-clinic-muted">
+          {appointment.patient?.document_number ? `DNI ${appointment.patient.document_number} · ` : ""}
+          {appointment.public_code ?? ""}
+        </p>
+        <p className="text-xs text-clinic-muted">Origen: {sourceLabel(appointment.source)}</p>
+      </div>
+
+      {!isProfessionalRole && (
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-clinic-ink">
+            Dr/a. {appointment.professional?.name ?? ""} {appointment.professional?.last_name ?? ""}
+          </p>
+        </div>
+      )}
+
+      <div className="min-w-0">
+        <p className="truncate text-sm text-clinic-ink">{appointment.service?.name ?? appointment.reason}</p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <AppointmentStatusBadge status={appointment.status} />
+        <PaymentStatusBadge status={appointment.payment_status ?? "unpaid"} />
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        {isProfessionalRole && appointment.professional_id === myProfessionalId && !["cancelled", "completed"].includes(appointment.status) && (
+          <Button onClick={onStartAttention} variant="primary">Iniciar atención</Button>
+        )}
+        {!isProfessionalRole && appointment.status === "pending" && (
+          <IconButton label="Confirmar" onClick={onConfirm}>
+            <UserCheck size={16} />
+          </IconButton>
+        )}
+        {appointment.patient?.phone && (
+          <IconButton label="Abrir WhatsApp" onClick={onOpenWhatsApp}>
+            <MessageCircle size={16} />
+          </IconButton>
+        )}
+        <div className="relative">
+          <IconButton
+            label="Más acciones"
+            onClick={() => setOpenMenuId(openMenuId === appointment.id ? null : appointment.id)}
+          >
+            <MoreVertical size={16} />
+          </IconButton>
+          {openMenuId === appointment.id && (
+            <div className="absolute right-0 top-11 z-20 w-56 rounded-xl border border-clinic-line bg-white p-1.5 shadow-[0_18px_42px_rgba(13,54,66,0.12)]" role="menu">
+              {!isProfessionalRole && appointment.status === "pending" && (
+                <AppointmentMenuItem icon={<UserCheck size={16} />} onClick={() => { onConfirm(); setOpenMenuId(null); }}>
+                  Confirmar
+                </AppointmentMenuItem>
+              )}
+              {!isProfessionalRole && !["cancelled", "completed"].includes(appointment.status) && (
+                <AppointmentMenuItem icon={<UserCheck size={16} />} onClick={() => { onComplete(); setOpenMenuId(null); }}>
+                  Marcar atendido
+                </AppointmentMenuItem>
+              )}
+              {!isProfessionalRole && (
+                <AppointmentMenuItem icon={<CreditCard size={16} />} onClick={() => { onRegisterPayment(); setOpenMenuId(null); }}>
+                  Registrar pago
+                </AppointmentMenuItem>
+              )}
+              <AppointmentMenuItem icon={<CreditCard size={16} />} onClick={() => { onGeneratePaymentLink(); setOpenMenuId(null); }}>
+                Generar link de pago
+              </AppointmentMenuItem>
+              {paymentLinks[appointment.id] && (
+                <AppointmentMenuItem icon={<Copy size={16} />} onClick={() => { onCopyLink(); setOpenMenuId(null); }}>
+                  Copiar link
+                </AppointmentMenuItem>
+              )}
+              <AppointmentMenuItem icon={<Copy size={16} />} disabled={!appointment.patient?.phone} onClick={() => { onCopyMessage(); setOpenMenuId(null); }}>
+                Copiar mensaje
+              </AppointmentMenuItem>
+              {!isProfessionalRole && !["cancelled", "completed"].includes(appointment.status) && (
+                <>
+                  <AppointmentMenuItem onClick={() => { onNoShow(); setOpenMenuId(null); }}>
+                    Marcar no asistió
+                  </AppointmentMenuItem>
+                  <AppointmentMenuItem tone="danger" onClick={() => { onCancel(); setOpenMenuId(null); }}>
+                    Cancelar
+                  </AppointmentMenuItem>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function HuecoCard({ hueco, onOcupar, disabled }: { hueco: HuecoSlot; onOcupar: () => void; disabled?: boolean }) {
+  return (
+    <article className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-[#8FD2C6] bg-white px-4 py-3">
+      <div className="flex items-center gap-3">
+        <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#E6F4F1] text-clinic-brand">
+          <Clock3 size={16} />
+        </span>
+        <div>
+          <p className="font-semibold text-clinic-ink">Hueco libre</p>
+          <p className="text-xs text-clinic-muted">Disponible para ocupar</p>
+        </div>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-clinic-ink">
+          Dr/a. {hueco.professional.name} {hueco.professional.last_name}
+        </p>
+        <p className="truncate text-xs text-clinic-muted">{hueco.professional.specialties?.[0]?.name ?? hueco.service.name}</p>
+      </div>
+      {!disabled && (
+        <Button variant="primary" onClick={onOcupar}>Ocupar</Button>
+      )}
+    </article>
+  );
+}
+
+function WeekView({
+  dateFrom,
+  dateTo,
+  appointments,
+  timezone,
+  onSelectDay
+}: {
+  dateFrom: string;
+  dateTo: string;
+  appointments: AppointmentWithRelations[];
+  timezone: string;
+  onSelectDay: (date: string) => void;
+}) {
+  const days: string[] = [];
+  let cursor = dateFrom;
+  while (cursor <= dateTo) {
+    days.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return (
+    <div className="divide-y divide-clinic-line">
+      {days.map((day) => {
+        const dayAppointments = appointments
+          .filter((appointment) => getDateInTimeZone(new Date(appointment.starts_at), timezone) === day)
+          .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+        return (
+          <div key={day} className="px-5 py-4">
+            <button type="button" onClick={() => onSelectDay(day)} className="flex items-baseline gap-2">
+              <span className="font-semibold capitalize text-clinic-ink">{formatShortDateLabel(day)}</span>
+              {day === today && <span className="rounded-md bg-[#E6F4F1] px-2 py-0.5 text-xs font-semibold text-clinic-brand">Hoy</span>}
+            </button>
+            <div className="mt-2 grid gap-2">
+              {dayAppointments.length === 0 ? (
+                <p className="text-sm text-clinic-muted">Sin turnos.</p>
+              ) : (
+                dayAppointments.map((appointment) => (
+                  <div key={appointment.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-clinic-line px-3 py-2 text-sm">
+                    <span className="font-semibold text-clinic-brand">{formatTime(appointment.starts_at, timezone)}</span>
+                    <span className="font-medium text-clinic-ink">
+                      {appointment.patient ? `${appointment.patient.first_name} ${appointment.patient.last_name}` : "Paciente sin vincular"}
+                    </span>
+                    <span className="text-clinic-muted">{appointment.service?.name ?? appointment.reason}</span>
+                    <AppointmentStatusBadge status={appointment.status} />
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MonthGrid({
+  month,
+  selectedDate,
+  activity,
+  onSelectDay
+}: {
+  month: string;
+  selectedDate: string;
+  activity: Record<string, number>;
+  onSelectDay: (date: string) => void;
+}) {
+  const cells = buildMonthCells(month);
+  return (
+    <div className="p-5">
+      <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-clinic-muted">
+        {["L", "M", "M", "J", "V", "S", "D"].map((label, index) => (
+          <span key={`${label}-${index}`}>{label}</span>
+        ))}
+      </div>
+      <div className="mt-2 grid grid-cols-7 gap-1">
+        {cells.map((cell, index) => {
+          if (!cell) return <div key={`empty-${index}`} />;
+          const count = activity[cell] ?? 0;
+          const isSelected = cell === selectedDate;
+          const isToday = cell === today;
+          return (
+            <button
+              key={cell}
+              type="button"
+              onClick={() => onSelectDay(cell)}
+              className={`flex h-16 flex-col items-center justify-center gap-1 rounded-lg border text-sm transition ${
+                isSelected ? "border-clinic-brand bg-clinic-brand text-white" : isToday ? "border-[#8FD2C6] bg-[#F3FAF9] text-clinic-ink" : "border-transparent text-clinic-ink hover:border-clinic-line"
+              }`}
+            >
+              <span className="font-semibold">{Number(cell.slice(-2))}</span>
+              {count > 0 && <span className={`text-[10px] ${isSelected ? "text-white" : "text-clinic-brand"}`}>{count} turno{count > 1 ? "s" : ""}</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MiniCalendar({
+  month,
+  selectedDate,
+  activity,
+  onMonthChange,
+  onSelectDate
+}: {
+  month: string;
+  selectedDate: string;
+  activity: Record<string, number>;
+  onMonthChange: (month: string) => void;
+  onSelectDate: (date: string) => void;
+}) {
+  const cells = buildMonthCells(month);
+  const [year, monthNum] = month.split("-").map(Number);
+  const label = new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, monthNum - 1, 1)));
+
+  function shiftMonth(delta: number) {
+    const date = new Date(Date.UTC(year, monthNum - 1 + delta, 1));
+    onMonthChange(`${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold capitalize text-clinic-ink">{label}</p>
+        <div className="flex items-center gap-1">
+          <IconButton label="Mes anterior" onClick={() => shiftMonth(-1)}><ChevronLeft size={15} /></IconButton>
+          <IconButton label="Mes siguiente" onClick={() => shiftMonth(1)}><ChevronRight size={15} /></IconButton>
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-clinic-muted">
+        {["L", "M", "M", "J", "V", "S", "D"].map((label2, index) => (
+          <span key={`${label2}-${index}`}>{label2}</span>
+        ))}
+      </div>
+      <div className="mt-1 grid grid-cols-7 gap-1">
+        {cells.map((cell, index) => {
+          if (!cell) return <div key={`empty-${index}`} />;
+          const hasActivity = (activity[cell] ?? 0) > 0;
+          const isSelected = cell === selectedDate;
+          const isToday = cell === today;
+          return (
+            <button
+              key={cell}
+              type="button"
+              onClick={() => onSelectDate(cell)}
+              className={`grid h-8 place-items-center rounded-full text-xs font-medium transition ${
+                isSelected ? "bg-clinic-brand text-white" : isToday ? "border border-[#8FD2C6] text-clinic-ink" : "text-clinic-ink hover:bg-[#E6F4F1]"
+              }`}
+            >
+              <span className="relative">
+                {Number(cell.slice(-2))}
+                {hasActivity && !isSelected && <span className="absolute -bottom-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-[#8FD2C6]" />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function buildMonthCells(month: string): Array<string | null> {
+  const [year, monthNum] = month.split("-").map(Number);
+  const firstDay = new Date(Date.UTC(year, monthNum - 1, 1));
+  const firstWeekday = firstDay.getUTCDay() === 0 ? 7 : firstDay.getUTCDay();
+  const daysInMonth = new Date(Date.UTC(year, monthNum, 0)).getUTCDate();
+  const cells: Array<string | null> = Array.from({ length: firstWeekday - 1 }, () => null);
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    cells.push(`${month}-${String(day).padStart(2, "0")}`);
+  }
+  return cells;
+}
+
+function mondayOf(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const weekDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return addDays(date, weekDay === 0 ? -6 : 1 - weekDay);
+}
+
+function endOfMonthOf(firstDayOfMonth: string) {
+  const [year, month] = firstDayOfMonth.split("-").map(Number);
+  return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
 }
 
 function buildManualWhatsAppMessage(appointment: AppointmentWithRelations, clinic: Clinic | null) {
@@ -1060,13 +1589,40 @@ function normalizePhoneForWhatsApp(value: string) {
   return `54${digits}`;
 }
 
-function QuickAction({ icon, label }: { icon: ReactNode; label: string }) {
+function KpiChip({ icon, value, label, tone }: { icon: ReactNode; value: number | string; label: string; tone: "amber" | "mint" | "red" }) {
+  const toneClass =
+    tone === "amber" ? "bg-amber-50 text-amber-700" : tone === "red" ? "bg-red-50 text-red-600" : "bg-[#E6F4F1] text-clinic-brand";
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-clinic-line bg-white p-4 shadow-sm">
-      <div className="grid h-10 w-10 place-items-center rounded-lg bg-teal-50 text-clinic-brand">
-        {icon}
+    <div className="flex items-center gap-3 rounded-2xl border border-clinic-line bg-white px-4 py-3">
+      <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${toneClass}`}>{icon}</div>
+      <div className="min-w-0">
+        <p className="text-lg font-semibold leading-none text-clinic-ink">{value}</p>
+        <p className="truncate text-xs text-clinic-muted">{label}</p>
       </div>
-      <p className="text-sm font-semibold text-clinic-ink">{label}</p>
+    </div>
+  );
+}
+
+function IconButton({ children, onClick, label }: { children: ReactNode; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="grid h-9 w-9 place-items-center rounded-lg border border-transparent text-clinic-muted transition hover:border-clinic-line hover:bg-[#E6F4F1] hover:text-clinic-ink"
+    >
+      {children}
+    </button>
+  );
+}
+
+function EmptyState({ title, description, actions }: { title: string; description: string; actions?: ReactNode }) {
+  return (
+    <div className="px-5 py-14 text-center">
+      <p className="font-semibold text-clinic-ink">{title}</p>
+      <p className="mx-auto mt-1 max-w-md text-sm text-clinic-muted">{description}</p>
+      {actions && <div className="mt-4 flex flex-wrap justify-center gap-2">{actions}</div>}
     </div>
   );
 }
@@ -1143,6 +1699,22 @@ function formatDateLabel(date: string) {
   }).format(new Date(`${date}T12:00:00Z`));
 }
 
+function formatDateNoWeekday(date: string) {
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC"
+  }).format(new Date(`${date}T12:00:00Z`));
+}
+
+function formatMonthLabel(date: string) {
+  return new Intl.DateTimeFormat("es-AR", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(new Date(`${date}T12:00:00Z`));
+}
+
 function formatShortDateLabel(date: string) {
   return new Intl.DateTimeFormat("es-AR", {
     weekday: "short",
@@ -1155,6 +1727,19 @@ function formatShortDateLabel(date: string) {
 function addDaysToDateString(date: string, days: number) {
   const [year, month, day] = date.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+function minutesUntilLabel(startsAt: string) {
+  const diffMs = new Date(startsAt).getTime() - Date.now();
+  if (diffMs <= 0) return "Ahora";
+  const minutes = Math.round(diffMs / 60000);
+  if (minutes < 60) return `En ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  return `En ${hours} h`;
+}
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function sourceLabel(value: string) {
