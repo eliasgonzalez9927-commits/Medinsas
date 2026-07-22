@@ -5,26 +5,21 @@ import { findAppointmentByToken } from "./_lib.js";
 const INACTIVE_STATUSES = ["cancelled", "completed", "attended", "no_show"];
 
 export default async function handler(req, res) {
-  const segments = Array.isArray(req.query?.action) ? req.query.action : [req.query?.action].filter(Boolean);
-  const token = String(segments[0] ?? "");
-  const sub = segments[1] ?? null;
-
+  const token = String(req.query?.token ?? "");
   if (!token) return res.status(400).json({ error: "INVALID_TOKEN" });
 
   const { client, error, missing } = makeSupabase();
   if (error) return res.status(500).json({ error, missing });
 
   try {
-    if (sub === "calendar.ics") {
+    if (req.query?.format === "ics") {
       if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
       return handleCalendar(client, res, token);
     }
-    if (sub === "requests") {
+    if (req.query?.action === "requests") {
       if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
       return handleCreateRequest(client, req, res, token);
     }
-    if (sub) return res.status(404).json({ error: "NOT_FOUND" });
-
     if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
     return handleDetail(client, res, token);
   } catch (err) {

@@ -71,7 +71,7 @@ export function PublicAppointmentPage() {
 
   const canUseCalendar = Boolean(data?.appointment.has_schedule && data.appointment.starts_at);
   const googleCalendarUrl = data ? buildGoogleCalendarUrl(data) : "";
-  const icsUrl = canUseCalendar ? `/api/appointments/public/${encodeURIComponent(token)}/calendar.ics` : "";
+  const icsUrl = canUseCalendar ? `/api/appointments/public/${encodeURIComponent(token)}?format=ics` : "";
   const whatsappUrl = data?.appointment.clinic_phone ? buildWhatsAppUrl(data) : "";
   const pendingRequestTypes = new Set((data?.pending_requests ?? []).map((request) => request.type));
   const requiresOnlinePayment = data?.appointment.requires_online_payment ?? false;
@@ -87,7 +87,7 @@ export function PublicAppointmentPage() {
     if (!requestType) return;
     try {
       setSubmitting(true);
-      const response = await fetch(`/api/appointments/public/${encodeURIComponent(token)}/requests`, {
+      const response = await fetch(`/api/appointments/public/${encodeURIComponent(token)}?action=requests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: requestType, notes: notes.trim() || null })
