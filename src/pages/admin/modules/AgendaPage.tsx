@@ -376,10 +376,13 @@ export function AgendaPage() {
             ) {
               return current;
             }
+            // Si ya hay una fecha elegida (ej. desde "Ocupar" sobre un hueco puntual),
+            // no la pisamos con la primera fecha disponible encontrada por el scan.
+            if (current.date) return current;
             return {
               ...current,
-              date: current.date && found.some((item) => item.date === current.date) ? current.date : found[0].date,
-              slot_starts_at: current.slot_starts_at || found[0].slots[0]?.startsAt || ""
+              date: found[0].date,
+              slot_starts_at: found[0].slots[0]?.startsAt ?? ""
             };
           });
           setAvailabilityMessage(`Primer turno disponible: ${formatDateLabel(found[0].date)} a las ${found[0].slots[0]?.time}.`);
@@ -467,6 +470,8 @@ export function AgendaPage() {
   function occupySlot(hueco: HuecoSlot) {
     setFormOpen(true);
     setNotice("");
+    setAvailableDates([]);
+    setSlots([hueco]);
     setForm((current) => ({
       ...current,
       patient_id: current.patient_id || patients[0]?.id || "",
