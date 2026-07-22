@@ -5,6 +5,8 @@ import { ADMIN_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-ro
 import { Login } from "./pages/auth/Login";
 import { Register } from "./pages/auth/Register";
 import { AcceptInvitationPage } from "./pages/auth/AcceptInvitationPage";
+import { ForgotPasswordPage } from "./pages/auth/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/auth/ResetPasswordPage";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { AgendaPage } from "./pages/admin/modules/AgendaPage";
 import { AppointmentRequestsPage } from "./pages/admin/modules/AppointmentRequestsPage";
@@ -57,6 +59,8 @@ export function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/recuperar-contrasena" element={<ForgotPasswordPage />} />
+      <Route path="/restablecer-contrasena" element={<ResetPasswordPage />} />
       <Route path="/paciente/login" element={<PatientLoginPage />} />
       <Route path="/paciente/registro" element={<PatientRegisterPage />} />
       <Route path="/paciente/preview" element={<PatientPreviewPage />} />
