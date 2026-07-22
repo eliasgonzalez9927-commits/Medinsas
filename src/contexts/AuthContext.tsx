@@ -1,6 +1,7 @@
 import { Session, User } from "@supabase/supabase-js";
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { setActiveClinicOverride } from "../lib/active-clinic";
 import { ClinicMember, Profile, UserRole } from "../types/database";
 
 type AuthSnapshot = {
@@ -134,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
       },
       async signOut() {
+        setActiveClinicOverride(null);
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
       }
