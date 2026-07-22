@@ -1,42 +1,46 @@
 import { BarChart3, CalendarX2, Repeat2, Trophy } from "lucide-react";
 
-const kpis = [
-  {
-    title: "Tasa de ausentismo",
-    value: "8.4%",
-    delta: "-2.1%",
-    description: "Comparado con el mes anterior",
-    icon: CalendarX2
-  },
-  {
-    title: "Pacientes nuevos",
-    value: "126",
-    delta: "+18%",
-    description: "Nuevos vs. recurrentes: 38% / 62%",
-    icon: Repeat2
-  },
-  {
-    title: "Ticket promedio",
-    value: "$92K",
-    delta: "+11%",
-    description: "Promedio de tratamientos del mes",
-    icon: Trophy
-  }
-];
-
-const profitableTreatments = [
-  { name: "Implantologia", revenue: 1840000, margin: 42 },
-  { name: "Ortodoncia invisible", revenue: 1260000, margin: 38 },
-  { name: "Dermatologia laser", revenue: 940000, margin: 34 }
-];
-
 const currency = new Intl.NumberFormat("es-AR", {
   style: "currency",
   currency: "ARS",
   maximumFractionDigits: 0
 });
 
-export function GrowthDashboard({ periodLabel = "Mes actual" }: { periodLabel?: string }) {
+export type GrowthDashboardMetrics = {
+  noShowRate: number | null;
+  confirmationRate: number | null;
+  avgTicket: number | null;
+  topRevenueServices: Array<{ name: string; revenue: number }>;
+};
+
+export function GrowthDashboard({
+  periodLabel = "Mes actual",
+  metrics
+}: {
+  periodLabel?: string;
+  metrics: GrowthDashboardMetrics;
+}) {
+  const kpis = [
+    {
+      title: "Tasa de ausentismo",
+      value: metrics.noShowRate === null ? "Sin datos" : `${metrics.noShowRate.toFixed(1)}%`,
+      description: "No asistió sobre turnos ya finalizados",
+      icon: CalendarX2
+    },
+    {
+      title: "Tasa de confirmación",
+      value: metrics.confirmationRate === null ? "Sin datos" : `${metrics.confirmationRate.toFixed(1)}%`,
+      description: "Turnos confirmados sobre el total del período",
+      icon: Repeat2
+    },
+    {
+      title: "Ticket promedio",
+      value: metrics.avgTicket === null ? "Sin datos" : currency.format(metrics.avgTicket),
+      description: "Promedio de pagos acreditados del período",
+      icon: Trophy
+    }
+  ];
+
   return (
     <section className="rounded-lg border border-clinic-line bg-white p-5 shadow-sm">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -63,9 +67,6 @@ export function GrowthDashboard({ periodLabel = "Mes actual" }: { periodLabel?: 
               </div>
               <div className="mt-4 flex items-end gap-3">
                 <p className="text-3xl font-semibold text-clinic-ink">{kpi.value}</p>
-                <span className="mb-1 rounded-lg bg-teal-50 px-2 py-1 text-xs font-semibold text-clinic-brand">
-                  {kpi.delta}
-                </span>
               </div>
               <p className="mt-2 text-sm text-clinic-muted">{kpi.description}</p>
             </article>
@@ -75,29 +76,19 @@ export function GrowthDashboard({ periodLabel = "Mes actual" }: { periodLabel?: 
 
       <div className="mt-5 rounded-lg border border-clinic-line">
         <div className="border-b border-clinic-line px-4 py-3">
-          <h3 className="font-semibold text-clinic-ink">Tratamientos mas rentables del mes</h3>
+          <h3 className="font-semibold text-clinic-ink">Servicios con más facturación del período</h3>
         </div>
         <div className="divide-y divide-clinic-line">
-          {profitableTreatments.map((treatment) => (
-            <div
-              key={treatment.name}
-              className="grid gap-3 px-4 py-4 sm:grid-cols-[1fr_160px_140px] sm:items-center"
-            >
-              <div>
-                <p className="font-medium text-clinic-ink">{treatment.name}</p>
-                <div className="mt-2 h-2 rounded-full bg-clinic-surface">
-                  <div
-                    className="h-2 rounded-full bg-clinic-brand"
-                    style={{ width: `${treatment.margin}%` }}
-                  />
-                </div>
+          {metrics.topRevenueServices.length ? (
+            metrics.topRevenueServices.map((service) => (
+              <div key={service.name} className="flex items-center justify-between gap-3 px-4 py-4">
+                <p className="font-medium text-clinic-ink">{service.name}</p>
+                <p className="text-sm font-semibold text-clinic-ink">{currency.format(service.revenue)}</p>
               </div>
-              <p className="text-sm font-semibold text-clinic-ink">
-                {currency.format(treatment.revenue)}
-              </p>
-              <p className="text-sm text-clinic-muted">Margen {treatment.margin}%</p>
-            </div>
-          ))}
+            ))
+          ) : (
+            <p className="px-4 py-4 text-sm text-clinic-muted">Sin pagos acreditados en el período seleccionado.</p>
+          )}
         </div>
       </div>
     </section>
