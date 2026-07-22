@@ -1568,7 +1568,7 @@ export async function getPublicAvailableSlots({
     });
     if (error) throw error;
     return (data ?? []).map((slot: any) => ({
-      time: slot.time,
+      time: slot.slot_label,
       startsAt: slot.starts_at,
       endTime: slot.end_time
     }));
