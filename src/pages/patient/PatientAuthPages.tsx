@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useState } from "react";
-import { ArrowRight, HeartPulse, ShieldCheck } from "lucide-react";
+import { ArrowRight, HeartPulse } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -208,11 +208,7 @@ function PatientAuthShell({
 
         <aside className="hidden bg-[linear-gradient(135deg,#E6F4F1_0%,#F6FAF9_48%,#0D3642_140%)] px-12 py-14 lg:flex lg:items-center">
           <div className="max-w-xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white/70 px-4 py-2 text-sm font-semibold text-clinic-brand">
-              <ShieldCheck size={16} />
-              Acceso paciente separado del panel del equipo
-            </div>
-            <h2 className="mt-8 text-5xl font-semibold leading-tight tracking-normal text-clinic-ink">
+            <h2 className="text-5xl font-semibold leading-tight tracking-normal text-clinic-ink">
               Tus turnos y datos personales, en un lugar claro.
             </h2>
             <p className="mt-5 text-lg leading-8 text-slate-600">
