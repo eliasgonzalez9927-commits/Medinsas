@@ -10,10 +10,13 @@ import {
   MessageCircle,
   MoreVertical,
   Plus,
+  QrCode as QrCodeIcon,
   Search,
   UserCheck,
-  UserX
+  UserX,
+  X as CloseIcon
 } from "lucide-react";
+import QRCode from "qrcode";
 import { AppointmentStatusBadge } from "../../../components/admin/AppointmentStatusBadge";
 import { RegisterPaymentPanel } from "../../../components/admin/RegisterPaymentPanel";
 import { SectionCard } from "../../../components/admin/SectionCard";
@@ -123,6 +126,7 @@ export function AgendaPage() {
   const [error, setError] = useState("");
   const [paymentLinks, setPaymentLinks] = useState<Record<string, string>>({});
   const [paymentAppt, setPaymentAppt] = useState<AppointmentWithRelations | null>(null);
+  const [qrLink, setQrLink] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [overbookingOpen, setOverbookingOpen] = useState(false);
   const [overbookingSaving, setOverbookingSaving] = useState(false);
@@ -786,6 +790,8 @@ export function AgendaPage() {
         />
       )}
 
+      {qrLink && <PaymentQrModal link={qrLink} onClose={() => setQrLink(null)} />}
+
       {/* Barra compacta de control de agenda */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-clinic-line bg-white px-4 py-3 shadow-[0_2px_10px_rgba(13,54,66,0.03)]">
         <div className="flex items-center gap-1">
@@ -1091,6 +1097,7 @@ export function AgendaPage() {
                           navigator.clipboard?.writeText(paymentLinks[entry.appointment.id]);
                           setNotice("Link copiado.");
                         }}
+                        onShowQr={() => setQrLink(paymentLinks[entry.appointment.id])}
                         onCopyMessage={() => copyWhatsAppMessage(entry.appointment)}
                         onOpenWhatsApp={() => openWhatsApp(entry.appointment)}
                         onStartAttention={() => navigate(`/admin/mi-agenda/atencion/${entry.appointment.id}`)}
@@ -1214,6 +1221,7 @@ function AppointmentCard({
   onRegisterPayment,
   onGeneratePaymentLink,
   onCopyLink,
+  onShowQr,
   onCopyMessage,
   onOpenWhatsApp,
   onStartAttention
@@ -1231,6 +1239,7 @@ function AppointmentCard({
   onRegisterPayment: () => void;
   onGeneratePaymentLink: () => void;
   onCopyLink: () => void;
+  onShowQr: () => void;
   onCopyMessage: () => void;
   onOpenWhatsApp: () => void;
   onStartAttention: () => void;
@@ -1322,12 +1331,18 @@ function AppointmentCard({
                   Registrar pago
                 </AppointmentMenuItem>
               )}
-              <AppointmentMenuItem icon={<CreditCard size={16} />} onClick={() => { onGeneratePaymentLink(); setOpenMenuId(null); }}>
-                Generar link de pago
-              </AppointmentMenuItem>
-              {paymentLinks[appointment.id] && (
-                <AppointmentMenuItem icon={<Copy size={16} />} onClick={() => { onCopyLink(); setOpenMenuId(null); }}>
-                  Copiar link
+              {paymentLinks[appointment.id] ? (
+                <>
+                  <AppointmentMenuItem icon={<Copy size={16} />} onClick={() => { onCopyLink(); setOpenMenuId(null); }}>
+                    Copiar link de pago
+                  </AppointmentMenuItem>
+                  <AppointmentMenuItem icon={<QrCodeIcon size={16} />} onClick={() => { onShowQr(); setOpenMenuId(null); }}>
+                    Ver código QR
+                  </AppointmentMenuItem>
+                </>
+              ) : (
+                <AppointmentMenuItem icon={<CreditCard size={16} />} onClick={() => { onGeneratePaymentLink(); setOpenMenuId(null); }}>
+                  Generar link de pago
                 </AppointmentMenuItem>
               )}
               <AppointmentMenuItem icon={<Copy size={16} />} disabled={!appointment.patient?.phone} onClick={() => { onCopyMessage(); setOpenMenuId(null); }}>
@@ -1348,6 +1363,51 @@ function AppointmentCard({
         </div>
       </div>
     </article>
+  );
+}
+
+function PaymentQrModal({ link, onClose }: { link: string; onClose: () => void }) {
+  const [dataUrl, setDataUrl] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    QRCode.toDataURL(link, { width: 260, margin: 1 })
+      .then((url) => {
+        if (!cancelled) setDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setError("No pudimos generar el código QR.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [link]);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 px-4" onClick={onClose}>
+      <div
+        className="w-full max-w-xs rounded-2xl border border-clinic-line bg-white p-5 text-center shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <p className="font-semibold text-clinic-ink">Código QR de pago</p>
+          <button type="button" onClick={onClose} aria-label="Cerrar" className="grid h-8 w-8 place-items-center rounded-lg text-clinic-muted hover:bg-[#E6F4F1] hover:text-clinic-ink">
+            <CloseIcon size={16} />
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-clinic-muted">El paciente puede escanearlo con la cámara del celular para pagar.</p>
+        <div className="mt-4 grid place-items-center">
+          {dataUrl ? (
+            <img src={dataUrl} alt="Código QR del link de pago" className="h-56 w-56 rounded-lg border border-clinic-line" />
+          ) : error ? (
+            <p className="py-10 text-sm text-red-600">{error}</p>
+          ) : (
+            <p className="py-10 text-sm text-clinic-muted">Generando...</p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
