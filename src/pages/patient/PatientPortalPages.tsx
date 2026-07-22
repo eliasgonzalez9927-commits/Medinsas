@@ -408,15 +408,26 @@ export function PatientProfilePage() {
 
 export function PatientFamilyPage() {
   const { links, loading, refetch } = usePatientLinks();
-  const [form, setForm] = useState({ firstName: "", lastName: "", documentNumber: "", relationship: "", birthDate: "" });
+  const [form, setForm] = useState<{
+    firstName: string;
+    lastName: string;
+    documentNumber: string;
+    relationship: "guardian" | "family_member";
+    birthDate: string;
+  }>({ firstName: "", lastName: "", documentNumber: "", relationship: "family_member", birthDate: "" });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState("");
   const [error, setError] = useState("");
 
   const familyMembers = links.filter((link) => link.relationship === "family_member" && link.patients);
 
-  function update(key: keyof typeof form, value: string) {
+  function update(key: "firstName" | "lastName" | "documentNumber" | "birthDate", value: string) {
     setForm((current) => ({ ...current, [key]: value }));
+    setSaved("");
+  }
+
+  function updateRelationship(value: "guardian" | "family_member") {
+    setForm((current) => ({ ...current, relationship: value }));
     setSaved("");
   }
 
@@ -426,7 +437,7 @@ export function PatientFamilyPage() {
     setError("");
     try {
       await addFamilyMember(form);
-      setForm({ firstName: "", lastName: "", documentNumber: "", relationship: "", birthDate: "" });
+      setForm({ firstName: "", lastName: "", documentNumber: "", relationship: "family_member", birthDate: "" });
       setSaved("Familiar agregado. Ya queda disponible para reservar un turno.");
       refetch();
     } catch (err) {
@@ -488,7 +499,17 @@ export function PatientFamilyPage() {
               <FormInput label="Nombre" value={form.firstName} onChange={(value) => update("firstName", value)} required />
               <FormInput label="Apellido" value={form.lastName} onChange={(value) => update("lastName", value)} required />
               <FormInput label="DNI" value={form.documentNumber} onChange={(value) => update("documentNumber", value)} />
-              <FormInput label="Vínculo" value={form.relationship} onChange={(value) => update("relationship", value)} placeholder="Hijo, madre, pareja..." required />
+              <label className="block">
+                <span className="text-sm font-semibold text-clinic-ink">Vínculo</span>
+                <select
+                  value={form.relationship}
+                  onChange={(event) => updateRelationship(event.target.value as "guardian" | "family_member")}
+                  className="mt-2 h-12 w-full rounded-lg border border-clinic-line bg-white px-4 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+                >
+                  <option value="family_member">Familiar (hijo/a, pareja, madre, padre, etc.)</option>
+                  <option value="guardian">Persona a mi cargo (tutelado/a)</option>
+                </select>
+              </label>
               <FormInput label="Fecha de nacimiento" type="date" value={form.birthDate} onChange={(value) => update("birthDate", value)} required />
               <button
                 type="submit"

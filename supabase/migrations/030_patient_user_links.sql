@@ -1,6 +1,9 @@
 -- Base model for authenticated patient access.
 -- This migration only creates the link table and integrity guards.
--- Patient-facing read/write policies for patients and appointments must be added in a later approved PR.
+-- Patient-facing read/write policies for patients and appointments are added in migration 042.
+--
+-- Written back in an earlier session but never actually run against Supabase
+-- until 2026-07-22 (found while wiring the patient portal to real data).
 
 create table if not exists public.patient_user_links (
   id uuid primary key default gen_random_uuid(),
@@ -59,7 +62,7 @@ create or replace function public.validate_patient_user_link_clinic()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   v_patient_clinic_id uuid;
@@ -94,7 +97,7 @@ create trigger validate_patient_user_link_clinic_trigger
 create or replace function public.set_patient_user_links_updated_at()
 returns trigger
 language plpgsql
-set search_path = public
+set search_path = public, pg_temp
 as $$
 begin
   new.updated_at = now();
@@ -113,7 +116,7 @@ create trigger set_patient_user_links_updated_at_trigger
 alter table public.patient_user_links enable row level security;
 
 comment on table public.patient_user_links is
-  'Links authenticated users to real operational patients inside a clinic. RLS is intentionally closed until patient access policies are approved.';
+  'Links authenticated users to real operational patients inside a clinic.';
 comment on column public.patient_user_links.user_id is
   'Authenticated Supabase user that can access one or more linked patient records.';
 comment on column public.patient_user_links.patient_id is

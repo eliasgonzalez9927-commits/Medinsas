@@ -84,7 +84,7 @@ export async function addFamilyMember(input: {
   firstName: string;
   lastName: string;
   documentNumber: string;
-  relationship: string;
+  relationship: "guardian" | "family_member";
   birthDate: string;
 }): Promise<void> {
   const { error } = await supabase.rpc("add_patient_family_member", {

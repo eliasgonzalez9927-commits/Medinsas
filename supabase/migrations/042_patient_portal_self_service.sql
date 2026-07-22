@@ -1,9 +1,9 @@
 -- El portal de paciente (/paciente/*) tenia login real (Supabase auth,
 -- rol patient) pero las paginas de adentro (dashboard, turnos, perfil,
 -- grupo familiar) leian todo desde un mock fijo en el frontend - ningun
--- paciente veia sus datos reales. patient_user_links (migracion 030) ya
--- existia como tabla puente pero se dejo con RLS cerrada a proposito y
--- sin ningun mecanismo que la poblara.
+-- paciente veia sus datos reales. patient_user_links (migracion 030)
+-- nunca se habia llegado a correr contra la base (se corrio recien junto
+-- con esta).
 --
 -- Esta migracion:
 -- 1) Agrega las policies de RLS que le permiten a un paciente autenticado
@@ -15,23 +15,29 @@
 --    clinica).
 -- 3) Agrega add_patient_family_member(): permite que el paciente cargue
 --    un familiar (nueva fila en patients + link con relationship
---    'family_member'), en la misma clinica que su propio vinculo 'self'.
+--    'guardian' o 'family_member', nunca 'self' - eso evita que este
+--    endpoint se use para crear un segundo vinculo 'self').
 --
--- NO APLICADA TODAVIA. Pendiente de revision antes de correr contra
--- Supabase.
+-- APLICADA el 2026-07-22 (junto con 030, que tampoco estaba corrida).
 
 drop policy if exists "patient can view own links" on public.patient_user_links;
 create policy "patient can view own links"
-  on public.patient_user_links for select
+  on public.patient_user_links
+  for select
+  to authenticated
   using (user_id = auth.uid());
 
 drop policy if exists "patient can view linked patients" on public.patients;
 create policy "patient can view linked patients"
-  on public.patients for select
+  on public.patients
+  for select
+  to authenticated
   using (
     exists (
-      select 1 from public.patient_user_links pul
+      select 1
+      from public.patient_user_links pul
       where pul.patient_id = patients.id
+        and pul.clinic_id = patients.clinic_id
         and pul.user_id = auth.uid()
         and pul.status = 'active'
     )
@@ -39,11 +45,15 @@ create policy "patient can view linked patients"
 
 drop policy if exists "patient can update own patient record" on public.patients;
 create policy "patient can update own patient record"
-  on public.patients for update
+  on public.patients
+  for update
+  to authenticated
   using (
     exists (
-      select 1 from public.patient_user_links pul
+      select 1
+      from public.patient_user_links pul
       where pul.patient_id = patients.id
+        and pul.clinic_id = patients.clinic_id
         and pul.user_id = auth.uid()
         and pul.status = 'active'
         and pul.relationship = 'self'
@@ -51,8 +61,10 @@ create policy "patient can update own patient record"
   )
   with check (
     exists (
-      select 1 from public.patient_user_links pul
+      select 1
+      from public.patient_user_links pul
       where pul.patient_id = patients.id
+        and pul.clinic_id = patients.clinic_id
         and pul.user_id = auth.uid()
         and pul.status = 'active'
         and pul.relationship = 'self'
@@ -61,11 +73,15 @@ create policy "patient can update own patient record"
 
 drop policy if exists "patient can view own appointments" on public.appointments;
 create policy "patient can view own appointments"
-  on public.appointments for select
+  on public.appointments
+  for select
+  to authenticated
   using (
     exists (
-      select 1 from public.patient_user_links pul
+      select 1
+      from public.patient_user_links pul
       where pul.patient_id = appointments.patient_id
+        and pul.clinic_id = appointments.clinic_id
         and pul.user_id = auth.uid()
         and pul.status = 'active'
     )
@@ -73,10 +89,13 @@ create policy "patient can view own appointments"
 
 drop policy if exists "patient can view own payments" on public.payments;
 create policy "patient can view own payments"
-  on public.payments for select
+  on public.payments
+  for select
+  to authenticated
   using (
     exists (
-      select 1 from public.patient_user_links pul
+      select 1
+      from public.patient_user_links pul
       where pul.patient_id = payments.patient_id
         and pul.user_id = auth.uid()
         and pul.status = 'active'
@@ -85,12 +104,16 @@ create policy "patient can view own payments"
 
 drop policy if exists "patient can view own appointment requests" on public.appointment_requests;
 create policy "patient can view own appointment requests"
-  on public.appointment_requests for select
+  on public.appointment_requests
+  for select
+  to authenticated
   using (
     exists (
       select 1
       from public.appointments a
-      join public.patient_user_links pul on pul.patient_id = a.patient_id
+      join public.patient_user_links pul
+        on pul.patient_id = a.patient_id
+       and pul.clinic_id = a.clinic_id
       where a.id = appointment_requests.appointment_id
         and pul.user_id = auth.uid()
         and pul.status = 'active'
@@ -99,13 +122,17 @@ create policy "patient can view own appointment requests"
 
 drop policy if exists "patient can create own appointment requests" on public.appointment_requests;
 create policy "patient can create own appointment requests"
-  on public.appointment_requests for insert
+  on public.appointment_requests
+  for insert
+  to authenticated
   with check (
     requested_by = 'patient'
     and exists (
       select 1
       from public.appointments a
-      join public.patient_user_links pul on pul.patient_id = a.patient_id
+      join public.patient_user_links pul
+        on pul.patient_id = a.patient_id
+       and pul.clinic_id = a.clinic_id
       where a.id = appointment_requests.appointment_id
         and pul.user_id = auth.uid()
         and pul.status = 'active'
@@ -116,7 +143,7 @@ create or replace function public.sync_patient_user_links()
 returns setof public.patient_user_links
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   v_user_id uuid := auth.uid();
@@ -126,27 +153,45 @@ begin
     raise exception 'UNAUTHENTICATED';
   end if;
 
-  select email into v_email from auth.users where id = v_user_id;
+  select au.email
+    into v_email
+  from auth.users au
+  where au.id = v_user_id;
+
   if v_email is null or btrim(v_email) = '' then
-    return query select * from public.patient_user_links where user_id = v_user_id and status = 'active';
+    return query
+      select *
+      from public.patient_user_links
+      where user_id = v_user_id
+        and status = 'active';
     return;
   end if;
 
-  insert into public.patient_user_links (user_id, clinic_id, patient_id, relationship, status, created_by, verified_at)
-  select v_user_id, p.clinic_id, p.id, 'self', 'active', v_user_id, now()
+  insert into public.patient_user_links (
+    user_id, clinic_id, patient_id, relationship, status, created_by, verified_at
+  )
+  select
+    v_user_id, p.clinic_id, p.id, 'self', 'active', v_user_id, now()
   from public.patients p
   where lower(p.email) = lower(v_email)
     and not exists (
-      select 1 from public.patient_user_links pul
+      select 1
+      from public.patient_user_links pul
       where pul.user_id = v_user_id
+        and pul.clinic_id = p.clinic_id
         and pul.patient_id = p.id
         and pul.status <> 'revoked'
     );
 
-  return query select * from public.patient_user_links where user_id = v_user_id and status = 'active';
+  return query
+    select *
+    from public.patient_user_links
+    where user_id = v_user_id
+      and status = 'active';
 end;
 $$;
 
+revoke all on function public.sync_patient_user_links() from public;
 grant execute on function public.sync_patient_user_links() to authenticated;
 
 create or replace function public.add_patient_family_member(
@@ -159,23 +204,31 @@ create or replace function public.add_patient_family_member(
 returns public.patients
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   v_user_id uuid := auth.uid();
   v_clinic_id uuid;
   v_self_phone text;
   v_patient public.patients%rowtype;
+  v_relationship text;
 begin
   if v_user_id is null then raise exception 'UNAUTHENTICATED'; end if;
   if coalesce(btrim(p_first_name), '') = '' then raise exception 'FIRST_NAME_REQUIRED'; end if;
   if coalesce(btrim(p_last_name), '') = '' then raise exception 'LAST_NAME_REQUIRED'; end if;
   if coalesce(btrim(p_relationship), '') = '' then raise exception 'RELATIONSHIP_REQUIRED'; end if;
 
+  v_relationship := btrim(p_relationship);
+  if v_relationship not in ('guardian', 'family_member') then
+    raise exception 'INVALID_RELATIONSHIP';
+  end if;
+
   select pul.clinic_id, p.phone
     into v_clinic_id, v_self_phone
   from public.patient_user_links pul
-  join public.patients p on p.id = pul.patient_id
+  join public.patients p
+    on p.id = pul.patient_id
+   and p.clinic_id = pul.clinic_id
   where pul.user_id = v_user_id
     and pul.relationship = 'self'
     and pul.status = 'active'
@@ -189,10 +242,11 @@ begin
   returning * into v_patient;
 
   insert into public.patient_user_links (user_id, clinic_id, patient_id, relationship, status, created_by, verified_at)
-  values (v_user_id, v_clinic_id, v_patient.id, 'family_member', 'active', v_user_id, now());
+  values (v_user_id, v_clinic_id, v_patient.id, v_relationship, 'active', v_user_id, now());
 
   return v_patient;
 end;
 $$;
 
+revoke all on function public.add_patient_family_member(text, text, text, text, date) from public;
 grant execute on function public.add_patient_family_member(text, text, text, text, date) to authenticated;
