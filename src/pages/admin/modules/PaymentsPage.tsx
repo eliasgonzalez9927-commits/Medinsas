@@ -451,6 +451,7 @@ export function PaymentDetailPage() {
 
 export function PaymentSettingsPage() {
   const { role } = useAuth();
+  const canEditPaymentSettings = role === "platform_admin" || role === "clinic_admin" || role === "admin";
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
   const [form, setForm] = useState({
@@ -526,6 +527,7 @@ export function PaymentSettingsPage() {
   }, []);
 
   async function handleConnect() {
+    if (!canEditPaymentSettings) return;
     setConnecting(true);
     setError("");
     try {
@@ -539,7 +541,7 @@ export function PaymentSettingsPage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!settings) return;
+    if (!settings || !canEditPaymentSettings) return;
     try {
       const updated = await updatePaymentSettings(settings.id, {
         active: form.active,
@@ -591,9 +593,15 @@ export function PaymentSettingsPage() {
               )}
             </div>
           </div>
-          <Button disabled={connecting} onClick={handleConnect} variant="primary">
-            {connecting ? "Redirigiendo..." : settings?.connected_at ? "Reconectar" : "Conectar con Mercado Pago"}
-          </Button>
+          {canEditPaymentSettings ? (
+            <Button disabled={connecting} onClick={handleConnect} variant="primary">
+              {connecting ? "Redirigiendo..." : settings?.connected_at ? "Reconectar" : "Conectar con Mercado Pago"}
+            </Button>
+          ) : (
+            <span className="rounded-lg bg-clinic-surface px-3 py-2 text-sm font-medium text-clinic-muted">
+              {settings?.connected_at ? "Conectada" : "No conectada"}
+            </span>
+          )}
         </div>
       </SectionCard>
 
@@ -608,18 +616,25 @@ export function PaymentSettingsPage() {
               <p className="mt-1 text-sm text-clinic-muted">Preferencias de cobro. La cuenta de Mercado Pago se conecta arriba — acá solo configurás cómo se ve el checkout.</p>
             </div>
           </div>
+          {!canEditPaymentSettings && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              Tu rol no permite editar la configuración de pagos.
+            </div>
+          )}
           <form onSubmit={save} className="mt-5 grid gap-4 md:grid-cols-2">
-            <label className="flex items-center gap-2"><input checked={form.active} onChange={(event) => setForm({ ...form, active: event.target.checked })} type="checkbox" /><span className="text-sm font-medium">Integracion activa</span></label>
-            <Select label="Modo" value={form.mode} onChange={(value) => setForm({ ...form, mode: value })} options={[{ value: "sandbox", label: "Test / sandbox" }, { value: "production", label: "Produccion" }]} />
-            <Input label="Public key" value={form.public_key} onChange={(value) => setForm({ ...form, public_key: value })} />
-            <Input label="Nombre publico en checkout" value={form.checkout_public_name} onChange={(value) => setForm({ ...form, checkout_public_name: value })} />
-            <label className="flex items-center gap-2"><input checked={form.collect_deposit_online} onChange={(event) => setForm({ ...form, collect_deposit_online: event.target.checked })} type="checkbox" /><span className="text-sm font-medium">Cobrar seña en reservas online</span></label>
-            <Select label="Tipo de seña" value={form.deposit_type} onChange={(value) => setForm({ ...form, deposit_type: value })} options={[{ value: "fixed", label: "Monto fijo" }, { value: "percentage", label: "Porcentaje" }]} />
-            <Input label="Monto fijo de seña" value={form.deposit_amount} onChange={(value) => setForm({ ...form, deposit_amount: value })} type="number" />
-            <Input label="Porcentaje de seña" value={form.deposit_percentage} onChange={(value) => setForm({ ...form, deposit_percentage: value })} type="number" />
-            <Input label="Vencimiento link en minutos" value={form.payment_link_expiration_minutes} onChange={(value) => setForm({ ...form, payment_link_expiration_minutes: value })} type="number" />
-            <Input label="Email de soporte" value={form.support_email} onChange={(value) => setForm({ ...form, support_email: value })} />
-            <div className="md:col-span-2"><Button type="submit" variant="primary">Guardar configuracion</Button></div>
+            <label className="flex items-center gap-2"><input checked={form.active} onChange={(event) => setForm({ ...form, active: event.target.checked })} type="checkbox" disabled={!canEditPaymentSettings} /><span className="text-sm font-medium">Integracion activa</span></label>
+            <Select label="Modo" value={form.mode} onChange={(value) => setForm({ ...form, mode: value })} options={[{ value: "sandbox", label: "Test / sandbox" }, { value: "production", label: "Produccion" }]} disabled={!canEditPaymentSettings} />
+            <Input label="Public key" value={form.public_key} onChange={(value) => setForm({ ...form, public_key: value })} disabled={!canEditPaymentSettings} />
+            <Input label="Nombre publico en checkout" value={form.checkout_public_name} onChange={(value) => setForm({ ...form, checkout_public_name: value })} disabled={!canEditPaymentSettings} />
+            <label className="flex items-center gap-2"><input checked={form.collect_deposit_online} onChange={(event) => setForm({ ...form, collect_deposit_online: event.target.checked })} type="checkbox" disabled={!canEditPaymentSettings} /><span className="text-sm font-medium">Cobrar seña en reservas online</span></label>
+            <Select label="Tipo de seña" value={form.deposit_type} onChange={(value) => setForm({ ...form, deposit_type: value })} options={[{ value: "fixed", label: "Monto fijo" }, { value: "percentage", label: "Porcentaje" }]} disabled={!canEditPaymentSettings} />
+            <Input label="Monto fijo de seña" value={form.deposit_amount} onChange={(value) => setForm({ ...form, deposit_amount: value })} type="number" disabled={!canEditPaymentSettings} />
+            <Input label="Porcentaje de seña" value={form.deposit_percentage} onChange={(value) => setForm({ ...form, deposit_percentage: value })} type="number" disabled={!canEditPaymentSettings} />
+            <Input label="Vencimiento link en minutos" value={form.payment_link_expiration_minutes} onChange={(value) => setForm({ ...form, payment_link_expiration_minutes: value })} type="number" disabled={!canEditPaymentSettings} />
+            <Input label="Email de soporte" value={form.support_email} onChange={(value) => setForm({ ...form, support_email: value })} disabled={!canEditPaymentSettings} />
+            {canEditPaymentSettings && (
+              <div className="md:col-span-2"><Button type="submit" variant="primary">Guardar configuracion</Button></div>
+            )}
           </form>
         </SectionCard>
 
@@ -684,12 +699,12 @@ function Info({ label, value }: { label: string; value: string }) {
   return <div className="rounded-lg border border-clinic-line px-3 py-2"><dt className="text-clinic-muted">{label}</dt><dd className="mt-1 font-medium text-clinic-ink">{value}</dd></div>;
 }
 
-function Input({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
-  return <label><span className="text-sm font-medium text-clinic-ink">{label}</span><input type={type} value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100" /></label>;
+function Input({ label, value, onChange, type = "text", disabled }: { label: string; value: string; onChange: (value: string) => void; type?: string; disabled?: boolean }) {
+  return <label><span className="text-sm font-medium text-clinic-ink">{label}</span><input type={type} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100 disabled:bg-clinic-surface disabled:text-clinic-muted" /></label>;
 }
 
-function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }> }) {
-  return <label><span className="text-sm font-medium text-clinic-ink">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100">{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+function Select({ label, value, onChange, options, disabled }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }>; disabled?: boolean }) {
+  return <label><span className="text-sm font-medium text-clinic-ink">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100 disabled:bg-clinic-surface disabled:text-clinic-muted">{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
 }
 
 function Message({ tone, children }: { tone: "success" | "error"; children: string }) {
