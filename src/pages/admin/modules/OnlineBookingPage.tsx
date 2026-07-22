@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Copy, Sparkles } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
+import { getDefaultClinic } from "../../../lib/clinic-data";
 import { buildPublicUrl } from "../../../lib/public-url";
 import { AdminPageShell } from "./AdminPageShell";
 import { SettingsTabsNav } from "./SettingsPage";
@@ -19,7 +20,14 @@ const UPCOMING_CAPABILITIES = [
 export function OnlineBookingPage() {
   const navigate = useNavigate();
   const [copyNotice, setCopyNotice] = useState("");
-  const publicLink = buildPublicUrl("/reservar/clinica-central");
+  const [clinicSlug, setClinicSlug] = useState<string | null>(null);
+  const publicLink = buildPublicUrl(`/reservar/${clinicSlug ?? "clinica-central"}`);
+
+  useEffect(() => {
+    getDefaultClinic()
+      .then((clinic) => setClinicSlug(clinic?.slug ?? null))
+      .catch(() => undefined);
+  }, []);
 
   async function copyPublicLink() {
     try {

@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { CalendarDays, Copy, Stethoscope } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
-import { getProfessionalById, updateProfessional } from "../../../lib/clinic-data";
+import { getDefaultClinic, getProfessionalById, updateProfessional } from "../../../lib/clinic-data";
 import { buildPublicUrl } from "../../../lib/public-url";
 import { ProfessionalWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
@@ -13,8 +13,10 @@ const dayLabels = ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes
 export function ProfessionalProfilePage() {
   const { id } = useParams();
   const [professional, setProfessional] = useState<ProfessionalWithRelations | null>(null);
+  const [clinicSlug, setClinicSlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [copyNotice, setCopyNotice] = useState("");
 
   // Settlement section state
   const [shareInput, setShareInput] = useState("");
@@ -28,8 +30,9 @@ export function ProfessionalProfilePage() {
       setLoading(true);
       setError("");
       try {
-        const prof = await getProfessionalById(id);
+        const [prof, clinic] = await Promise.all([getProfessionalById(id), getDefaultClinic()]);
         setProfessional(prof);
+        setClinicSlug(clinic?.slug ?? null);
         const current = prof?.professional_share_percentage;
         setShareInput(current != null ? String(current) : "");
       } catch (err) {
@@ -103,7 +106,17 @@ export function ProfessionalProfilePage() {
     );
   }
 
-  const bookingLink = buildPublicUrl(`/reservar/clinica-central/${professional.slug ?? professional.id}`);
+  const bookingLink = buildPublicUrl(`/reservar/${clinicSlug ?? "clinica-central"}/${professional.slug ?? professional.id}`);
+
+  async function copyBookingLink() {
+    try {
+      await navigator.clipboard.writeText(bookingLink);
+      setCopyNotice("Link copiado.");
+      setTimeout(() => setCopyNotice(""), 3000);
+    } catch {
+      setCopyNotice(`No pudimos copiar el link. Usá: ${bookingLink}`);
+    }
+  }
 
   return (
     <AdminPageShell
@@ -155,8 +168,8 @@ export function ProfessionalProfilePage() {
           <div className="mt-6 rounded-lg border border-clinic-line bg-white p-4">
             <p className="text-sm text-clinic-muted">Link publico de reserva</p>
             <p className="mt-1 truncate text-sm font-semibold text-clinic-ink">{bookingLink}</p>
-            <Button className="mt-3" icon={<Copy size={15} />}>
-              Copiar link
+            <Button className="mt-3" icon={<Copy size={15} />} onClick={copyBookingLink}>
+              {copyNotice || "Copiar link"}
             </Button>
           </div>
         </SectionCard>
