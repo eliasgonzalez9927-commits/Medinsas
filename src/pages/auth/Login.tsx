@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { getPostLoginPath } from "../../lib/auth-roles";
@@ -76,6 +76,10 @@ export function Login() {
                   placeholder="••••••••"
                 />
               </label>
+
+              <Link to="/recuperar-contrasena" className="inline-block text-sm font-semibold text-[#0D766E]">
+                Olvidé mi contraseña
+              </Link>
 
               {error && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-clinic-danger">
