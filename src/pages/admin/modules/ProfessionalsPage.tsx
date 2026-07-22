@@ -143,7 +143,7 @@ export function ProfessionalsPage() {
 
   async function copyBookingLink(professional: ProfessionalWithRelations) {
     const slug = professional.slug ?? professional.id;
-    const link = `${window.location.origin}/reservar/clinica-central/${slug}`;
+    const link = `${window.location.origin}/reservar/${clinic?.slug ?? "clinica-central"}/${slug}`;
     try {
       await navigator.clipboard.writeText(link);
       setNotice("Link de reserva copiado.");
