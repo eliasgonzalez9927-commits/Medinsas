@@ -1352,27 +1352,23 @@ function AppointmentCard({
 }
 
 function HuecoCard({ hueco, onOcupar, disabled }: { hueco: HuecoSlot; onOcupar: () => void; disabled?: boolean }) {
+  if (disabled) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-dashed border-clinic-line px-4 py-2.5 text-sm text-clinic-muted">
+        <Clock3 size={14} />
+        Hueco libre
+      </div>
+    );
+  }
   return (
-    <article className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-[#8FD2C6] bg-white px-4 py-3">
-      <div className="flex items-center gap-3">
-        <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#E6F4F1] text-clinic-brand">
-          <Clock3 size={16} />
-        </span>
-        <div>
-          <p className="font-semibold text-clinic-ink">Hueco libre</p>
-          <p className="text-xs text-clinic-muted">Disponible para ocupar</p>
-        </div>
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-clinic-ink">
-          Dr/a. {hueco.professional.name} {hueco.professional.last_name}
-        </p>
-        <p className="truncate text-xs text-clinic-muted">{hueco.professional.specialties?.[0]?.name ?? hueco.service.name}</p>
-      </div>
-      {!disabled && (
-        <Button variant="primary" onClick={onOcupar}>Ocupar</Button>
-      )}
-    </article>
+    <button
+      type="button"
+      onClick={onOcupar}
+      className="flex w-full items-center gap-2 rounded-lg border border-dashed border-[#8FD2C6] px-4 py-2.5 text-left text-sm font-medium text-clinic-muted transition hover:bg-[#F3FAF9] hover:text-clinic-brand"
+    >
+      <Clock3 size={14} />
+      Hueco libre
+    </button>
   );
 }
 
