@@ -69,9 +69,20 @@ export class PaymentAppointmentSyncError extends Error {
   }
 }
 
+async function isPlatformAdmin(userId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("clinic_members")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("role", "platform_admin")
+    .eq("active", true)
+    .limit(1)
+    .maybeSingle();
+  return Boolean(data);
+}
+
 async function canAccessClinic(userId: string, clinicId: string): Promise<boolean> {
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
-  if (profile?.role === "platform_admin") return true;
+  if (await isPlatformAdmin(userId)) return true;
   const { data: member } = await supabase
     .from("clinic_members")
     .select("id")
@@ -131,8 +142,7 @@ export async function getSwitchableClinics(): Promise<SwitchableClinic[]> {
   try {
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) return [];
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", auth.user.id).maybeSingle();
-    if (profile?.role === "platform_admin") {
+    if (await isPlatformAdmin(auth.user.id)) {
       const { data, error } = await supabase.from("clinics").select("id, name, slug, status").order("name");
       if (error) throw error;
       return (data ?? []) as SwitchableClinic[];
