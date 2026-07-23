@@ -5,6 +5,7 @@ import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { Button } from "../../../components/ui/Button";
 import { supabase } from "../../../lib/supabase";
+import { normalizeSearchText } from "../../../lib/text-search";
 import {
   createPatient,
   getDefaultClinic,
@@ -437,13 +438,15 @@ function CoverageAutocomplete({
     }
     let cancelled = false;
     const timeout = window.setTimeout(async () => {
-      const { data } = await supabase
-        .from("health_coverages")
-        .select("id, name")
-        .eq("active", true)
-        .ilike("name", `%${query}%`)
-        .order("name")
-        .limit(8);
+      // Matchea por palabra (en cualquier orden) contra normalized_name en vez de
+      // un substring literal contra name, asi "medicos obra" tambien encuentra
+      // "OBRA SOCIAL DE LOS MEDICOS..." y no importan acentos.
+      const words = normalizeSearchText(query).split(/\s+/).filter(Boolean);
+      let builder = supabase.from("health_coverages").select("id, name").eq("active", true);
+      for (const word of words) {
+        builder = builder.ilike("normalized_name", `%${word}%`);
+      }
+      const { data } = await builder.order("name").limit(10);
       if (!cancelled) setOptions(data ?? []);
     }, 250);
     return () => {
