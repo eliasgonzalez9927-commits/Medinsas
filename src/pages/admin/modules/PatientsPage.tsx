@@ -27,6 +27,8 @@ type PatientForm = {
   document_number: string;
   insurance: string;
   coverage_id: string;
+  plan_name: string;
+  affiliate_number: string;
   birth_date: string;
   notes: string;
 };
@@ -39,6 +41,8 @@ const emptyForm: PatientForm = {
   document_number: "",
   insurance: "",
   coverage_id: "",
+  plan_name: "",
+  affiliate_number: "",
   birth_date: "",
   notes: ""
 };
@@ -126,6 +130,8 @@ export function PatientsPage() {
       email: current.email || (documentMatch.email ?? ""),
       insurance: current.insurance || (documentMatch.insurance ?? ""),
       coverage_id: current.coverage_id || (documentMatch.coverage_id ?? ""),
+      plan_name: current.plan_name || (documentMatch.plan_name ?? ""),
+      affiliate_number: current.affiliate_number || (documentMatch.affiliate_number ?? ""),
       birth_date: current.birth_date || (documentMatch.birth_date ?? "")
     }));
     setDocumentMatch(null);
@@ -179,6 +185,8 @@ export function PatientsPage() {
       document_number: patient.document_number ?? "",
       insurance: patient.insurance ?? "",
       coverage_id: patient.coverage_id ?? "",
+      plan_name: patient.plan_name ?? "",
+      affiliate_number: patient.affiliate_number ?? "",
       birth_date: patient.birth_date ?? "",
       notes: patient.notes ?? ""
     });
@@ -203,6 +211,8 @@ export function PatientsPage() {
         document_number: form.document_number || null,
         insurance: form.insurance || null,
         coverage_id: form.coverage_id || null,
+        plan_name: form.plan_name || null,
+        affiliate_number: form.affiliate_number || null,
         birth_date: form.birth_date || null,
         notes: form.notes || null
       };
@@ -278,6 +288,8 @@ export function PatientsPage() {
               coverageId={form.coverage_id}
               onChange={(insurance, coverage_id) => setForm({ ...form, insurance, coverage_id })}
             />
+            <Input label="Plan" value={form.plan_name} onChange={(value) => setForm({ ...form, plan_name: value })} />
+            <Input label="N° de afiliado" value={form.affiliate_number} onChange={(value) => setForm({ ...form, affiliate_number: value })} />
             <Input label="Fecha de nacimiento" value={form.birth_date} onChange={(value) => setForm({ ...form, birth_date: value })} type="date" />
             <label className="md:col-span-2">
               <span className="text-sm font-medium text-clinic-ink">Notas internas</span>

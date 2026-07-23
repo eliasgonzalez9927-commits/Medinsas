@@ -89,6 +89,8 @@ export type Patient = {
   document_number: string | null;
   insurance: string | null;
   coverage_id?: string | null;
+  plan_name?: string | null;
+  affiliate_number?: string | null;
   birth_date: string | null;
   notes: string | null;
   email_opt_in?: boolean;
@@ -306,6 +308,8 @@ export type PatientInput = {
   document_number?: string | null;
   insurance?: string | null;
   coverage_id?: string | null;
+  plan_name?: string | null;
+  affiliate_number?: string | null;
   birth_date?: string | null;
   notes?: string | null;
   email_opt_in?: boolean;
@@ -322,6 +326,8 @@ export type PatientDocumentMatch = {
   email: string | null;
   insurance: string | null;
   coverage_id: string | null;
+  plan_name: string | null;
+  affiliate_number: string | null;
   birth_date: string | null;
 };
 

@@ -14,6 +14,8 @@ returns table (
   email text,
   insurance text,
   coverage_id uuid,
+  plan_name text,
+  affiliate_number text,
   birth_date date
 )
 language plpgsql
@@ -35,7 +37,7 @@ begin
   end if;
 
   return query
-  select p.clinic_id, c.name, p.first_name, p.last_name, p.phone, p.email, p.insurance, p.coverage_id, p.birth_date
+  select p.clinic_id, c.name, p.first_name, p.last_name, p.phone, p.email, p.insurance, p.coverage_id, p.plan_name, p.affiliate_number, p.birth_date
   from public.patients p
   join public.clinics c on c.id = p.clinic_id
   where p.document_number = v_document
