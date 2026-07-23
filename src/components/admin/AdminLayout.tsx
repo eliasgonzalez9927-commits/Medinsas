@@ -35,6 +35,7 @@ export function AdminLayout({
   const [switchingClinicId, setSwitchingClinicId] = useState<string | null>(null);
   const displayName = profile?.full_name ?? user?.email ?? "Equipo clínico";
   const displayRole = role ? roleLabels[role] : "Usuario";
+  const isPlatformAdmin = role === "platform_admin";
 
   const visibleModules = useMemo(() => {
     return ADMIN_MODULES.filter((item) => {
@@ -69,12 +70,26 @@ export function AdminLayout({
     };
   }, [globalSearch, clinic]);
 
-  useEffect(() => {
+  function loadSwitchableClinics() {
     if (isProfessionalRole) return;
     getSwitchableClinics()
       .then(setSwitchableClinics)
       .catch(() => setSwitchableClinics([]));
+  }
+
+  useEffect(() => {
+    loadSwitchableClinics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isProfessionalRole, user?.id]);
+
+  function toggleClinicSwitcher() {
+    setClinicSwitcherOpen((value) => {
+      const next = !value;
+      // Reabrir siempre trae la lista al día - por ej. despues de crear una clinica nueva desde el mismo menu.
+      if (next) loadSwitchableClinics();
+      return next;
+    });
+  }
 
   async function handleSwitchClinic(clinicId: string) {
     if (!clinic || clinicId === clinic.id) {
@@ -194,11 +209,11 @@ export function AdminLayout({
             <p className="text-xs text-clinic-muted">{displayRole} · {clinicStatusLabel(clinic?.status)}</p>
           </div>
         </div>
-        {switchableClinics.length > 1 ? (
+        {switchableClinics.length > 1 || isPlatformAdmin ? (
           <div className="relative mt-3">
             <button
               type="button"
-              onClick={() => setClinicSwitcherOpen((value) => !value)}
+              onClick={toggleClinicSwitcher}
               aria-haspopup="menu"
               aria-expanded={clinicSwitcherOpen}
               className="inline-flex items-center gap-1 text-xs font-semibold text-clinic-brand hover:underline"
@@ -208,7 +223,10 @@ export function AdminLayout({
             {clinicSwitcherOpen && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setClinicSwitcherOpen(false)} />
-                <div className="absolute left-0 top-7 z-40 max-h-72 w-72 overflow-y-auto rounded-xl border border-clinic-line bg-white p-1.5 shadow-[0_18px_42px_rgba(13,54,66,0.14)]" role="menu">
+                <div className="absolute left-0 top-7 z-40 max-h-80 w-72 overflow-y-auto rounded-xl border border-clinic-line bg-white p-1.5 shadow-[0_18px_42px_rgba(13,54,66,0.14)]" role="menu">
+                  {switchableClinics.length === 0 && (
+                    <p className="px-3 py-2 text-xs text-clinic-muted">No hay otras clínicas disponibles.</p>
+                  )}
                   {switchableClinics.map((item) => (
                     <button
                       key={item.id}
@@ -225,6 +243,19 @@ export function AdminLayout({
                       {item.id === clinic?.id && <Check size={16} className="shrink-0 text-clinic-brand" />}
                     </button>
                   ))}
+                  {isPlatformAdmin && (
+                    <>
+                      {switchableClinics.length > 0 && <div className="my-1 border-t border-clinic-line" />}
+                      <Link
+                        to="/superadmin/clinicas?new=1"
+                        role="menuitem"
+                        onClick={() => setClinicSwitcherOpen(false)}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-clinic-brand transition hover:bg-[#e6f4f1]"
+                      >
+                        <CirclePlus size={16} /> Agregar clínica nueva
+                      </Link>
+                    </>
+                  )}
                 </div>
               </>
             )}
