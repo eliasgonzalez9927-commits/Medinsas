@@ -88,6 +88,7 @@ export type Patient = {
   email: string | null;
   document_number: string | null;
   insurance: string | null;
+  coverage_id?: string | null;
   birth_date: string | null;
   notes: string | null;
   email_opt_in?: boolean;
@@ -304,6 +305,7 @@ export type PatientInput = {
   email?: string | null;
   document_number?: string | null;
   insurance?: string | null;
+  coverage_id?: string | null;
   birth_date?: string | null;
   notes?: string | null;
   email_opt_in?: boolean;
