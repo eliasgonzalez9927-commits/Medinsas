@@ -9,10 +9,11 @@ import {
   createPatient,
   getDefaultClinic,
   getPatients,
+  lookupPatientByDocument,
   searchPatients,
   updatePatient
 } from "../../../lib/clinic-data";
-import { Clinic, PatientInput, PatientWithAppointments } from "../../../types/clinic";
+import { Clinic, PatientDocumentMatch, PatientInput, PatientWithAppointments } from "../../../types/clinic";
 import { DateRangeValue, isDateInRange, resolveDateRange } from "../../../lib/date-range";
 import { AdminPageShell } from "./AdminPageShell";
 
@@ -53,6 +54,8 @@ export function PatientsPage() {
   const [error, setError] = useState("");
   const [range, setRange] = useState<DateRangeValue>(() => resolveDateRange("this_month"));
   const [temporalFilter, setTemporalFilter] = useState<"all" | "created" | "last_appointment" | "next_appointment" | "inactive">("all");
+  const [documentMatch, setDocumentMatch] = useState<PatientDocumentMatch | null>(null);
+  const [documentMatchDismissed, setDocumentMatchDismissed] = useState(false);
 
   async function load(search = query) {
     setLoading(true);
@@ -87,6 +90,47 @@ export function PatientsPage() {
     return () => window.clearTimeout(timeout);
   }, [query]);
 
+  // Solo tiene sentido ofrecer el cruce en el alta (form.id vacio): si estamos
+  // editando un paciente existente, el DNI ya es de esta clinica.
+  useEffect(() => {
+    if (form.id || documentMatchDismissed) {
+      setDocumentMatch(null);
+      return;
+    }
+    const dni = form.document_number.trim();
+    if (dni.length < 6) {
+      setDocumentMatch(null);
+      return;
+    }
+    let cancelled = false;
+    const timeout = window.setTimeout(async () => {
+      const matches = await lookupPatientByDocument(dni);
+      if (cancelled) return;
+      const otherClinicMatch = matches.find((match) => match.clinic_id !== clinic?.id) ?? null;
+      setDocumentMatch(otherClinicMatch);
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [form.document_number, form.id, documentMatchDismissed, clinic?.id]);
+
+  function applyDocumentMatch() {
+    if (!documentMatch) return;
+    setForm((current) => ({
+      ...current,
+      first_name: current.first_name || documentMatch.first_name,
+      last_name: current.last_name || documentMatch.last_name,
+      phone: current.phone || (documentMatch.phone ?? ""),
+      email: current.email || (documentMatch.email ?? ""),
+      insurance: current.insurance || (documentMatch.insurance ?? ""),
+      coverage_id: current.coverage_id || (documentMatch.coverage_id ?? ""),
+      birth_date: current.birth_date || (documentMatch.birth_date ?? "")
+    }));
+    setDocumentMatch(null);
+    setDocumentMatchDismissed(true);
+  }
+
   const visiblePatients = useMemo(() => patients.filter((patient) => {
     const appointments = patient.appointments ?? [];
     if (temporalFilter === "all") return true;
@@ -120,6 +164,8 @@ export function PatientsPage() {
     setForm(emptyForm);
     setFormOpen(true);
     setNotice("");
+    setDocumentMatch(null);
+    setDocumentMatchDismissed(false);
   }
 
   function openEdit(patient: PatientWithAppointments) {
@@ -137,6 +183,8 @@ export function PatientsPage() {
     });
     setFormOpen(true);
     setNotice("");
+    setDocumentMatch(null);
+    setDocumentMatchDismissed(false);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -210,7 +258,20 @@ export function PatientsPage() {
             <Input label="Apellido" value={form.last_name} onChange={(value) => setForm({ ...form, last_name: value })} required />
             <Input label="Telefono / WhatsApp" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} required />
             <Input label="Email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} type="email" />
-            <Input label="DNI" value={form.document_number} onChange={(value) => setForm({ ...form, document_number: value })} />
+            <div>
+              <Input label="DNI" value={form.document_number} onChange={(value) => setForm({ ...form, document_number: value })} />
+              {documentMatch && (
+                <div className="mt-2 rounded-lg border border-clinic-brand/30 bg-[#e6f4f1] p-3 text-sm">
+                  <p className="text-clinic-ink">
+                    Encontramos este DNI en <strong>{documentMatch.clinic_name}</strong>: {documentMatch.first_name} {documentMatch.last_name}.
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <Button type="button" variant="primary" onClick={applyDocumentMatch}>Autocompletar datos</Button>
+                    <Button type="button" onClick={() => { setDocumentMatch(null); setDocumentMatchDismissed(true); }}>Ignorar</Button>
+                  </div>
+                </div>
+              )}
+            </div>
             <CoverageAutocomplete
               value={form.insurance}
               coverageId={form.coverage_id}
