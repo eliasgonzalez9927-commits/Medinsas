@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
 import { supabase } from "../lib/supabase";
+import { getDefaultClinic } from "../lib/clinic-data";
 import { Clinic } from "../types/clinic";
 
 type WorkspaceContextValue = {
@@ -12,14 +13,13 @@ type WorkspaceContextValue = {
 const WorkspaceContext = createContext<WorkspaceContextValue | undefined>(undefined);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const { clinicMembership } = useAuth();
-  const clinicId = clinicMembership?.clinic_id ?? null;
+  const { user, clinicMembership } = useAuth();
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [modules, setModules] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!clinicId) {
+    if (!user) {
       setClinic(null);
       setModules({});
       return;
@@ -27,12 +27,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     setLoading(true);
     async function loadWorkspace() {
-      const [{ data: clinicRow }, { data: moduleRows }] = await Promise.all([
-        supabase.from("clinics").select("*").eq("id", clinicId).maybeSingle(),
-        supabase.from("clinic_modules").select("module_key, enabled").eq("clinic_id", clinicId)
-      ]);
+      // getDefaultClinic() respeta el override de "Cambiar clinica" (localStorage) -
+      // no se puede derivar directo de clinicMembership.clinic_id, que siempre apunta
+      // a la membresia propia del usuario, no a la clinica que eligio ver.
+      const resolvedClinic = await getDefaultClinic();
       if (cancelled) return;
-      setClinic((clinicRow as Clinic) ?? null);
+      if (!resolvedClinic) {
+        setClinic(null);
+        setModules({});
+        setLoading(false);
+        return;
+      }
+      const { data: moduleRows } = await supabase
+        .from("clinic_modules")
+        .select("module_key, enabled")
+        .eq("clinic_id", resolvedClinic.id);
+      if (cancelled) return;
+      setClinic(resolvedClinic);
       setModules(Object.fromEntries((moduleRows ?? []).map((item: { module_key: string; enabled: boolean }) => [item.module_key, item.enabled])));
       setLoading(false);
     }
@@ -40,7 +51,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [clinicId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, clinicMembership?.clinic_id]);
 
   return <WorkspaceContext.Provider value={{ clinic, modules, loading }}>{children}</WorkspaceContext.Provider>;
 }

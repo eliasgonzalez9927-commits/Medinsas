@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { getActiveClinicOverride, setActiveClinicOverride } from "./active-clinic";
 import {
   availabilityRules as fallbackAvailabilityRules,
   professionals as fallbackProfessionals,
@@ -68,10 +69,48 @@ export class PaymentAppointmentSyncError extends Error {
   }
 }
 
+async function isPlatformAdmin(userId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("clinic_members")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("role", "platform_admin")
+    .eq("active", true)
+    .limit(1)
+    .maybeSingle();
+  return Boolean(data);
+}
+
+async function canAccessClinic(userId: string, clinicId: string): Promise<boolean> {
+  if (await isPlatformAdmin(userId)) return true;
+  const { data: member } = await supabase
+    .from("clinic_members")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("clinic_id", clinicId)
+    .eq("active", true)
+    .maybeSingle();
+  return Boolean(member);
+}
+
 export async function getDefaultClinic() {
   try {
     const { data: auth } = await supabase.auth.getUser();
     if (auth.user) {
+      const overrideId = getActiveClinicOverride();
+      if (overrideId) {
+        const allowed = await canAccessClinic(auth.user.id, overrideId);
+        if (allowed) {
+          const { data: clinic, error } = await supabase.from("clinics").select("*").eq("id", overrideId).maybeSingle();
+          if (error) throw error;
+          if (clinic) return clinic as Clinic;
+        } else {
+          // El usuario ya no tiene acceso a esa clinica (o nunca lo tuvo) - limpiamos
+          // el override en vez de dejarlo bloqueado en una clinica inaccesible.
+          setActiveClinicOverride(null);
+        }
+      }
+
       const { data: member, error: memberError } = await supabase
         .from("clinic_members")
         .select("clinic_id")
@@ -95,6 +134,32 @@ export async function getDefaultClinic() {
     console.error("Failed to resolve member clinic", error);
   }
   return null;
+}
+
+export type SwitchableClinic = { id: string; name: string; slug: string; status: string };
+
+export async function getSwitchableClinics(): Promise<SwitchableClinic[]> {
+  try {
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user) return [];
+    if (await isPlatformAdmin(auth.user.id)) {
+      const { data, error } = await supabase.from("clinics").select("id, name, slug, status").order("name");
+      if (error) throw error;
+      return (data ?? []) as SwitchableClinic[];
+    }
+    const { data, error } = await supabase
+      .from("clinic_members")
+      .select("clinic_id, clinics(id, name, slug, status)")
+      .eq("user_id", auth.user.id)
+      .eq("active", true);
+    if (error) throw error;
+    return (data ?? [])
+      .map((row) => (row as unknown as { clinics: SwitchableClinic | null }).clinics)
+      .filter((item): item is SwitchableClinic => Boolean(item));
+  } catch (error) {
+    console.error("Failed to load switchable clinics", error);
+    return [];
+  }
 }
 
 export async function getClinicBySlug(slug: string): Promise<Clinic | null> {

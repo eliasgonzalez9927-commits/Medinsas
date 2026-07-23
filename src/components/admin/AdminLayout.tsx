@@ -1,11 +1,12 @@
-import { Building2, ChevronDown, CirclePlus, LogOut, Menu, Search, UserRound, X } from "lucide-react";
+import { Building2, Check, ChevronDown, CirclePlus, LogOut, Menu, Search, UserRound, X } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import { ADMIN_MODULES, ADMIN_NAVIGATION_GROUPS, AdminModuleDefinition } from "../../lib/admin-navigation";
 import { roleLabels } from "../../lib/auth-roles";
-import { searchPatients } from "../../lib/clinic-data";
+import { getSwitchableClinics, searchPatients, SwitchableClinic } from "../../lib/clinic-data";
+import { setActiveClinicOverride } from "../../lib/active-clinic";
 import { BASE_MODULES } from "../../lib/modules";
 import { PatientWithAppointments } from "../../types/clinic";
 import { Button } from "../ui/Button";
@@ -29,6 +30,9 @@ export function AdminLayout({
   const [searchFocused, setSearchFocused] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [lastRefreshAt, setLastRefreshAt] = useState<Date>(() => new Date());
+  const [clinicSwitcherOpen, setClinicSwitcherOpen] = useState(false);
+  const [switchableClinics, setSwitchableClinics] = useState<SwitchableClinic[]>([]);
+  const [switchingClinicId, setSwitchingClinicId] = useState<string | null>(null);
   const displayName = profile?.full_name ?? user?.email ?? "Equipo clínico";
   const displayRole = role ? roleLabels[role] : "Usuario";
 
@@ -64,6 +68,23 @@ export function AdminLayout({
       window.clearTimeout(timeout);
     };
   }, [globalSearch, clinic]);
+
+  useEffect(() => {
+    if (isProfessionalRole) return;
+    getSwitchableClinics()
+      .then(setSwitchableClinics)
+      .catch(() => setSwitchableClinics([]));
+  }, [isProfessionalRole, user?.id]);
+
+  async function handleSwitchClinic(clinicId: string) {
+    if (!clinic || clinicId === clinic.id) {
+      setClinicSwitcherOpen(false);
+      return;
+    }
+    setSwitchingClinicId(clinicId);
+    setActiveClinicOverride(clinicId);
+    window.location.href = "/admin";
+  }
 
   function runGlobalSearch() {
     const query = globalSearch.trim();
@@ -173,9 +194,44 @@ export function AdminLayout({
             <p className="text-xs text-clinic-muted">{displayRole} · {clinicStatusLabel(clinic?.status)}</p>
           </div>
         </div>
-        <button type="button" disabled title="El selector multi-clínica estará disponible próximamente." className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-clinic-muted disabled:cursor-not-allowed disabled:opacity-70">
-          Cambiar clínica <ChevronDown size={14} />
-        </button>
+        {switchableClinics.length > 1 ? (
+          <div className="relative mt-3">
+            <button
+              type="button"
+              onClick={() => setClinicSwitcherOpen((value) => !value)}
+              aria-haspopup="menu"
+              aria-expanded={clinicSwitcherOpen}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-clinic-brand hover:underline"
+            >
+              Cambiar clínica <ChevronDown size={14} />
+            </button>
+            {clinicSwitcherOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setClinicSwitcherOpen(false)} />
+                <div className="absolute left-0 top-7 z-40 max-h-72 w-72 overflow-y-auto rounded-xl border border-clinic-line bg-white p-1.5 shadow-[0_18px_42px_rgba(13,54,66,0.14)]" role="menu">
+                  {switchableClinics.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="menuitem"
+                      disabled={switchingClinicId !== null}
+                      onClick={() => handleSwitchClinic(item.id)}
+                      className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-clinic-ink transition hover:bg-[#e6f4f1] disabled:cursor-wait disabled:opacity-60"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate">{item.name}</span>
+                        <span className="block text-xs font-normal text-clinic-muted">{clinicStatusLabel(item.status)}</span>
+                      </span>
+                      {item.id === clinic?.id && <Check size={16} className="shrink-0 text-clinic-brand" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-clinic-muted">Solo tenés acceso a esta clínica.</p>
+        )}
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-5">{clinicalNavigation}</nav>
