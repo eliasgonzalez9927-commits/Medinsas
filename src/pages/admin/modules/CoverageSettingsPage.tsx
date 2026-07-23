@@ -5,6 +5,7 @@ import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
 import { getDefaultClinic } from "../../../lib/clinic-data";
 import { supabase } from "../../../lib/supabase";
+import { matchesAllWords } from "../../../lib/text-search";
 import { Clinic, HealthCoverage } from "../../../types/clinic";
 
 export function CoverageSettingsPage() {
@@ -24,7 +25,7 @@ export function CoverageSettingsPage() {
       setClinic(currentClinic);
       if (!currentClinic) return;
       const [coverageResult, acceptedResult] = await Promise.all([
-        supabase.from("health_coverages").select("*").eq("active", true).order("name").limit(300),
+        supabase.from("health_coverages").select("*").eq("active", true).order("name").limit(600),
         supabase.from("clinic_accepted_coverages").select("coverage_id, accepted").eq("clinic_id", currentClinic.id)
       ]);
       if (coverageResult.error) throw coverageResult.error;
@@ -38,7 +39,7 @@ export function CoverageSettingsPage() {
 
   useEffect(() => { load(); }, []);
 
-  const visible = useMemo(() => coverages.filter((coverage) => coverage.name.toLowerCase().includes(query.toLowerCase())), [coverages, query]);
+  const visible = useMemo(() => coverages.filter((coverage) => matchesAllWords(coverage.name, query)), [coverages, query]);
 
   async function toggle(coverageId: string) {
     if (!clinic) return;

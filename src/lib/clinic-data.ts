@@ -30,6 +30,7 @@ import {
   MessageLog,
   MessageTemplate,
   Patient,
+  PatientDocumentMatch,
   PatientInput,
   PatientWithAppointments,
   Payment,
@@ -1277,6 +1278,22 @@ export async function getPatientForProfessional(
   } catch (error) {
     console.error("Failed to load patient for professional", error);
     throw new FriendlyDataError("No pudimos cargar la ficha del paciente.");
+  }
+}
+
+// Busca el DNI entre TODAS las clinicas de la plataforma (via RPC security definer),
+// no solo la clinica activa, para poder ofrecer autocompletar el alta de un
+// paciente que ya existe en otra clinica del grupo.
+export async function lookupPatientByDocument(documentNumber: string): Promise<PatientDocumentMatch[]> {
+  const trimmed = documentNumber.trim();
+  if (trimmed.length < 6) return [];
+  try {
+    const { data, error } = await supabase.rpc("lookup_patient_by_document", { p_document_number: trimmed });
+    if (error) throw error;
+    return (data ?? []) as PatientDocumentMatch[];
+  } catch (error) {
+    console.error("Failed to lookup patient by document", error);
+    return [];
   }
 }
 

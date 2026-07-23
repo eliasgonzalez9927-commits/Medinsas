@@ -16,6 +16,7 @@ import {
   ServiceWithRelations
 } from "../../types/clinic";
 import { supabase } from "../../lib/supabase";
+import { matchesAllWords } from "../../lib/text-search";
 
 type BookingForm = {
   firstName: string;
@@ -112,7 +113,7 @@ export function PublicBookingPage() {
           .eq("active", true)
           .eq("enabled_for_choice", true)
           .order("name")
-          .limit(100);
+          .limit(600);
         setCoverages(coverageRows ?? []);
       } catch (err) {
         console.error("Public booking load failed", {
@@ -597,7 +598,7 @@ function validatePatientForm(form: BookingForm) {
 }
 
 function CoveragePicker({ form, coverages, onChange }: { form: BookingForm; coverages: Array<{ id: string; name: string }>; onChange: (next: BookingForm) => void }) {
-  const matches = coverages.filter((coverage) => coverage.name.toLowerCase().includes(form.insurance.toLowerCase())).slice(0, 6);
+  const matches = coverages.filter((coverage) => matchesAllWords(coverage.name, form.insurance)).slice(0, 6);
   return (
     <div className="sm:col-span-2">
       <label className="block text-sm font-medium text-clinic-ink">Obra social, prepaga o cobertura</label>
