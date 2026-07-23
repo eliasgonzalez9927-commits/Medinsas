@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { Button } from "../../../components/ui/Button";
+import { supabase } from "../../../lib/supabase";
 import {
   createPatient,
   getDefaultClinic,
@@ -23,6 +24,7 @@ type PatientForm = {
   email: string;
   document_number: string;
   insurance: string;
+  coverage_id: string;
   birth_date: string;
   notes: string;
 };
@@ -34,6 +36,7 @@ const emptyForm: PatientForm = {
   email: "",
   document_number: "",
   insurance: "",
+  coverage_id: "",
   birth_date: "",
   notes: ""
 };
@@ -128,6 +131,7 @@ export function PatientsPage() {
       email: patient.email ?? "",
       document_number: patient.document_number ?? "",
       insurance: patient.insurance ?? "",
+      coverage_id: patient.coverage_id ?? "",
       birth_date: patient.birth_date ?? "",
       notes: patient.notes ?? ""
     });
@@ -149,6 +153,7 @@ export function PatientsPage() {
         email: form.email || null,
         document_number: form.document_number || null,
         insurance: form.insurance || null,
+        coverage_id: form.coverage_id || null,
         birth_date: form.birth_date || null,
         notes: form.notes || null
       };
@@ -206,7 +211,11 @@ export function PatientsPage() {
             <Input label="Telefono / WhatsApp" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} required />
             <Input label="Email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} type="email" />
             <Input label="DNI" value={form.document_number} onChange={(value) => setForm({ ...form, document_number: value })} />
-            <Input label="Obra social" value={form.insurance} onChange={(value) => setForm({ ...form, insurance: value })} />
+            <CoverageAutocomplete
+              value={form.insurance}
+              coverageId={form.coverage_id}
+              onChange={(insurance, coverage_id) => setForm({ ...form, insurance, coverage_id })}
+            />
             <Input label="Fecha de nacimiento" value={form.birth_date} onChange={(value) => setForm({ ...form, birth_date: value })} type="date" />
             <label className="md:col-span-2">
               <span className="text-sm font-medium text-clinic-ink">Notas internas</span>
@@ -341,6 +350,75 @@ function Input({
         required={required}
         className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
       />
+    </label>
+  );
+}
+
+type CoverageOption = { id: string; name: string };
+
+function CoverageAutocomplete({
+  value,
+  coverageId,
+  onChange
+}: {
+  value: string;
+  coverageId: string;
+  onChange: (insurance: string, coverageId: string) => void;
+}) {
+  const [options, setOptions] = useState<CoverageOption[]>([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const query = value.trim();
+    if (query.length < 2) {
+      setOptions([]);
+      return;
+    }
+    let cancelled = false;
+    const timeout = window.setTimeout(async () => {
+      const { data } = await supabase
+        .from("health_coverages")
+        .select("id, name")
+        .eq("active", true)
+        .ilike("name", `%${query}%`)
+        .order("name")
+        .limit(8);
+      if (!cancelled) setOptions(data ?? []);
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [value]);
+
+  return (
+    <label className="relative">
+      <span className="text-sm font-medium text-clinic-ink">Obra social</span>
+      <input
+        value={value}
+        onChange={(event) => { onChange(event.target.value, ""); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+        placeholder="Buscá OSDE, PAMI, Swiss Medical..."
+        autoComplete="off"
+        className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+      />
+      {coverageId && <p className="mt-1 text-xs text-emerald-700">Vinculada al catálogo oficial.</p>}
+      {open && !coverageId && options.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border border-clinic-line bg-white p-1.5 shadow-[0_18px_42px_rgba(13,54,66,0.12)]">
+          {options.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => { onChange(option.name, option.id); setOpen(false); }}
+              className="block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-clinic-surface"
+            >
+              {option.name}
+            </button>
+          ))}
+        </div>
+      )}
     </label>
   );
 }
