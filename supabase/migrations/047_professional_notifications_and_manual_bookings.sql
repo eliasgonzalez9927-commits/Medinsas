@@ -37,6 +37,18 @@ exception when undefined_object then
     check (recipient_type in ('patient', 'clinic_user', 'professional_user', 'platform_user'));
 end $$;
 
+do $$
+begin
+  alter table public.notification_templates drop constraint notification_templates_audience_check;
+  alter table public.notification_templates
+    add constraint notification_templates_audience_check
+    check (audience in ('patient', 'clinic', 'professional', 'platform'));
+exception when undefined_object then
+  alter table public.notification_templates
+    add constraint notification_templates_audience_check
+    check (audience in ('patient', 'clinic', 'professional', 'platform'));
+end $$;
+
 alter table public.notification_events
   add column if not exists professional_id uuid references public.professionals(id) on delete set null;
 
