@@ -6,6 +6,7 @@ import { getDefaultClinic } from "../../../lib/clinic-data";
 import { getNotificationEvents } from "../../../lib/notifications";
 import { Clinic, NotificationDelivery, NotificationEvent } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
+import { SettingsTabsNav } from "./SettingsPage";
 
 type NotificationFilter = "all" | "pending" | "processed" | "failed";
 
@@ -72,11 +73,12 @@ export function NotificationsPage() {
 
   return (
     <AdminPageShell
-      description="Eventos internos, entregas preparadas y trazabilidad para email, WhatsApp futuro y avisos en la plataforma."
-      eyebrow="Comunicación"
+      description="Registro técnico de envíos por email y WhatsApp (auditoría/debug). Los avisos accionables del día a día están en la campanita del encabezado."
+      eyebrow="Configuración"
       onRefresh={() => load()}
-      title="Notificaciones"
+      title="Registro de envíos"
     >
+      <SettingsTabsNav activeTab="delivery_log" />
       {error && <Message tone="error">{error}</Message>}
 
       <section className="grid gap-4 md:grid-cols-4">

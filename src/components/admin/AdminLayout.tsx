@@ -7,6 +7,7 @@ import { ADMIN_MODULES, ADMIN_NAVIGATION_GROUPS, AdminModuleDefinition } from ".
 import { roleLabels } from "../../lib/auth-roles";
 import { getSwitchableClinics, searchPatients, SwitchableClinic } from "../../lib/clinic-data";
 import { setActiveClinicOverride } from "../../lib/active-clinic";
+import { NotificationBell } from "./NotificationBell";
 import { BASE_MODULES } from "../../lib/modules";
 import { PatientWithAppointments } from "../../types/clinic";
 import { Button } from "../ui/Button";
@@ -339,6 +340,7 @@ export function AdminLayout({
               <div className="hidden min-w-0 text-right xl:block"><p className="truncate text-sm font-semibold text-clinic-ink">{clinic?.name ?? "Medin"}</p><p className="text-xs text-clinic-muted">{displayRole}</p></div>
               <Button className="hidden sm:inline-flex" onClick={handleRefresh} variant="secondary">Actualizar</Button>
               {!isProfessionalRole && <Button onClick={onCreateAppointment} variant="primary">Nuevo turno</Button>}
+              {!isProfessionalRole && <NotificationBell clinicId={clinic?.id} />}
               <div className="relative">
                 <button
                   type="button"

@@ -2,11 +2,76 @@ import { supabase } from "./supabase";
 import { FriendlyDataError } from "./clinic-data";
 import {
   ClinicNotificationSettings,
+  InAppNotification,
   NotificationAudience,
   NotificationDelivery,
   NotificationEvent,
   NotificationTemplate
 } from "../types/clinic";
+
+// A que pantalla llevar al hacer click en cada tipo de notificacion in-app.
+const EVENT_TYPE_LINKS: Record<string, string> = {
+  reschedule_requested_clinic: "/admin/solicitudes",
+  cancellation_requested_clinic: "/admin/solicitudes",
+  new_booking_clinic: "/admin/agenda",
+  manual_booking_clinic: "/admin/agenda",
+  overbooking_created_clinic: "/admin/agenda",
+  payment_approved_clinic: "/admin/pagos"
+};
+
+export function resolveNotificationLink(eventType: string): string {
+  return EVENT_TYPE_LINKS[eventType] ?? "/admin";
+}
+
+// Trae las notificaciones in-app de la clinica (para la campanita). No
+// depende de una tabla nueva: usa el mismo pipeline de eventos/deliveries
+// que ya alimentan la pagina de auditoria de envios, filtrado a channel
+// in_app y audiencia clinica.
+export async function getInAppNotifications(clinicId: string, limit = 30): Promise<InAppNotification[]> {
+  try {
+    const { data, error } = await supabase
+      .from("notification_deliveries")
+      .select("id, read_at, notification_events!inner(id, event_type, title, message, created_at, metadata, clinic_id, audience)")
+      .eq("clinic_id", clinicId)
+      .eq("channel", "in_app")
+      .eq("recipient_type", "clinic_user")
+      .order("created_at", { referencedTable: "notification_events", ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return ((data ?? []) as any[]).map((row) => ({
+      delivery_id: row.id,
+      event_id: row.notification_events.id,
+      event_type: row.notification_events.event_type,
+      title: row.notification_events.title,
+      message: row.notification_events.message,
+      created_at: row.notification_events.created_at,
+      read_at: row.read_at,
+      metadata: row.notification_events.metadata ?? {}
+    }));
+  } catch (error) {
+    console.error("Failed to load in-app notifications", error);
+    return [];
+  }
+}
+
+export async function markNotificationRead(deliveryId: string): Promise<void> {
+  const { error } = await supabase
+    .from("notification_deliveries")
+    .update({ read_at: new Date().toISOString() })
+    .eq("id", deliveryId)
+    .is("read_at", null);
+  if (error) console.error("Failed to mark notification as read", error);
+}
+
+export async function markAllNotificationsRead(clinicId: string): Promise<void> {
+  const { error } = await supabase
+    .from("notification_deliveries")
+    .update({ read_at: new Date().toISOString() })
+    .eq("clinic_id", clinicId)
+    .eq("channel", "in_app")
+    .is("read_at", null);
+  if (error) console.error("Failed to mark all notifications as read", error);
+}
 
 export type NotificationEventPayload = {
   clinic_id?: string | null;
