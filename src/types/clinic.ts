@@ -752,7 +752,21 @@ export type NotificationDelivery = {
   provider_message_id: string | null;
   error_message: string | null;
   sent_at: string | null;
+  read_at: string | null;
   created_at: string;
+  metadata: Record<string, unknown>;
+};
+
+// Notificacion in-app lista para mostrar en la campanita: junta el evento
+// (titulo/mensaje/tipo) con su delivery in_app (estado de lectura).
+export type InAppNotification = {
+  delivery_id: string;
+  event_id: string;
+  event_type: string;
+  title: string;
+  message: string | null;
+  created_at: string;
+  read_at: string | null;
   metadata: Record<string, unknown>;
 };
 

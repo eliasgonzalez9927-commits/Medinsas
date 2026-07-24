@@ -58,16 +58,16 @@ export const ADMIN_MODULES: AdminModuleDefinition[] = [
 
   { key: "professionals", label: "Profesionales", path: "/admin/profesionales", icon: Stethoscope, group: "clinical_management", status: "active", moduleFlag: "profesionales" },
   { key: "services", label: "Servicios", path: "/admin/servicios", icon: WalletCards, group: "clinical_management", status: "active", moduleFlag: "servicios" },
-  { key: "requests", label: "Solicitudes", path: "/admin/solicitudes", icon: ClipboardCheck, group: "operations", status: "active", moduleFlag: "agenda" },
+  { key: "requests", label: "Solicitudes", path: "/admin/solicitudes", icon: ClipboardCheck, group: "operations", status: "hidden", moduleFlag: "agenda" },
   { key: "availability", label: "Disponibilidad", path: "/admin/disponibilidad", icon: SlidersHorizontal, group: "operations", status: "active", moduleFlag: "disponibilidad" },
-  { key: "online_booking", label: "Reservas online", path: "/admin/booking", icon: CalendarDays, group: "operations", status: "active", moduleFlag: "reservas_online" },
+  { key: "online_booking", label: "Reservas online", path: "/admin/booking", icon: CalendarDays, group: "operations", status: "hidden", moduleFlag: "reservas_online" },
   { key: "onboarding", label: "Onboarding", path: "/admin/onboarding", icon: ClipboardCheck, group: "operations", status: "beta" },
 
   { key: "payments", label: "Pagos", path: "/admin/pagos", icon: WalletCards, group: "administration", status: "active", moduleFlag: ["pagos", "mercado_pago"] },
   { key: "financing", label: "Financiación", path: "/admin/financiacion", icon: Banknote, group: "administration", status: "coming_soon", moduleFlag: "financiacion", description: "Opciones de financiación y simulaciones para tratamientos." },
   { key: "billing", label: "Facturación", path: "/admin/facturacion", icon: ReceiptText, group: "administration", status: "coming_soon", moduleFlag: "facturacion", description: "Comprobantes internos e integración fiscal cuando esté lista." },
 
-  { key: "notifications", label: "Notificaciones", path: "/admin/notificaciones", icon: Bell, group: "communication", status: "active" },
+  { key: "notifications", label: "Notificaciones", path: "/admin/notificaciones", icon: Bell, group: "communication", status: "hidden" },
   { key: "messages", label: "Mensajes", path: "/admin/mensajes", icon: MessageCircle, group: "communication", status: "beta", moduleFlag: "mensajes" },
   { key: "whatsapp", label: "WhatsApp", path: "/admin/whatsapp", icon: MessageCircle, group: "communication", status: "coming_soon", moduleFlag: "whatsapp", description: "Automatizaciones y conversaciones por WhatsApp con integración oficial." },
 

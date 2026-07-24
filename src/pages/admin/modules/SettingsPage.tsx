@@ -47,7 +47,8 @@ export type SettingsTab =
   | "booking"
   | "branding"
   | "fiscal"
-  | "integrations";
+  | "integrations"
+  | "delivery_log";
 
 const tabs: Array<{ id: SettingsTab; label: string; to: string }> = [
   { id: "clinic", label: "Datos de la clinica", to: "/admin/configuracion" },
@@ -59,7 +60,8 @@ const tabs: Array<{ id: SettingsTab; label: string; to: string }> = [
   { id: "booking", label: "Reservas online", to: "/admin/booking" },
   { id: "branding", label: "Branding", to: "/admin/configuracion#branding" },
   { id: "fiscal", label: "Datos fiscales", to: "/admin/facturacion/configuracion" },
-  { id: "integrations", label: "Integraciones", to: "/admin/configuracion#integraciones" }
+  { id: "integrations", label: "Integraciones", to: "/admin/configuracion#integraciones" },
+  { id: "delivery_log", label: "Registro de envíos", to: "/admin/notificaciones" }
 ];
 
 export function SettingsTabsNav({ activeTab }: { activeTab: SettingsTab }) {
