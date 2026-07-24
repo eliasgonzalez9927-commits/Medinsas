@@ -1372,12 +1372,25 @@ export async function createAppointment(data: AppointmentInput): Promise<Appoint
       .single();
     if (error) throw error;
     await logAppointmentEvent(created.id, "appointment_created", null, created.status);
+    dispatchAppointmentNotifications(created.id);
     return created as Appointment;
   } catch (error) {
     if (error instanceof FriendlyDataError) throw error;
     console.error("Failed to create appointment", error);
     throw new FriendlyDataError("No pudimos crear el turno.");
   }
+}
+
+// El trigger de la base ya deja las notificaciones en 'pending' dentro del
+// mismo insert; esto solo dispara el envio real de los emails ya
+// encolados. Fire-and-forget: si falla, las filas quedan pending y se
+// pueden reintentar despues - nunca debe bloquear ni romper el alta del turno.
+function dispatchAppointmentNotifications(appointmentId: string) {
+  fetch("/api/notifications/dispatch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ appointment_id: appointmentId })
+  }).catch((error) => console.error("Failed to dispatch appointment notifications", error));
 }
 
 export async function createOverbooking(data: OverbookingInput): Promise<Appointment> {
@@ -1620,7 +1633,9 @@ export async function createPublicBooking(payload: PublicBookingPayload): Promis
       p_reason: payload.reason ?? null
     });
     if (error) throw error;
-    return data as PublicBookingResult;
+    const result = data as PublicBookingResult;
+    if (result?.appointment_id) dispatchAppointmentNotifications(result.appointment_id);
+    return result;
   } catch (error: any) {
     console.error("Failed to create public booking", error);
     if (String(error?.message ?? "").includes("SLOT_NOT_AVAILABLE")) {
