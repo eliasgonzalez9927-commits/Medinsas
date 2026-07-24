@@ -77,7 +77,7 @@ export function AppointmentRequestsPage() {
     setNotice("");
     try {
       const token = await getAccessToken();
-      const response = await fetch(`/api/appointment-requests/${id}`, {
+      const response = await fetch(`/api/appointment-requests?id=${id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
