@@ -1064,6 +1064,13 @@ export async function createDraftInvoice(input: DraftInvoiceInput): Promise<Invo
       );
       if (itemsError) throw itemsError;
     }
+    // Deja el pago apuntando a su comprobante para que la ficha de pago
+    // pueda mostrar "Ver comprobante" en vez de "Facturar" de nuevo.
+    const { error: paymentError } = await supabase
+      .from("payments")
+      .update({ invoice_id: invoice.id })
+      .eq("id", input.paymentId);
+    if (paymentError) throw paymentError;
     return invoice as Invoice;
   } catch (error) {
     console.error("Failed to create draft invoice", error);

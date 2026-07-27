@@ -1,12 +1,15 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ChevronDown, CreditCard, ExternalLink, RefreshCw, Settings, WalletCards } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ChevronDown, CreditCard, ExternalLink, FileCheck2, RefreshCw, Settings, WalletCards } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { Button } from "../../../components/ui/Button";
 import { useAuth } from "../../../contexts/AuthContext";
 import {
+  createDraftInvoice,
   getDefaultClinic,
+  getFiscalSettings,
+  getInvoiceById,
   getPaymentById,
   getPaymentEvents,
   getPayments,
@@ -18,7 +21,7 @@ import {
 import { getPublicAppUrl } from "../../../lib/public-url";
 import { DateRangeValue, resolveDateRange } from "../../../lib/date-range";
 import { supabase } from "../../../lib/supabase";
-import { Clinic, PaymentEvent, PaymentSettings, PaymentWithRelations } from "../../../types/clinic";
+import { Clinic, FiscalSettings, Invoice, PaymentEvent, PaymentSettings, PaymentWithRelations } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
 import { SettingsTabsNav } from "./SettingsPage";
 
@@ -310,20 +313,53 @@ export function PaymentsPage() {
 
 export function PaymentDetailPage() {
   const { id = "" } = useParams();
+  const navigate = useNavigate();
   const [payment, setPayment] = useState<PaymentWithRelations | null>(null);
   const [events, setEvents] = useState<PaymentEvent[]>([]);
+  const [fiscalSettings, setFiscalSettings] = useState<FiscalSettings | null>(null);
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [invoicing, setInvoicing] = useState(false);
   const [showTech, setShowTech] = useState(false);
 
   async function load() {
     try {
       const loadedPayment = await getPaymentById(id);
       setPayment(loadedPayment);
-      if (loadedPayment) setEvents(await getPaymentEvents(loadedPayment.id).catch(() => []));
+      if (loadedPayment) {
+        setEvents(await getPaymentEvents(loadedPayment.id).catch(() => []));
+        setFiscalSettings(await getFiscalSettings(loadedPayment.clinic_id).catch(() => null));
+        setInvoice(loadedPayment.invoice_id ? await getInvoiceById(loadedPayment.invoice_id).catch(() => null) : null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar el pago.");
+    }
+  }
+
+  async function handleFacturar() {
+    if (!payment || !fiscalSettings) return;
+    setInvoicing(true);
+    setError("");
+    try {
+      const isFacturaB = fiscalSettings.fiscal_condition === "responsable_inscripto";
+      const grossAmount = Number(payment.amount);
+      const taxRate = isFacturaB ? 21 : 0;
+      const unitPrice = isFacturaB ? Math.round((grossAmount / 1.21) * 100) / 100 : grossAmount;
+      const draft = await createDraftInvoice({
+        clinicId: payment.clinic_id,
+        paymentId: payment.id,
+        patientId: payment.patient_id,
+        fiscalSettingId: fiscalSettings.id,
+        documentType: isFacturaB ? "factura_b" : "factura_c",
+        items: [{ description: payment.services?.name ?? "Atencion medica", quantity: 1, unitPrice, taxRate }]
+      });
+      navigate(`/admin/facturacion/comprobantes/${draft.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos crear el comprobante.");
+    } finally {
+      setInvoicing(false);
     }
   }
 
@@ -402,9 +438,25 @@ export function PaymentDetailPage() {
                 Advertencia: este pago no tiene un turno asociado con fecha y hora. Revisar la reserva original antes de contactar al paciente.
               </p>
             )}
-            <p className="mt-5 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              Pago registrado. La emision fiscal se gestiona desde Facturacion.
-            </p>
+            {invoice ? (
+              <Link
+                to={`/admin/facturacion/comprobantes/${invoice.id}`}
+                className="mt-5 flex items-center gap-2 rounded-lg bg-teal-50 px-3 py-2 text-sm font-semibold text-clinic-brand hover:underline"
+              >
+                <FileCheck2 size={16} />
+                Ver comprobante ({invoiceStatusLabel(invoice.arca_status)})
+              </Link>
+            ) : getEffectivePaymentStatus(payment) === "approved" && fiscalSettings?.arca_integration_status === "configured" ? (
+              <Button className="mt-5" icon={<FileCheck2 size={16} />} onClick={handleFacturar} disabled={invoicing}>
+                {invoicing ? "Generando..." : "Facturar"}
+              </Button>
+            ) : (
+              <p className="mt-5 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {getEffectivePaymentStatus(payment) !== "approved"
+                  ? "La emision fiscal solo esta disponible para pagos acreditados."
+                  : "Facturacion electronica todavia no esta configurada para esta clinica."}
+              </p>
+            )}
             <div className="mt-4 border-t border-clinic-line pt-4">
               <button
                 type="button"
@@ -724,6 +776,16 @@ function paymentStatusLabel(status: string) {
     expired: "Vencido"
   };
   return labels[status] ?? status;
+}
+
+function invoiceStatusLabel(arcaStatus: string) {
+  const labels: Record<string, string> = {
+    pending_configuration: "Sin emitir",
+    pending: "Emitiendo...",
+    synced: "CAE obtenido",
+    failed: "Rechazado por ARCA"
+  };
+  return labels[arcaStatus] ?? arcaStatus;
 }
 
 function getProfId(payment: PaymentWithRelations): string | null {
