@@ -436,8 +436,8 @@ export type FiscalSettings = {
   cuit: string | null;
   fiscal_condition: string | null;
   fiscal_address: string | null;
-  sale_points: Array<Record<string, unknown>>;
-  receipt_types: Array<Record<string, unknown>>;
+  sale_points: string[];
+  receipt_types: string[];
   arca_integration_status: "pending_configuration" | "configured" | "disabled" | string;
   arca_provider: string | null;
   arca_environment: "sandbox" | "production" | string;

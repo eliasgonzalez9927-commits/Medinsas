@@ -26,6 +26,7 @@ import { ProfessionalsPage } from "./pages/admin/modules/ProfessionalsPage";
 import { ProfessionalProfilePage } from "./pages/admin/modules/ProfessionalProfilePage";
 import { SettingsLocationsPage, SettingsNotificationsPage, SettingsPage, SettingsUsersPage } from "./pages/admin/modules/SettingsPage";
 import { CoverageSettingsPage } from "./pages/admin/modules/CoverageSettingsPage";
+import { FiscalSettingsPage } from "./pages/admin/modules/FiscalSettingsPage";
 import { ComingSoonPage } from "./pages/admin/modules/ComingSoonPage";
 import { MyPlanPage } from "./pages/admin/modules/MyPlanPage";
 import { ImportsPage } from "./pages/admin/modules/ImportsPage";
@@ -121,7 +122,7 @@ export function App() {
         <Route path="/admin/configuracion/coberturas" element={<CoverageSettingsPage />} />
         <Route path="/admin/notificaciones/configuracion" element={<SettingsNotificationsPage />} />
         <Route path="/admin/pagos/configuracion" element={<PaymentSettingsPage />} />
-        <Route path="/admin/facturacion/configuracion" element={<ComingSoonPage title="Configuración fiscal" description="Los datos fiscales e integración ARCA se habilitarán junto con el módulo de facturación operativo." settingsTab="fiscal" />} />
+        <Route path="/admin/facturacion/configuracion" element={<FiscalSettingsPage />} />
         <Route path="/admin/recetarios/configuracion" element={<ComingSoonPage title="Configuración de recetarios" description="La configuración de matrícula, firma e integraciones aprobadas estará disponible cuando el módulo esté operativo." />} />
       </Route>
       <Route element={<ProtectedRoute roles={["platform_admin"]} />}>
