@@ -112,10 +112,10 @@ export function App() {
         <Route path="/admin/recetarios" element={<ComingSoonPage title="Recetarios" description="Próximamente vas a poder trabajar con recetarios internos, órdenes e indicaciones bajo el circuito clínico y regulatorio correspondiente." />} />
         <Route path="/admin/recetarios/nuevo" element={<ComingSoonPage title="Nuevo documento" description="La creación de documentos médicos se habilitará junto con las validaciones profesionales y de trazabilidad necesarias." />} />
         <Route path="/admin/reportes" element={<ReportsPage />} />
-      </Route>
-      <Route element={<ProtectedRoute roles={CONFIG_ROLES} />}>
         <Route path="/admin/configuracion" element={<SettingsPage />} />
         <Route path="/admin/configuracion/sedes" element={<SettingsLocationsPage />} />
+      </Route>
+      <Route element={<ProtectedRoute roles={CONFIG_ROLES} />}>
         <Route path="/admin/configuracion/usuarios" element={<SettingsUsersPage />} />
         <Route path="/admin/configuracion/notificaciones" element={<SettingsNotificationsPage />} />
         <Route path="/admin/configuracion/coberturas" element={<CoverageSettingsPage />} />

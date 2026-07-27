@@ -64,11 +64,15 @@ const tabs: Array<{ id: SettingsTab; label: string; to: string }> = [
   { id: "delivery_log", label: "Registro de envíos", to: "/admin/notificaciones" }
 ];
 
+const RECEPTIONIST_HIDDEN_TABS: SettingsTab[] = ["users", "notifications", "payments", "fiscal", "branding", "integrations"];
+
 export function SettingsTabsNav({ activeTab }: { activeTab: SettingsTab }) {
+  const { role } = useAuth();
+  const visibleTabs = role === "receptionist" ? tabs.filter((tab) => !RECEPTIONIST_HIDDEN_TABS.includes(tab.id)) : tabs;
   return (
     <SectionCard className="p-3">
       <div className="flex gap-2 overflow-x-auto">
-        {tabs.map((tab) => (
+        {visibleTabs.map((tab) => (
           <Link
             key={tab.id}
             to={tab.to}
@@ -340,8 +344,16 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
             />
           )}
           {activeTab === "notifications" && <NotificationsPanel clinic={clinic} disabled={!permissions.manageClinic || saving} />}
-          {activeTab === "branding" && <PreparedPanel icon={<SlidersHorizontal size={20} />} title="Branding" text="Logo, color principal, textos publicos y dominio personalizado quedan preparados sobre la tabla clinics." />}
-          {activeTab === "integrations" && <PreparedPanel icon={<ShieldCheck size={20} />} title="Integraciones" text="Resend queda activo desde backend. WhatsApp, ARCA y receta electronica se mantienen como integraciones futuras controladas." />}
+          {activeTab === "branding" && (
+            role === "receptionist"
+              ? <Message tone="warning">Tu rol no tiene acceso a esta seccion.</Message>
+              : <PreparedPanel icon={<SlidersHorizontal size={20} />} title="Branding" text="Logo, color principal, textos publicos y dominio personalizado quedan preparados sobre la tabla clinics." />
+          )}
+          {activeTab === "integrations" && (
+            role === "receptionist"
+              ? <Message tone="warning">Tu rol no tiene acceso a esta seccion.</Message>
+              : <PreparedPanel icon={<ShieldCheck size={20} />} title="Integraciones" text="Resend queda activo desde backend. WhatsApp, ARCA y receta electronica se mantienen como integraciones futuras controladas." />
+          )}
         </>
       )}
     </AdminPageShell>

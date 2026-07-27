@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import type { ClinicModuleKey } from "./modules";
 import type { UserRole } from "../types/database";
-import { CONFIG_ROLES } from "./auth-roles";
 
 export type AdminNavigationGroup =
   | "summary"
@@ -74,7 +73,7 @@ export const ADMIN_MODULES: AdminModuleDefinition[] = [
 
   { key: "reports", label: "Reportes", path: "/admin/reportes", icon: PieChart, group: "administration", status: "beta", moduleFlag: "reportes" },
   { key: "my_plan", label: "Mi plan", path: "/admin/mi-plan", icon: ReceiptText, group: "administration", status: "active" },
-  { key: "settings", label: "Configuración", path: "/admin/configuracion", icon: Settings, group: "administration", status: "active", allowedRoles: CONFIG_ROLES },
+  { key: "settings", label: "Configuración", path: "/admin/configuracion", icon: Settings, group: "administration", status: "active" },
 
   { key: "superadmin", label: "Superadmin", path: "/superadmin", icon: ShieldCheck, group: "platform", status: "active", allowedRoles: ["platform_admin"] },
   { key: "prescriptions", label: "Recetarios", path: "/admin/recetarios", icon: FilePenLine, group: "administration", status: "coming_soon", moduleFlag: "recetarios", description: "Recetarios internos, indicaciones y futuras integraciones reguladas." },
