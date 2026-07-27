@@ -999,15 +999,15 @@ export async function getInvoices(clinicId: string, filters: PaymentFilters = {}
   }
 }
 
-export async function getInvoiceById(id: string): Promise<(Invoice & { invoice_items: InvoiceItem[] }) | null> {
+export async function getInvoiceById(id: string): Promise<(Invoice & { invoice_items: InvoiceItem[]; clinics: Clinic | null; fiscal_settings: FiscalSettings | null; patients: Patient | null }) | null> {
   try {
     const { data, error } = await supabase
       .from("invoices")
-      .select("*, invoice_items(*), patients(*), payments(*)")
+      .select("*, invoice_items(*), patients(*), payments(*), clinics(*), fiscal_settings(*)")
       .eq("id", id)
       .maybeSingle();
     if (error) throw error;
-    return data as (Invoice & { invoice_items: InvoiceItem[] }) | null;
+    return data as (Invoice & { invoice_items: InvoiceItem[]; clinics: Clinic | null; fiscal_settings: FiscalSettings | null; patients: Patient | null }) | null;
   } catch (error) {
     console.error("Failed to load invoice", error);
     throw new FriendlyDataError("No pudimos cargar el comprobante.");

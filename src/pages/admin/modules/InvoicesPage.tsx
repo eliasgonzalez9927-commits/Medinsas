@@ -6,7 +6,7 @@ import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { Button } from "../../../components/ui/Button";
 import { getDefaultClinic, getInvoiceById, getInvoices, issueInvoice } from "../../../lib/clinic-data";
 import { DateRangeValue, resolveDateRange } from "../../../lib/date-range";
-import { Clinic, Invoice, InvoiceItem } from "../../../types/clinic";
+import { Clinic, Invoice } from "../../../types/clinic";
 import { AdminPageShell } from "./AdminPageShell";
 
 const DOCUMENT_TYPE_LABELS: Record<string, string> = {
@@ -104,7 +104,7 @@ export function InvoicesListPage() {
 
 export function InvoiceDetailPage() {
   const { id = "" } = useParams();
-  const [invoice, setInvoice] = useState<(Invoice & { invoice_items: InvoiceItem[] }) | null>(null);
+  const [invoice, setInvoice] = useState<Awaited<ReturnType<typeof getInvoiceById>>>(null);
   const [error, setError] = useState("");
   const [issuing, setIssuing] = useState(false);
   const autoIssued = useRef(false);
@@ -168,7 +168,17 @@ export function InvoiceDetailPage() {
                 </p>
               </div>
             </div>
-            <InvoiceStatusBadge arcaStatus={invoice.arca_status} />
+            <div className="flex flex-col items-end gap-2">
+              <InvoiceStatusBadge arcaStatus={invoice.arca_status} />
+              {invoice.arca_status === "synced" && (
+                <Link
+                  to={`/admin/facturacion/comprobantes/${invoice.id}/imprimir`}
+                  className="text-sm font-semibold text-clinic-brand hover:underline"
+                >
+                  Ver / imprimir
+                </Link>
+              )}
+            </div>
           </div>
 
           <dl className="mt-5 grid gap-3 text-sm md:grid-cols-2">

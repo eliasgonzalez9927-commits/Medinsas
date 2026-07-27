@@ -28,6 +28,7 @@ import { SettingsLocationsPage, SettingsNotificationsPage, SettingsPage, Setting
 import { CoverageSettingsPage } from "./pages/admin/modules/CoverageSettingsPage";
 import { FiscalSettingsPage } from "./pages/admin/modules/FiscalSettingsPage";
 import { InvoiceDetailPage, InvoicesListPage } from "./pages/admin/modules/InvoicesPage";
+import { InvoicePrintPage } from "./pages/admin/modules/InvoicePrintPage";
 import { ComingSoonPage } from "./pages/admin/modules/ComingSoonPage";
 import { MyPlanPage } from "./pages/admin/modules/MyPlanPage";
 import { ImportsPage } from "./pages/admin/modules/ImportsPage";
@@ -112,6 +113,7 @@ export function App() {
         <Route path="/admin/facturacion" element={<ComingSoonPage title="Facturación" description="Próximamente vas a poder gestionar comprobantes internos e integraciones fiscales. No se emitirán facturas reales hasta contar con la integración correspondiente." />} />
         <Route path="/admin/facturacion/comprobantes" element={<InvoicesListPage />} />
         <Route path="/admin/facturacion/comprobantes/:id" element={<InvoiceDetailPage />} />
+        <Route path="/admin/facturacion/comprobantes/:id/imprimir" element={<InvoicePrintPage />} />
         <Route path="/admin/recetarios" element={<ComingSoonPage title="Recetarios" description="Próximamente vas a poder trabajar con recetarios internos, órdenes e indicaciones bajo el circuito clínico y regulatorio correspondiente." />} />
         <Route path="/admin/recetarios/nuevo" element={<ComingSoonPage title="Nuevo documento" description="La creación de documentos médicos se habilitará junto con las validaciones profesionales y de trazabilidad necesarias." />} />
         <Route path="/admin/reportes" element={<ReportsPage />} />
