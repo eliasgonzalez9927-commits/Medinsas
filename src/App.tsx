@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { ADMIN_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-roles";
+import { ADMIN_ROLES, CONFIG_ROLES, PROFESSIONAL_ROLES, getPostLoginPath } from "./lib/auth-roles";
 import { Login } from "./pages/auth/Login";
 import { Register } from "./pages/auth/Register";
 import { AcceptInvitationPage } from "./pages/auth/AcceptInvitationPage";
@@ -103,24 +103,26 @@ export function App() {
         <Route path="/admin/reservas-online" element={<OnlineBookingPage />} />
         <Route path="/admin/whatsapp" element={<ComingSoonPage title="WhatsApp" description="Próximamente vas a poder usar automatizaciones, confirmaciones y recordatorios mediante una integración oficial de WhatsApp." />} />
         <Route path="/admin/notificaciones" element={<NotificationsPage />} />
-        <Route path="/admin/notificaciones/configuracion" element={<SettingsNotificationsPage />} />
         <Route path="/admin/mensajes" element={<MessagesPage />} />
         <Route path="/admin/pagos" element={<PaymentsPage />} />
-        <Route path="/admin/pagos/configuracion" element={<PaymentSettingsPage />} />
         <Route path="/admin/pagos/:id" element={<PaymentDetailPage />} />
         <Route path="/admin/financiacion" element={<ComingSoonPage title="Financiación" description="Próximamente vas a poder preparar opciones de financiación de tratamientos y conectar proveedores de scoring cuando estén validados." />} />
         <Route path="/admin/facturacion" element={<ComingSoonPage title="Facturación" description="Próximamente vas a poder gestionar comprobantes internos e integraciones fiscales. No se emitirán facturas reales hasta contar con la integración correspondiente." />} />
         <Route path="/admin/facturacion/comprobantes" element={<ComingSoonPage title="Comprobantes" description="La emisión y gestión de comprobantes estará disponible cuando el módulo de facturación esté operativo." />} />
-        <Route path="/admin/facturacion/configuracion" element={<ComingSoonPage title="Configuración fiscal" description="Los datos fiscales e integración ARCA se habilitarán junto con el módulo de facturación operativo." settingsTab="fiscal" />} />
         <Route path="/admin/recetarios" element={<ComingSoonPage title="Recetarios" description="Próximamente vas a poder trabajar con recetarios internos, órdenes e indicaciones bajo el circuito clínico y regulatorio correspondiente." />} />
         <Route path="/admin/recetarios/nuevo" element={<ComingSoonPage title="Nuevo documento" description="La creación de documentos médicos se habilitará junto con las validaciones profesionales y de trazabilidad necesarias." />} />
-        <Route path="/admin/recetarios/configuracion" element={<ComingSoonPage title="Configuración de recetarios" description="La configuración de matrícula, firma e integraciones aprobadas estará disponible cuando el módulo esté operativo." />} />
         <Route path="/admin/reportes" element={<ReportsPage />} />
         <Route path="/admin/configuracion" element={<SettingsPage />} />
         <Route path="/admin/configuracion/sedes" element={<SettingsLocationsPage />} />
+      </Route>
+      <Route element={<ProtectedRoute roles={CONFIG_ROLES} />}>
         <Route path="/admin/configuracion/usuarios" element={<SettingsUsersPage />} />
         <Route path="/admin/configuracion/notificaciones" element={<SettingsNotificationsPage />} />
         <Route path="/admin/configuracion/coberturas" element={<CoverageSettingsPage />} />
+        <Route path="/admin/notificaciones/configuracion" element={<SettingsNotificationsPage />} />
+        <Route path="/admin/pagos/configuracion" element={<PaymentSettingsPage />} />
+        <Route path="/admin/facturacion/configuracion" element={<ComingSoonPage title="Configuración fiscal" description="Los datos fiscales e integración ARCA se habilitarán junto con el módulo de facturación operativo." settingsTab="fiscal" />} />
+        <Route path="/admin/recetarios/configuracion" element={<ComingSoonPage title="Configuración de recetarios" description="La configuración de matrícula, firma e integraciones aprobadas estará disponible cuando el módulo esté operativo." />} />
       </Route>
       <Route element={<ProtectedRoute roles={["platform_admin"]} />}>
         <Route path="/superadmin" element={<SuperadminDashboard />} />

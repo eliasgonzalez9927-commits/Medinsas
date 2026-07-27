@@ -1,6 +1,7 @@
 import { UserRole } from "../types/database";
 
 export const ADMIN_ROLES: UserRole[] = ["platform_admin", "clinic_admin", "receptionist", "admin"];
+export const CONFIG_ROLES: UserRole[] = ["platform_admin", "clinic_admin", "admin"];
 export const PROFESSIONAL_ROLES: UserRole[] = ["professional", "doctor"];
 export const STAFF_ROLES: UserRole[] = [...ADMIN_ROLES, ...PROFESSIONAL_ROLES];
 
