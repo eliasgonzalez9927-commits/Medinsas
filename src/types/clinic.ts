@@ -440,6 +440,7 @@ export type FiscalSettings = {
   receipt_types: Array<Record<string, unknown>>;
   arca_integration_status: "pending_configuration" | "configured" | "disabled" | string;
   arca_provider: string | null;
+  arca_environment: "sandbox" | "production" | string;
   created_at: string;
   updated_at: string;
 };
@@ -567,6 +568,9 @@ export type Invoice = {
   pdf_url: string | null;
   arca_status: "pending_configuration" | "pending" | "synced" | "failed" | string;
   arca_external_id: string | null;
+  arca_cae_expires_at: string | null;
+  arca_requested_at: string | null;
+  arca_response: Record<string, unknown> | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
