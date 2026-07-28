@@ -981,7 +981,11 @@ export async function getInvoices(clinicId: string, filters: PaymentFilters = {}
   try {
     let query = supabase
       .from("invoices")
-      .select("*, patients(*), payments(*)")
+      // payments!invoices_payment_id_fkey desambigua: invoices.payment_id
+      // apunta a payments, pero payments.invoice_id tambien apunta de
+      // vuelta a invoices - sin el hint, PostgREST no sabe cual de las dos
+      // relaciones usar y devuelve 300 (ambiguous embedding).
+      .select("*, patients(*), payments!invoices_payment_id_fkey(*)")
       .eq("clinic_id", clinicId)
       .order("created_at", { ascending: false });
     if (filters.dateFrom) {
@@ -1003,7 +1007,7 @@ export async function getInvoiceById(id: string): Promise<(Invoice & { invoice_i
   try {
     const { data, error } = await supabase
       .from("invoices")
-      .select("*, invoice_items(*), patients(*), payments(*), clinics(*), fiscal_settings(*)")
+      .select("*, invoice_items(*), patients(*), payments!invoices_payment_id_fkey(*), clinics(*), fiscal_settings(*)")
       .eq("id", id)
       .maybeSingle();
     if (error) throw error;
