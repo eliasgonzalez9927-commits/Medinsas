@@ -138,6 +138,8 @@ export type Appointment = {
   cancellation_reason: string | null;
   rescheduled_from_id: string | null;
   whatsapp_status: string | null;
+  reminder_24h_sent_at?: string | null;
+  reminder_2h_sent_at?: string | null;
   payment_status?: AppointmentPaymentStatus;
   deposit_amount?: number | null;
   payment_required?: boolean;
@@ -533,6 +535,34 @@ export type PaymentSettings = {
   deposit_percentage: number | null;
   payment_link_expiration_minutes: number | null;
   support_email: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WhatsAppSettings = {
+  id: string;
+  clinic_id: string;
+  waba_id: string | null;
+  phone_number_id: string | null;
+  display_phone_number: string | null;
+  verified_name: string | null;
+  status: "disconnected" | "connected" | string;
+  connected_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WhatsAppTemplateKey = "appointment_confirmation" | "reminder_24h" | "reminder_2h";
+
+export type WhatsAppMessageTemplate = {
+  id: string;
+  clinic_id: string;
+  template_key: WhatsAppTemplateKey | string;
+  meta_template_name: string | null;
+  meta_template_id: string | null;
+  language_code: string;
+  category: string;
+  status: "pending" | "approved" | "rejected" | string;
   created_at: string;
   updated_at: string;
 };

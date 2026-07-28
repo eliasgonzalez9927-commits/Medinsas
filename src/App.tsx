@@ -29,6 +29,7 @@ import { CoverageSettingsPage } from "./pages/admin/modules/CoverageSettingsPage
 import { FiscalSettingsPage } from "./pages/admin/modules/FiscalSettingsPage";
 import { InvoiceDetailPage, InvoicesListPage } from "./pages/admin/modules/InvoicesPage";
 import { InvoicePrintPage } from "./pages/admin/modules/InvoicePrintPage";
+import { WhatsAppSettingsPage } from "./pages/admin/modules/WhatsAppSettingsPage";
 import { ComingSoonPage } from "./pages/admin/modules/ComingSoonPage";
 import { MyPlanPage } from "./pages/admin/modules/MyPlanPage";
 import { ImportsPage } from "./pages/admin/modules/ImportsPage";
@@ -104,7 +105,6 @@ export function App() {
         <Route path="/admin/tratamientos" element={<ServicesPage />} />
         <Route path="/admin/booking" element={<OnlineBookingPage />} />
         <Route path="/admin/reservas-online" element={<OnlineBookingPage />} />
-        <Route path="/admin/whatsapp" element={<ComingSoonPage title="WhatsApp" description="Próximamente vas a poder usar automatizaciones, confirmaciones y recordatorios mediante una integración oficial de WhatsApp." />} />
         <Route path="/admin/notificaciones" element={<NotificationsPage />} />
         <Route path="/admin/mensajes" element={<MessagesPage />} />
         <Route path="/admin/pagos" element={<PaymentsPage />} />
@@ -128,6 +128,7 @@ export function App() {
         <Route path="/admin/pagos/configuracion" element={<PaymentSettingsPage />} />
         <Route path="/admin/facturacion/configuracion" element={<FiscalSettingsPage />} />
         <Route path="/admin/recetarios/configuracion" element={<ComingSoonPage title="Configuración de recetarios" description="La configuración de matrícula, firma e integraciones aprobadas estará disponible cuando el módulo esté operativo." />} />
+        <Route path="/admin/whatsapp" element={<WhatsAppSettingsPage />} />
       </Route>
       <Route element={<ProtectedRoute roles={["platform_admin"]} />}>
         <Route path="/superadmin" element={<SuperadminDashboard />} />

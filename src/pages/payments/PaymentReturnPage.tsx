@@ -63,7 +63,7 @@ function PaymentReturnPage({ kind }: { kind: PaymentReturnKind }) {
       const value = query.get(key);
       if (value) params.set(key, value);
     });
-    return `/api/payments/mercadopago/status?${params.toString()}`;
+    return `/api/payments/mercadopago/create-preference?${params.toString()}`;
   }, [query]);
 
   const load = useCallback(async (silent = false) => {

@@ -17,6 +17,9 @@ export default async function handler(req, res) {
     supabaseServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     arcaSdkAccessToken: Boolean(process.env.AFIPSDK_ACCESS_TOKEN),
     arcaInvoiceIssueEnabled: process.env.ARCA_INVOICE_ISSUE_ENABLED === "true",
-    supportNotificationEmail: Boolean(process.env.SUPPORT_NOTIFICATION_EMAIL)
+    supportNotificationEmail: Boolean(process.env.SUPPORT_NOTIFICATION_EMAIL),
+    metaAppId: Boolean(process.env.META_APP_ID),
+    metaAppSecret: Boolean(process.env.META_APP_SECRET),
+    whatsappWebhookVerifyToken: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN)
   });
 }

@@ -1,6 +1,16 @@
 import crypto from "node:crypto";
 import { makeSupabase } from "../_lib/supabase.js";
 import { allowOnly, handleError } from "../_lib/http.js";
+import {
+  EVENT_TYPE_TO_TEMPLATE_KEY,
+  WHATSAPP_TEMPLATE_DEFINITIONS,
+  buildTemplateParams,
+  connectClinicWhatsApp,
+  getClinicWhatsAppAccessToken,
+  getClinicWhatsAppSender,
+  sendWhatsAppMessage,
+  submitWhatsAppTemplate
+} from "../_lib/whatsappAccount.js";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 const DEFAULT_LIMIT = 15;
@@ -114,29 +124,82 @@ const FALLBACK_TEMPLATES = {
       "",
       "Gestionar solicitud: {{admin_requests_url}}"
     ].join("\n")
+  },
+  // Fallback por email de los recordatorios - la via principal es WhatsApp,
+  // pero clinic_notification_settings.email_enabled puede seguir sumando
+  // una delivery de canal email para el mismo evento (mismo patron que el
+  // resto de los eventos, no son mutuamente excluyentes).
+  appointment_reminder_24h: {
+    subject: "Recordatorio: tu turno es manana",
+    body: [
+      "Hola {{patient_name}},",
+      "",
+      "Te recordamos tu turno para manana en {{clinic_name}}.",
+      "",
+      "Servicio: {{service_name}}",
+      "Profesional: {{professional_name}}",
+      "Fecha y hora: {{appointment_datetime}}",
+      "Codigo: {{public_code}}",
+      "",
+      "Ver mi turno: {{appointment_url}}"
+    ].join("\n")
+  },
+  appointment_reminder_2h: {
+    subject: "Recordatorio: tu turno es hoy",
+    body: [
+      "Hola {{patient_name}},",
+      "",
+      "Tu turno en {{clinic_name}} es hoy.",
+      "",
+      "Servicio: {{service_name}}",
+      "Profesional: {{professional_name}}",
+      "Fecha y hora: {{appointment_datetime}}",
+      "Codigo: {{public_code}}",
+      "",
+      "Ver mi turno: {{appointment_url}}"
+    ].join("\n")
   }
 };
 
 export default async function handler(req, res) {
-  if (!allowOnly(req, res, ["POST"])) return;
+  if (!allowOnly(req, res, ["GET", "POST"])) return;
 
   const { client, error, missing } = makeSupabase();
   if (error) return res.status(500).json({ error, missing });
 
   try {
+    // Vercel Cron solo hace GET - unico caso que acepta ese metodo aca,
+    // protegido con CRON_SECRET (Vercel manda ese Authorization solo si
+    // la env var existe con ese nombre exacto).
+    if (req.method === "GET") {
+      if (req.query?.type !== "reminders_sweep") return res.status(404).json({ error: "NOT_FOUND" });
+      if (!isCronAuthorized(req)) return res.status(401).json({ error: "UNAUTHORIZED" });
+      const summary = await runRemindersSweep(client);
+      return res.status(200).json(summary);
+    }
+
     // Boton global de "Necesitas ayuda?" (HelpWidget) - comparte este
     // archivo en vez de sumar una funcion serverless nueva (Vercel Hobby
     // ya esta en el tope de 12, se vio fallar el deploy real por esto).
     if (req.body?.type === "support_ticket") {
       return await handleSupportTicket(client, req, res);
     }
+    if (req.body?.type === "whatsapp_connect") {
+      return await handleWhatsAppConnect(client, req, res);
+    }
     const appointmentId = req.body?.appointment_id ?? null;
     const limit = Math.min(Math.max(Number(req.body?.limit) || DEFAULT_LIMIT, 1), MAX_LIMIT);
-    const summary = await processPendingEmailDeliveries(client, { appointmentId, limit });
+    const summary = await processPendingDeliveries(client, { appointmentId, limit });
     return res.status(200).json(summary);
   } catch (err) {
     return handleError(res, err);
   }
+}
+
+function isCronAuthorized(req) {
+  const header = req.headers?.authorization ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  return Boolean(process.env.CRON_SECRET) && token === process.env.CRON_SECRET;
 }
 
 async function handleSupportTicket(client, req, res) {
@@ -169,6 +232,128 @@ async function handleSupportTicket(client, req, res) {
   return res.status(200).json({ ok: true, id: ticket.id });
 }
 
+async function handleWhatsAppConnect(client, req, res) {
+  const auth = await authenticate(client, req);
+  if (!auth) return res.status(401).json({ error: "UNAUTHORIZED" });
+  if (!["platform_admin", "clinic_admin", "admin"].includes(auth.role)) {
+    return res.status(403).json({ error: "FORBIDDEN" });
+  }
+  if (!auth.clinicId) return res.status(400).json({ error: "NO_CLINIC" });
+
+  const code = String(req.body?.code ?? "");
+  const wabaId = String(req.body?.waba_id ?? "");
+  const phoneNumberId = String(req.body?.phone_number_id ?? "");
+  if (!code || !wabaId || !phoneNumberId) {
+    return res.status(400).json({ error: "MISSING_FIELDS" });
+  }
+
+  try {
+    const settings = await connectClinicWhatsApp(client, { clinicId: auth.clinicId, code, wabaId, phoneNumberId });
+
+    // Las 3 plantillas estandar se mandan a aprobar solas apenas se
+    // conecta - si alguna falla (ej. ya existia de un intento anterior),
+    // no aborta la conexion, solo se loguea.
+    const accessToken = await getClinicWhatsAppAccessToken(client, auth.clinicId);
+    for (const templateKey of Object.keys(WHATSAPP_TEMPLATE_DEFINITIONS)) {
+      await submitWhatsAppTemplate(client, { clinicId: auth.clinicId, wabaId, accessToken, templateKey }).catch((err) =>
+        console.error(`Failed to submit whatsapp template ${templateKey}`, err?.metaResponse ?? err)
+      );
+    }
+
+    return res.status(200).json({ ok: true, settings });
+  } catch (err) {
+    return res.status(err?.statusCode ?? 502).json({
+      error: "WHATSAPP_CONNECT_FAILED",
+      message: "No pudimos conectar WhatsApp. Probá de nuevo.",
+      detail: err?.metaResponse ?? null
+    });
+  }
+}
+
+// Dispara desde vercel.json (crons, cada 15 min) via GET con
+// ?type=reminders_sweep. Barre dos ventanas (24h y 2h antes del turno) y
+// encola un notification_event por turno que caiga adentro, una sola vez
+// (columnas reminder_24h_sent_at/reminder_2h_sent_at de la migracion 050).
+// La ventana de busqueda (30 min) es mas ancha que el intervalo del cron (15
+// min) a proposito, para no perder turnos si una corrida se atrasa o falla.
+async function runRemindersSweep(client) {
+  const windowMinutes = 30;
+  const results24h = await sweepReminderWindow(client, {
+    hoursBefore: 24,
+    sentAtColumn: "reminder_24h_sent_at",
+    eventType: "appointment_reminder_24h",
+    windowMinutes
+  });
+  const results2h = await sweepReminderWindow(client, {
+    hoursBefore: 2,
+    sentAtColumn: "reminder_2h_sent_at",
+    eventType: "appointment_reminder_2h",
+    windowMinutes
+  });
+  return { reminder_24h: results24h, reminder_2h: results2h };
+}
+
+async function sweepReminderWindow(client, { hoursBefore, sentAtColumn, eventType, windowMinutes }) {
+  const enabledColumn = hoursBefore === 24 ? "reminder_24h_enabled" : "reminder_2h_enabled";
+  const { data: settingsRows, error: settingsError } = await client
+    .from("clinic_notification_settings")
+    .select("clinic_id")
+    .eq(enabledColumn, true);
+  if (settingsError) throw settingsError;
+
+  const clinicIds = (settingsRows ?? []).map((row) => row.clinic_id);
+  const summary = { candidates: 0, enqueued: 0, failed: 0 };
+  if (clinicIds.length === 0) return summary;
+
+  const windowStart = new Date(Date.now() + hoursBefore * 60 * 60 * 1000);
+  const windowEnd = new Date(windowStart.getTime() + windowMinutes * 60 * 1000);
+
+  const { data: appointments, error: appointmentsError } = await client
+    .from("appointments")
+    .select("id, clinic_id, patient_id, professional_id, starts_at, public_code, reason, services(name), clinics(name), patients(first_name, last_name), professionals(name, last_name)")
+    .in("clinic_id", clinicIds)
+    .in("status", ["pending", "confirmed"])
+    .is(sentAtColumn, null)
+    .gte("starts_at", windowStart.toISOString())
+    .lt("starts_at", windowEnd.toISOString());
+  if (appointmentsError) throw appointmentsError;
+
+  summary.candidates = appointments?.length ?? 0;
+  for (const appointment of appointments ?? []) {
+    try {
+      const metadata = {
+        service_name: appointment.services?.name ?? appointment.reason ?? "Turno",
+        clinic_name: appointment.clinics?.name ?? "Medin",
+        patient_name: [appointment.patients?.first_name, appointment.patients?.last_name].filter(Boolean).join(" "),
+        professional_name: [appointment.professionals?.name, appointment.professionals?.last_name].filter(Boolean).join(" "),
+        appointment_datetime: appointment.starts_at ?? "",
+        public_code: appointment.public_code ?? ""
+      };
+      const { error: rpcError } = await client.rpc("enqueue_notification_event", {
+        p_event_type: eventType,
+        p_audience: "patient",
+        p_clinic_id: appointment.clinic_id,
+        p_patient_id: appointment.patient_id,
+        p_appointment_id: appointment.id,
+        p_metadata: metadata
+      });
+      if (rpcError) throw rpcError;
+
+      const { error: updateError } = await client
+        .from("appointments")
+        .update({ [sentAtColumn]: new Date().toISOString() })
+        .eq("id", appointment.id);
+      if (updateError) throw updateError;
+
+      summary.enqueued += 1;
+    } catch (err) {
+      console.error(`Failed to enqueue ${eventType} for appointment ${appointment.id}`, err);
+      summary.failed += 1;
+    }
+  }
+  return summary;
+}
+
 async function authenticate(client, req) {
   const header = req.headers?.authorization ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
@@ -187,7 +372,7 @@ async function authenticate(client, req) {
   return { userId: data.user.id, clinicId: member?.clinic_id ?? null, role: member?.role ?? null };
 }
 
-async function processPendingEmailDeliveries(client, { appointmentId, limit }) {
+async function processPendingDeliveries(client, { appointmentId, limit }) {
   let query = client
     .from("notification_deliveries")
     .select(`
@@ -200,7 +385,7 @@ async function processPendingEmailDeliveries(client, { appointmentId, limit }) {
         appointments(*, services(*), professionals(*), locations(*))
       )
     `)
-    .eq("channel", "email")
+    .in("channel", ["email", "whatsapp"])
     .eq("status", "pending")
     .order("created_at", { ascending: true })
     .limit(limit);
@@ -217,7 +402,7 @@ async function processPendingEmailDeliveries(client, { appointmentId, limit }) {
   const summary = { processed: 0, sent: 0, failed: 0, skipped: 0 };
   for (const delivery of relevant) {
     summary.processed += 1;
-    const result = await processDelivery(client, delivery);
+    const result = delivery.channel === "whatsapp" ? await processWhatsAppDelivery(client, delivery) : await processDelivery(client, delivery);
     summary[result.status] += 1;
   }
   return summary;
@@ -237,11 +422,50 @@ async function processDelivery(client, delivery) {
       text: rendered.text,
       html: rendered.html
     });
-    return markDelivery(client, delivery.id, "sent", { providerMessageId: sent.id ?? null });
+    return markDelivery(client, delivery.id, "sent", { provider: "resend", providerMessageId: sent.id ?? null });
   } catch (err) {
     console.error("Failed to send notification email with Resend", err);
-    return markDelivery(client, delivery.id, "failed", { errorMessage: safeErrorMessage(err) });
+    return markDelivery(client, delivery.id, "failed", { provider: "resend", errorMessage: safeErrorMessage(err) });
   }
+}
+
+// Las deliveries de canal whatsapp ya vienen filtradas en 'pending' por
+// enqueue_notification_event() (solo si whatsapp_enabled y hay telefono) -
+// aca solo falta que la clinica tenga un numero CONECTADO (Embedded Signup,
+// Parte C) y que el evento tenga una plantilla asociada (Parte D).
+async function processWhatsAppDelivery(client, delivery) {
+  const event = delivery.notification_events;
+  if (!event) return markDelivery(client, delivery.id, "failed", { errorMessage: "Evento asociado no encontrado" });
+  if (!delivery.recipient_phone) return markDelivery(client, delivery.id, "skipped", { errorMessage: "Destinatario sin telefono" });
+
+  const templateKey = EVENT_TYPE_TO_TEMPLATE_KEY[event.event_type];
+  if (!templateKey) return markDelivery(client, delivery.id, "skipped", { errorMessage: `Sin plantilla de WhatsApp para ${event.event_type}` });
+
+  const sender = await getClinicWhatsAppSender(client, event.clinic_id);
+  if (!sender) return markDelivery(client, delivery.id, "skipped", { errorMessage: "La clinica no tiene un numero de WhatsApp conectado" });
+
+  try {
+    const params = buildTemplateParams(event.metadata ?? {});
+    const sent = await sendWhatsAppMessage({
+      phoneNumberId: sender.phoneNumberId,
+      accessToken: sender.accessToken,
+      to: normalizeWhatsAppPhone(delivery.recipient_phone),
+      templateKey,
+      params
+    });
+    const messageId = sent?.messages?.[0]?.id ?? null;
+    return markDelivery(client, delivery.id, "sent", { provider: "meta", providerMessageId: messageId });
+  } catch (err) {
+    console.error("Failed to send WhatsApp message", err?.metaResponse ?? err);
+    return markDelivery(client, delivery.id, "failed", { provider: "meta", errorMessage: err?.metaResponse?.error?.message ?? safeErrorMessage(err) });
+  }
+}
+
+// Meta exige el numero en formato E.164 sin "+" ni separadores - los
+// telefonos guardados en patients/clinics vienen con formato libre (a veces
+// con espacios, guiones o el "+" inicial).
+function normalizeWhatsAppPhone(rawPhone) {
+  return String(rawPhone).replace(/[^\d]/g, "");
 }
 
 async function sendTransactionalEmail({ to, subject, html, text }) {
@@ -331,14 +555,14 @@ async function ensureAppointmentPublicLink(client, appointmentId) {
   return data.token;
 }
 
-async function markDelivery(client, id, status, { providerMessageId = null, errorMessage = null } = {}) {
+async function markDelivery(client, id, status, { provider = null, providerMessageId = null, errorMessage = null } = {}) {
   const payload = {
     status,
-    provider: "resend",
     provider_message_id: providerMessageId,
     error_message: errorMessage,
     sent_at: status === "sent" ? new Date().toISOString() : null
   };
+  if (provider) payload.provider = provider;
   const { error } = await client.from("notification_deliveries").update(payload).eq("id", id);
   if (error) throw error;
   return { id, status };
