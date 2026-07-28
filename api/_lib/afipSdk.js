@@ -98,8 +98,14 @@ export async function getOrRefreshWsaaTicket(client, fiscalSettings) {
 const CBTE_TIPO_BY_DOCUMENT_TYPE = { factura_b: 6, factura_c: 11 };
 const CONCEPTO_SERVICIOS = 2;
 const DOC_TIPO_CONSUMIDOR_FINAL = 99;
+const DOC_TIPO_DNI = 96;
 // CondicionIVAReceptorId, obligatorio desde RG 4291 v4.4 - 5 = Consumidor Final.
 const CONDICION_IVA_RECEPTOR_CONSUMIDOR_FINAL = 5;
+// Normativa vigente: recien es obligatorio identificar al comprador (DNI
+// como minimo) a partir de este importe por comprobante - un turno medico
+// nunca lo cruza en la practica, pero si algun servicio puntual lo hiciera,
+// no hay que emitir "consumidor final anonimo" por encima del umbral.
+const CONSUMIDOR_FINAL_IDENTIFICATION_THRESHOLD = 10_000_000;
 
 function todayAsArcaDate() {
   return new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -124,7 +130,7 @@ async function getNextInvoiceNumber({ client, fiscalSettings, ptoVta, cbteTipo }
   return lastNumber + 1;
 }
 
-export async function requestCae({ client, fiscalSettings, invoice }) {
+export async function requestCae({ client, fiscalSettings, invoice, patientDocNumber }) {
   const { token, sign } = await getOrRefreshWsaaTicket(client, fiscalSettings);
   const cbteTipo = CBTE_TIPO_BY_DOCUMENT_TYPE[invoice.document_type];
   if (!cbteTipo) {
@@ -139,6 +145,16 @@ export async function requestCae({ client, fiscalSettings, invoice }) {
   const today = todayAsArcaDate();
   const nextNumber = await getNextInvoiceNumber({ client, fiscalSettings, ptoVta, cbteTipo });
 
+  const requiresIdentification = impTotal >= CONSUMIDOR_FINAL_IDENTIFICATION_THRESHOLD;
+  if (requiresIdentification && !patientDocNumber) {
+    const err = new Error(`El comprobante supera $${CONSUMIDOR_FINAL_IDENTIFICATION_THRESHOLD.toLocaleString("es-AR")} y ARCA exige identificar al paciente, pero no tiene DNI cargado.`);
+    err.code = "ARCA_PATIENT_DOCUMENT_REQUIRED";
+    err.friendlyMessage = err.message;
+    throw err;
+  }
+  const docTipo = requiresIdentification ? DOC_TIPO_DNI : DOC_TIPO_CONSUMIDOR_FINAL;
+  const docNro = requiresIdentification ? Number(String(patientDocNumber).replace(/\D/g, "")) : 0;
+
   const result = await afipSdkFetch("/afip/requests", {
     environment: fiscalSettings.arca_environment === "production" ? "prod" : "dev",
     method: "FECAESolicitar",
@@ -151,8 +167,8 @@ export async function requestCae({ client, fiscalSettings, invoice }) {
           FECAEDetRequest: [
             {
               Concepto: CONCEPTO_SERVICIOS,
-              DocTipo: DOC_TIPO_CONSUMIDOR_FINAL,
-              DocNro: 0,
+              DocTipo: docTipo,
+              DocNro: docNro,
               CbteDesde: nextNumber,
               CbteHasta: nextNumber,
               CbteFch: today,
