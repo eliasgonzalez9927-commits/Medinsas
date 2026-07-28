@@ -88,7 +88,10 @@ export function SettingsTabsNav({ activeTab }: { activeTab: SettingsTab }) {
   );
 }
 
-const roles: UserRole[] = ["platform_admin", "clinic_admin", "receptionist", "professional"];
+// platform_admin (Superadmin, acceso a TODAS las clinicas) a proposito no
+// esta en esta lista - desde la configuracion de una clinica nunca se debe
+// poder otorgar ese rol, sin importar quien este operando la pantalla.
+const roles: UserRole[] = ["clinic_admin", "receptionist", "professional"];
 const roleLabels: Record<string, string> = {
   platform_admin: "Platform admin",
   clinic_admin: "Admin clinica",
@@ -535,7 +538,11 @@ function UsersPanel({
   const historyInvitations = invitations.filter((invitation) => invitation.status !== "pending");
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onInvite({ ...form, location_id: form.location_id || null, professional_id: form.professional_id || null });
+    onInvite({
+      ...form,
+      location_id: form.location_id || null,
+      professional_id: form.role === "professional" ? form.professional_id || null : null
+    });
     setForm({ email: "", full_name: "", role: "receptionist", location_id: "", professional_id: "" });
     setShowInviteForm(false);
   }
@@ -568,7 +575,9 @@ function UsersPanel({
             <Input label="Nombre" value={form.full_name} onChange={(value) => setForm({ ...form, full_name: value })} required />
             <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value })} options={roles.map((item) => ({ value: item, label: roleLabels[item] }))} />
             <Select label="Sede opcional" value={form.location_id} onChange={(value) => setForm({ ...form, location_id: value })} options={[{ value: "", label: "Sin sede asignada" }, ...locations.map((item) => ({ value: item.id, label: item.name }))]} />
-            <Select label="Profesional asociado" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} options={[{ value: "", label: "Sin profesional" }, ...professionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))]} />
+            {form.role === "professional" && (
+              <Select label="Profesional asociado" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} options={[{ value: "", label: "Sin profesional" }, ...professionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))]} />
+            )}
             <div className="flex gap-2">
               <Button disabled={disabled} type="submit" variant="primary">Enviar invitacion</Button>
               <Button type="button" onClick={() => setShowInviteForm(false)}>Cancelar</Button>
@@ -689,7 +698,7 @@ function MemberRow({
       await updateClinicMember(member.id, {
         role: form.role,
         location_id: form.location_id || null,
-        professional_id: form.professional_id || null
+        professional_id: form.role === "professional" ? form.professional_id || null : null
       });
       setEditing(false);
       onRefresh();
@@ -705,7 +714,9 @@ function MemberRow({
         <div className="grid gap-3 md:grid-cols-3">
           <Select label="Rol" value={form.role} onChange={(value) => setForm({ ...form, role: value })} options={roles.map((item) => ({ value: item, label: roleLabels[item] }))} />
           <Select label="Sede" value={form.location_id} onChange={(value) => setForm({ ...form, location_id: value })} options={[{ value: "", label: "Sin sede asignada" }, ...locations.map((item) => ({ value: item.id, label: item.name }))]} />
-          <Select label="Profesional asociado" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} options={[{ value: "", label: "Sin profesional" }, ...professionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))]} />
+          {form.role === "professional" && (
+            <Select label="Profesional asociado" value={form.professional_id} onChange={(value) => setForm({ ...form, professional_id: value })} options={[{ value: "", label: "Sin profesional" }, ...professionals.map((item) => ({ value: item.id, label: `${item.name} ${item.last_name}` }))]} />
+          )}
         </div>
         <div className="flex gap-2">
           <Button disabled={disabled || saving} onClick={saveEdit} variant="primary">{saving ? "Guardando..." : "Guardar cambios"}</Button>

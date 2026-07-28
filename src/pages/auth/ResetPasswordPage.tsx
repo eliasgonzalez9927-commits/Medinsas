@@ -20,6 +20,8 @@ export function ResetPasswordPage() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  const invitationReturnUrl = window.localStorage.getItem("medin_invitation_return_url");
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -53,6 +55,15 @@ export function ResetPasswordPage() {
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
               Contraseña actualizada. Ya podés iniciar sesión.
             </div>
+            {invitationReturnUrl && (
+              <a
+                href={invitationReturnUrl}
+                onClick={() => window.localStorage.removeItem("medin_invitation_return_url")}
+                className="font-semibold text-clinic-brand"
+              >
+                Volver a la invitación
+              </a>
+            )}
             <div className="flex flex-wrap gap-4 text-sm font-semibold text-clinic-brand">
               <Link to="/paciente/login">Ingresar como paciente</Link>
               <Link to="/login">Ingresar al panel del equipo</Link>

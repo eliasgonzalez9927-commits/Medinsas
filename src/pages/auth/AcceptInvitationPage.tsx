@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { getPostLoginPath, roleLabels } from "../../lib/auth-roles";
@@ -134,6 +134,16 @@ export function AcceptInvitationPage() {
                   <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-clinic-danger">
                     {formError}
                   </div>
+                )}
+
+                {invitation.account_exists && (
+                  <Link
+                    to={`/recuperar-contrasena?email=${encodeURIComponent(invitation.email)}`}
+                    onClick={() => window.localStorage.setItem("medin_invitation_return_url", window.location.href)}
+                    className="block text-sm font-semibold text-[#0D766E]"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </Link>
                 )}
 
                 <button
