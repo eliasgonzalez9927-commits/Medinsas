@@ -302,6 +302,29 @@ export async function getOnboardingProgress(clinicId: string) {
   return { steps, percent: Math.round((completed / steps.length) * 100) };
 }
 
+// Onboarding propio del profesional - no comparte el checklist del admin
+// (sedes, pagos, etc. no le corresponden a el/ella). Solo 2 pasos reales.
+export async function getProfessionalOnboardingProgress(professionalId: string) {
+  const [professional, availability] = await Promise.all([
+    supabase.from("professionals").select("id, license_number").eq("id", professionalId).maybeSingle(),
+    supabase.from("availability_rules").select("id", { count: "exact", head: true }).eq("professional_id", professionalId).eq("active", true)
+  ]);
+  const steps = [
+    step("profile", "Completar perfil", Boolean(professional.data?.license_number), `/admin/profesionales/${professionalId}`, professional.data?.license_number ? "Matrícula cargada" : "Falta la matrícula"),
+    step("availability", "Cargar disponibilidad", (availability.count ?? 0) > 0, "/admin/disponibilidad", `${availability.count ?? 0} reglas activas`)
+  ];
+  const readyToFinish = steps.every((item) => item.status === "completed");
+  steps.push(step(
+    "finish",
+    "Finalizar",
+    readyToFinish,
+    "/admin/mi-agenda",
+    readyToFinish ? "Ya podés empezar a atender." : "Completá los pasos anteriores para terminar."
+  ));
+  const completed = steps.filter((item) => item.status === "completed").length;
+  return { steps, percent: Math.round((completed / steps.length) * 100) };
+}
+
 async function seedClinicBase(clinicId: string, payload: ClinicFormPayload) {
   const plan = await resolvePlan(payload);
   await Promise.all([

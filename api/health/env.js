@@ -16,6 +16,7 @@ export default async function handler(req, res) {
     supabaseUrl: Boolean(process.env.SUPABASE_URL),
     supabaseServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     arcaSdkAccessToken: Boolean(process.env.AFIPSDK_ACCESS_TOKEN),
-    arcaInvoiceIssueEnabled: process.env.ARCA_INVOICE_ISSUE_ENABLED === "true"
+    arcaInvoiceIssueEnabled: process.env.ARCA_INVOICE_ISSUE_ENABLED === "true",
+    supportNotificationEmail: Boolean(process.env.SUPPORT_NOTIFICATION_EMAIL)
   });
 }

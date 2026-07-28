@@ -8,6 +8,7 @@ import { roleLabels } from "../../lib/auth-roles";
 import { getSwitchableClinics, searchPatients, SwitchableClinic } from "../../lib/clinic-data";
 import { setActiveClinicOverride } from "../../lib/active-clinic";
 import { NotificationBell } from "./NotificationBell";
+import { HelpWidget } from "./HelpWidget";
 import { BASE_MODULES } from "../../lib/modules";
 import { PatientWithAppointments } from "../../types/clinic";
 import { Button } from "../ui/Button";
@@ -21,7 +22,7 @@ export function AdminLayout({
   onRefresh: () => void;
   onCreateAppointment: () => void;
 }) {
-  const { profile, role, signOut, user } = useAuth();
+  const { profile, role, signOut, user, clinicMembership } = useAuth();
   const { clinic, modules } = useWorkspace();
   const isProfessionalRole = role === "professional" || role === "doctor";
   const navigate = useNavigate();
@@ -38,17 +39,28 @@ export function AdminLayout({
   const displayRole = role ? roleLabels[role] : "Usuario";
   const isPlatformAdmin = role === "platform_admin";
 
+  const isAdminChecklistRole = role === "platform_admin" || role === "clinic_admin" || role === "admin";
+
   const visibleModules = useMemo(() => {
     return ADMIN_MODULES.filter((item) => {
       if (item.status === "hidden") return false;
       if (item.allowedRoles && (!role || !item.allowedRoles.includes(role))) return false;
-      if (role === "professional" || role === "doctor") return item.key === "agenda" || item.key === "my_income";
+      // El checklist de admin es por clinica (compartido entre todos sus
+      // admins); el de profesional/recepcion es por membresia (cada uno
+      // completa/descarta el suyo, no se comparte con el resto del equipo).
+      if (item.key === "onboarding") {
+        const done = isAdminChecklistRole
+          ? Boolean(clinic?.onboarding_completed_at)
+          : Boolean(clinicMembership?.onboarding_completed_at);
+        if (done) return false;
+      }
+      if (role === "professional" || role === "doctor") return item.key === "agenda" || item.key === "my_income" || item.key === "onboarding";
       if (!item.moduleFlag) return true;
       const moduleFlags = Array.isArray(item.moduleFlag) ? item.moduleFlag : [item.moduleFlag];
       if (moduleFlags.some((flag) => BASE_MODULES.includes(flag))) return true;
       return moduleFlags.some((flag) => modules[flag] ?? false);
     });
-  }, [modules, role]);
+  }, [modules, role, clinic, clinicMembership, isAdminChecklistRole]);
 
   useEffect(() => {
     const query = globalSearch.trim();
@@ -122,7 +134,11 @@ export function AdminLayout({
   }
 
   function modulePath(item: AdminModuleDefinition) {
-    return (role === "professional" || role === "doctor") && item.key === "agenda" ? "/admin/mi-agenda" : item.path;
+    if (role === "professional" || role === "doctor") {
+      if (item.key === "agenda") return "/admin/mi-agenda";
+      if (item.key === "onboarding") return "/admin/mi-agenda/onboarding";
+    }
+    return item.path;
   }
 
   function navigationSection(groupKey: typeof ADMIN_NAVIGATION_GROUPS[number]["key"], compact = false) {
@@ -376,6 +392,7 @@ export function AdminLayout({
         </header>
         {children}
       </div>
+      <HelpWidget />
     </div>
   );
 }

@@ -124,6 +124,12 @@ export default async function handler(req, res) {
   if (error) return res.status(500).json({ error, missing });
 
   try {
+    // Boton global de "Necesitas ayuda?" (HelpWidget) - comparte este
+    // archivo en vez de sumar una funcion serverless nueva (Vercel Hobby
+    // ya esta en el tope de 12, se vio fallar el deploy real por esto).
+    if (req.body?.type === "support_ticket") {
+      return await handleSupportTicket(client, req, res);
+    }
     const appointmentId = req.body?.appointment_id ?? null;
     const limit = Math.min(Math.max(Number(req.body?.limit) || DEFAULT_LIMIT, 1), MAX_LIMIT);
     const summary = await processPendingEmailDeliveries(client, { appointmentId, limit });
@@ -131,6 +137,54 @@ export default async function handler(req, res) {
   } catch (err) {
     return handleError(res, err);
   }
+}
+
+async function handleSupportTicket(client, req, res) {
+  const auth = await authenticate(client, req);
+  if (!auth) return res.status(401).json({ error: "UNAUTHORIZED" });
+
+  const subject = String(req.body?.subject ?? "").trim();
+  const message = String(req.body?.message ?? "").trim();
+  if (!subject || !message) {
+    return res.status(400).json({ error: "MISSING_FIELDS" });
+  }
+
+  const { data: ticket, error: insertError } = await client
+    .from("support_tickets")
+    .insert({ clinic_id: auth.clinicId, created_by: auth.userId, role: auth.role, subject, message })
+    .select("id")
+    .single();
+  if (insertError) throw insertError;
+
+  if (process.env.RESEND_API_KEY && process.env.SUPPORT_NOTIFICATION_EMAIL) {
+    const text = `Rol: ${auth.role ?? "desconocido"}\nClinica: ${auth.clinicId ?? "sin clinica"}\n\n${message}`;
+    await sendTransactionalEmail({
+      to: process.env.SUPPORT_NOTIFICATION_EMAIL,
+      subject: `Nuevo ticket de soporte: ${subject}`,
+      text,
+      html: textToHtml(text)
+    }).catch((err) => console.error("Failed to email support ticket", err));
+  }
+
+  return res.status(200).json({ ok: true, id: ticket.id });
+}
+
+async function authenticate(client, req) {
+  const header = req.headers?.authorization ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  if (!token) return null;
+  const { data, error } = await client.auth.getUser(token);
+  if (error || !data.user) return null;
+  const { data: member, error: memberError } = await client
+    .from("clinic_members")
+    .select("clinic_id, role")
+    .eq("user_id", data.user.id)
+    .eq("active", true)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (memberError) throw memberError;
+  return { userId: data.user.id, clinicId: member?.clinic_id ?? null, role: member?.role ?? null };
 }
 
 async function processPendingEmailDeliveries(client, { appointmentId, limit }) {
