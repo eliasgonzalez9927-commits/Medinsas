@@ -42,7 +42,6 @@ export function ProfessionalsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [fromFallback, setFromFallback] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -60,7 +59,6 @@ export function ProfessionalsPage() {
       }
       const result = await getProfessionals(loadedClinic.id);
       setProfessionals(result.data);
-      setFromFallback(result.fromFallback);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar los profesionales.");
     } finally {
@@ -178,11 +176,6 @@ export function ProfessionalsPage() {
       title="Profesionales"
     >
       {notice && <Message tone="success">{notice}</Message>}
-      {fromFallback && (
-        <Message tone="warning">
-          Mostrando datos demo. Ejecuta `004_connect_operational_base.sql` para usar Supabase real.
-        </Message>
-      )}
       {error && <Message tone="error">{error}</Message>}
       <div className="flex flex-wrap gap-2"><Link to="/admin/importaciones" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink"><FileUp size={16} /> Importar profesionales</Link><Button icon={<Download size={16} />} onClick={exportProfessionals}>Exportar profesionales</Button><Button icon={<Download size={16} />} onClick={downloadTemplate}>Descargar plantilla CSV</Button></div>
 

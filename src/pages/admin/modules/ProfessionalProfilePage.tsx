@@ -30,7 +30,9 @@ export function ProfessionalProfilePage() {
       setLoading(true);
       setError("");
       try {
-        const [prof, clinic] = await Promise.all([getProfessionalById(id), getDefaultClinic()]);
+        const clinic = await getDefaultClinic();
+        if (!clinic) throw new Error("No pudimos cargar la clínica.");
+        const prof = await getProfessionalById(clinic.id, id);
         setProfessional(prof);
         setClinicSlug(clinic?.slug ?? null);
         const current = prof?.professional_share_percentage;

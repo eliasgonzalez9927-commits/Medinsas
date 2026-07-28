@@ -65,7 +65,6 @@ export function ServicesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [fromFallback, setFromFallback] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -90,7 +89,6 @@ export function ServicesPage() {
         getSpecialties(loadedClinic.id)
       ]);
       setServices(serviceResult.data);
-      setFromFallback(serviceResult.fromFallback);
       setSpecialties(loadedSpecialties);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar los servicios.");
@@ -212,11 +210,6 @@ export function ServicesPage() {
     >
       <div className="flex flex-wrap gap-2"><Link to="/admin/importaciones" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink"><FileUp size={16} /> Importar servicios</Link><Button icon={<Download size={16} />} onClick={exportServices}>Exportar servicios</Button><Button icon={<Download size={16} />} onClick={() => downloadServicesTemplate()}>Descargar plantilla CSV</Button><Button icon={<SlidersHorizontal size={16} />} onClick={() => setBulkOpen((open) => !open)}>{bulkOpen ? "Cerrar edición masiva" : "Actualizar precios"}</Button></div>
       {notice && <Message tone="success">{notice}</Message>}
-      {fromFallback && (
-        <Message tone="warning">
-          Mostrando datos demo. Ejecuta `004_connect_operational_base.sql` para usar Supabase real.
-        </Message>
-      )}
       {error && <Message tone="error">{error}</Message>}
 
       {bulkOpen && <SectionCard className="p-5"><h2 className="font-semibold">Vista previa de cambios</h2><p className="mt-1 text-sm text-clinic-muted">Seleccioná servicios y confirmá el cambio antes de aplicarlo.</p><div className="mt-4 grid gap-3 md:grid-cols-[1fr_180px_auto]"><select value={bulkMode} onChange={(event) => setBulkMode(event.target.value as typeof bulkMode)} className="h-10 rounded-lg border border-clinic-line px-3 text-sm"><option value="percent">Aumentar precio por porcentaje</option><option value="fixed">Aumentar precio por monto fijo</option><option value="deposit">Reemplazar seña</option><option value="duration">Reemplazar duración</option></select><input value={bulkValue} onChange={(event) => setBulkValue(event.target.value)} type="number" placeholder={bulkMode === "percent" ? "Ej. 20" : "Monto / minutos"} className="h-10 rounded-lg border border-clinic-line px-3 text-sm"/><Button disabled={!selected.size || !bulkValue || saving} onClick={applyBulk} variant="primary">Aplicar a {selected.size} servicios</Button></div></SectionCard>}
