@@ -20,6 +20,7 @@ export default async function handler(req, res) {
     supportNotificationEmail: Boolean(process.env.SUPPORT_NOTIFICATION_EMAIL),
     metaAppId: Boolean(process.env.META_APP_ID),
     metaAppSecret: Boolean(process.env.META_APP_SECRET),
-    whatsappWebhookVerifyToken: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN)
+    whatsappWebhookVerifyToken: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN),
+    cronSecret: Boolean(process.env.CRON_SECRET)
   });
 }
