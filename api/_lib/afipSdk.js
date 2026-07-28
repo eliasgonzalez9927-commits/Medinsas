@@ -48,7 +48,15 @@ export async function getOrRefreshWsaaTicket(client, fiscalSettings) {
     environment,
     wsid: "wsfe",
     tax_id: fiscalSettings.cuit,
-    force_create: false
+    force_create: false,
+    // Provisorio: certificado de homologacion generado a mano (WSASS de
+    // ARCA) para el CUIT de prueba de Medin, NO delegado a Afip SDK. Cuando
+    // una clinica real delegue el servicio a Afip SDK, esto no hace falta -
+    // ellos manejan el certificado. Sacar cuando el primer cliente real
+    // este configurado con delegacion real.
+    ...(process.env.ARCA_MANUAL_CERT && process.env.ARCA_MANUAL_KEY
+      ? { cert: process.env.ARCA_MANUAL_CERT, key: process.env.ARCA_MANUAL_KEY }
+      : {})
   });
 
   const token = auth?.token;
