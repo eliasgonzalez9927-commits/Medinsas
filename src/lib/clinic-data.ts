@@ -1030,6 +1030,7 @@ export type DraftInvoiceInput = {
   paymentId: string;
   patientId: string | null;
   fiscalSettingId: string;
+  salePoint: string;
   documentType: "factura_b" | "factura_c";
   items: DraftInvoiceItemInput[];
 };
@@ -1045,6 +1046,7 @@ export async function createDraftInvoice(input: DraftInvoiceInput): Promise<Invo
         patient_id: input.patientId,
         payment_id: input.paymentId,
         fiscal_setting_id: input.fiscalSettingId,
+        sale_point: input.salePoint,
         document_type: input.documentType,
         status: "draft",
         arca_status: "pending_configuration",

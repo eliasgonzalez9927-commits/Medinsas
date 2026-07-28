@@ -95,8 +95,20 @@ async function handleIssue(client, res, invoiceId, auth) {
   if (!fiscalSettings || fiscalSettings.arca_integration_status !== "configured" || !fiscalSettings.cuit) {
     return res.status(503).json({ error: "FISCAL_SETTINGS_NOT_CONFIGURED" });
   }
+  // Self-heal: comprobantes creados antes de que createDraftInvoice
+  // empezara a guardar sale_point (o cualquier otro caso borde) toman el
+  // punto de venta configurado en fiscal_settings en vez de fallar.
   if (!invoice.sale_point) {
-    return res.status(400).json({ error: "INVOICE_MISSING_SALE_POINT" });
+    const fallbackSalePoint = fiscalSettings.sale_points?.[0];
+    if (!fallbackSalePoint) {
+      return res.status(400).json({ error: "INVOICE_MISSING_SALE_POINT" });
+    }
+    invoice.sale_point = fallbackSalePoint;
+    const { error: salePointError } = await client
+      .from("invoices")
+      .update({ sale_point: fallbackSalePoint })
+      .eq("id", invoice.id);
+    if (salePointError) throw salePointError;
   }
 
   // Transicion condicional draft/pending_configuration/failed -> pending.
