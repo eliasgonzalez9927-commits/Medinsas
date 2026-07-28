@@ -60,10 +60,11 @@ export async function getOrRefreshWsaaTicket(client, fiscalSettings) {
     throw err;
   }
 
-  // Si Afip SDK no devuelve vencimiento explicito, el WSAA estandar de
-  // ARCA da tickets de 12hs - cacheamos 11hs para quedar del lado seguro.
-  const nextExpiresAt = auth?.expirationTime
-    ? new Date(auth.expirationTime).toISOString()
+  // Afip SDK devuelve "expiration" (confirmado en pruebas contra
+  // homologacion) - si en algun caso faltara, el WSAA estandar de ARCA da
+  // tickets de 12hs, asi que cacheamos 11hs para quedar del lado seguro.
+  const nextExpiresAt = auth?.expiration
+    ? new Date(auth.expiration).toISOString()
     : new Date(Date.now() + 11 * 60 * 60 * 1000).toISOString();
 
   const { error: updateError } = await client
@@ -82,7 +83,9 @@ export async function getOrRefreshWsaaTicket(client, fiscalSettings) {
 
 // Codigos oficiales de ARCA (estables desde hace anios, no especificos de
 // Afip SDK). MVP cubre solo Factura B y C a consumidor final (ver plan):
-// sin Factura A, sin discriminar CUIT del receptor.
+// sin Factura A, sin discriminar CUIT del receptor. Verificado contra
+// homologacion real (CUIT de prueba de Medin) el 2026-07-28: ambos tipos
+// obtuvieron CAE aprobado.
 const CBTE_TIPO_BY_DOCUMENT_TYPE = { factura_b: 6, factura_c: 11 };
 const CONCEPTO_SERVICIOS = 2;
 const DOC_TIPO_CONSUMIDOR_FINAL = 99;
@@ -93,11 +96,25 @@ function todayAsArcaDate() {
   return new Date().toISOString().slice(0, 10).replace(/-/g, "");
 }
 
-// IMPORTANTE: este mapeo de campos de FeCAEReq (Concepto/DocTipo/
-// CondicionIVAReceptorId/redondeo de importes) esta armado a partir de la
-// documentacion oficial de WSFEv1 pero TODAVIA NO se probo contra un CUIT
-// real delegado en homologacion - hacerlo es el primer paso del rollout
-// (ver plan) antes de habilitar ARCA_INVOICE_ISSUE_ENABLED en produccion.
+// Concepto=2 (Servicios) exige informar el periodo del servicio y el
+// vencimiento de pago (error 10049 si faltan) - una consulta/atencion es
+// same-day, asi que las tres fechas son la fecha del comprobante.
+async function getNextInvoiceNumber({ client, fiscalSettings, ptoVta, cbteTipo }) {
+  const { token, sign } = await getOrRefreshWsaaTicket(client, fiscalSettings);
+  const result = await afipSdkFetch("/afip/requests", {
+    environment: fiscalSettings.arca_environment === "production" ? "prod" : "dev",
+    method: "FECompUltimoAutorizado",
+    wsid: "wsfe",
+    params: {
+      Auth: { Token: token, Sign: sign, Cuit: fiscalSettings.cuit },
+      PtoVta: ptoVta,
+      CbteTipo: cbteTipo
+    }
+  });
+  const lastNumber = Number(result?.FECompUltimoAutorizadoResult?.CbteNro ?? 0);
+  return lastNumber + 1;
+}
+
 export async function requestCae({ client, fiscalSettings, invoice }) {
   const { token, sign } = await getOrRefreshWsaaTicket(client, fiscalSettings);
   const cbteTipo = CBTE_TIPO_BY_DOCUMENT_TYPE[invoice.document_type];
@@ -110,6 +127,8 @@ export async function requestCae({ client, fiscalSettings, invoice }) {
   const impNeto = Number(invoice.subtotal);
   const impIva = Number(invoice.tax_amount);
   const impTotal = Number(invoice.total);
+  const today = todayAsArcaDate();
+  const nextNumber = await getNextInvoiceNumber({ client, fiscalSettings, ptoVta, cbteTipo });
 
   const result = await afipSdkFetch("/afip/requests", {
     environment: fiscalSettings.arca_environment === "production" ? "prod" : "dev",
@@ -125,9 +144,12 @@ export async function requestCae({ client, fiscalSettings, invoice }) {
               Concepto: CONCEPTO_SERVICIOS,
               DocTipo: DOC_TIPO_CONSUMIDOR_FINAL,
               DocNro: 0,
-              CbteDesde: 0,
-              CbteHasta: 0,
-              CbteFch: todayAsArcaDate(),
+              CbteDesde: nextNumber,
+              CbteHasta: nextNumber,
+              CbteFch: today,
+              FchServDesde: today,
+              FchServHasta: today,
+              FchVtoPago: today,
               ImpTotal: impTotal,
               ImpTotConc: 0,
               ImpNeto: cbteTipo === CBTE_TIPO_BY_DOCUMENT_TYPE.factura_c ? impTotal : impNeto,
@@ -147,11 +169,13 @@ export async function requestCae({ client, fiscalSettings, invoice }) {
     }
   });
 
-  const detResponse = result?.FeDetResp?.FECAEDetResponse?.[0];
+  const detResponse = result?.FECAESolicitarResult?.FeDetResp?.FECAEDetResponse?.[0];
+  const topLevelError = result?.FECAESolicitarResult?.Errors?.Err?.[0]?.Msg;
+  const detailObservation = detResponse?.Observaciones?.Obs?.[0]?.Msg;
   if (!detResponse || detResponse.Resultado !== "A" || !detResponse.CAE) {
     const err = new Error("ARCA rechazo el comprobante");
     err.code = "ARCA_REJECTED";
-    err.friendlyMessage = detResponse?.Observaciones?.[0]?.Msg ?? "ARCA rechazo el comprobante.";
+    err.friendlyMessage = detailObservation ?? topLevelError ?? "ARCA rechazo el comprobante.";
     err.arcaResponse = result;
     throw err;
   }
