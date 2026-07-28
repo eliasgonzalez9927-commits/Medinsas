@@ -241,25 +241,16 @@ function SettingsCenter({ initialTab }: { initialTab: SettingsTab }) {
       });
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session) {
-        // El envio de mail automatico todavia no funciona en produccion
-        // (no hay backend de Resend conectado) - este fetch queda como
-        // best-effort y no bloquea el flujo. Por eso mostramos el link
-        // abajo para que el admin lo comparta a mano mientras tanto.
-        fetch("/api/messages/send", {
+        // El mail es best-effort (no bloquea el flujo) - por eso igual
+        // mostramos el link abajo para compartir a mano si el envio falla
+        // o si todavia no hay RESEND_API_KEY configurada.
+        fetch("/api/notifications/dispatch", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${sessionData.session.access_token}`
           },
-          body: JSON.stringify({
-            clinicId: clinic.id,
-            recipients: [{ email: data.email }],
-            subject: "Te invitaron a Medin",
-            text: `Hola ${data.full_name}, te invitaron a Medin como ${roleLabels[data.role] ?? data.role}. Ingresá acá: ${window.location.origin}/invitacion/${invitation.invitation_token}`,
-            template: "user_invitation",
-            related_entity_type: "user_invitation",
-            related_entity_id: invitation.id
-          })
+          body: JSON.stringify({ type: "user_invitation", invitation_id: invitation.id })
         }).catch(() => undefined);
       }
       if (invitation.invitation_token) {
@@ -560,7 +551,7 @@ function UsersPanel({
   return (
     <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
       <SectionCard className="p-5">
-        <Header icon={<ShieldCheck size={20} />} title="Invitar usuario" text="Registra la invitacion. El envio de mail automatico todavia no esta activo - compartí el link vos mismo." />
+        <Header icon={<ShieldCheck size={20} />} title="Invitar usuario" text="Registra la invitacion y le mandamos el link por mail. Si no le llega, tambien podes compartirselo vos mismo." />
         {inviteLink && (
           <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-sm font-semibold text-emerald-800">Invitación creada. Compartí este link:</p>
@@ -615,10 +606,11 @@ function UsersPanel({
             />
           ))}
           {pendingInvitations.map((invitation) => (
-            <article key={invitation.id} className="grid gap-3 bg-amber-50/40 px-5 py-4 md:grid-cols-[1fr_130px_120px_110px] md:items-center">
+            <article key={invitation.id} className="grid gap-3 bg-amber-50/40 px-5 py-4 md:grid-cols-[1fr_130px_120px_auto_auto] md:items-center">
               <div><p className="font-semibold">{invitation.full_name}</p><p className="text-sm text-clinic-muted">{invitation.email}</p></div>
               <span className="text-sm font-medium">{roleLabels[invitation.role] ?? invitation.role}</span>
               <span className="rounded-lg bg-white px-3 py-2 text-center text-xs font-semibold text-amber-700">{invitationStatusLabels[invitation.status] ?? invitation.status}</span>
+              {invitation.invitation_token && <CopyInvitationLinkButton token={invitation.invitation_token} />}
               <Button
                 aria-label="Cancelar invitacion"
                 className="justify-self-start text-red-500 hover:bg-red-50 hover:text-red-600"
@@ -640,6 +632,24 @@ function UsersPanel({
         </div>
       </SectionCard>
     </section>
+  );
+}
+
+function CopyInvitationLinkButton({ token }: { token: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/invitacion/${token}`);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+  return (
+    <Button onClick={copy} title="Copiar link de invitacion">
+      {copied ? "¡Copiado!" : "Copiar link"}
+    </Button>
   );
 }
 
