@@ -29,6 +29,12 @@ export function InvoicePrintPage() {
   useEffect(() => {
     if (!invoice || invoice.arca_status !== "synced" || !invoice.arca_external_id) return;
     const cbteTipo = CBTE_TIPO_BY_DOCUMENT_TYPE[invoice.document_type];
+    // El QR tiene que reflejar el DocTipo/DocNro que ARCA realmente
+    // registro (consumidor final anonimo, o DNI si el importe supero el
+    // umbral de identificacion) - se lee de la respuesta guardada en vez
+    // de asumir siempre consumidor final, para no imprimir un QR que no
+    // coincide con lo que ARCA tiene en sus sistemas.
+    const detResponse = (invoice.arca_response as any)?.FECAESolicitarResult?.FeDetResp?.FECAEDetResponse?.[0];
     const payload = {
       ver: 1,
       fecha: (invoice.issued_at ?? invoice.created_at).slice(0, 10),
@@ -39,8 +45,8 @@ export function InvoicePrintPage() {
       importe: Number(invoice.total),
       moneda: "PES",
       ctz: 1,
-      tipoDocRec: DOC_TIPO_CONSUMIDOR_FINAL,
-      nroDocRec: 0,
+      tipoDocRec: detResponse?.DocTipo ?? DOC_TIPO_CONSUMIDOR_FINAL,
+      nroDocRec: detResponse?.DocNro ?? 0,
       tipoCodAut: "E",
       codAut: Number(invoice.arca_external_id)
     };

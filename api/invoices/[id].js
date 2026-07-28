@@ -64,7 +64,11 @@ async function authenticate(client, req) {
 async function loadInvoice(client, invoiceId, clinicId) {
   const { data, error } = await client
     .from("invoices")
-    .select("*")
+    // patients(document_number) solo para el umbral de identificacion de
+    // consumidor final (RG vigente: $10.000.000 por comprobante) - un
+    // turno medico nunca lo cruza, pero si algun dia pasa, requestCae
+    // necesita el DNI del paciente en vez de consumidor final anonimo.
+    .select("*, patients(document_number)")
     .eq("id", invoiceId)
     .eq("clinic_id", clinicId)
     .maybeSingle();
@@ -132,7 +136,7 @@ async function handleIssue(client, res, invoiceId, auth) {
   }
 
   try {
-    const caeResult = await requestCae({ client, fiscalSettings, invoice: locked });
+    const caeResult = await requestCae({ client, fiscalSettings, invoice: locked, patientDocNumber: invoice.patients?.document_number });
     const { data: updated, error: updateError } = await client
       .from("invoices")
       .update({
