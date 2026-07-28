@@ -352,6 +352,7 @@ export function PaymentDetailPage() {
         paymentId: payment.id,
         patientId: payment.patient_id,
         fiscalSettingId: fiscalSettings.id,
+        salePoint: fiscalSettings.sale_points?.[0] ?? "",
         documentType: isFacturaB ? "factura_b" : "factura_c",
         items: [{ description: payment.services?.name ?? "Atencion medica", quantity: 1, unitPrice, taxRate }]
       });
