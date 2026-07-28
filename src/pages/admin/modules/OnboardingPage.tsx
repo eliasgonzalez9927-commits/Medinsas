@@ -48,7 +48,11 @@ function AdminOnboarding() {
     setError("");
     try {
       await finishClinicOnboarding(clinicId);
-      navigate("/admin");
+      // navigate() no alcanza: WorkspaceContext ya tiene "clinic" en memoria
+      // desde que se cargo la pagina, y no se re-consulta solo. Recarga
+      // completa para que el menu deje de mostrar "Onboarding" ya mismo,
+      // no recien la proxima vez que se refresque la app por otro motivo.
+      window.location.href = "/admin";
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos finalizar el onboarding.");
     } finally {
@@ -77,7 +81,6 @@ function AdminOnboarding() {
 }
 
 function ProfessionalOnboarding({ clinicMembership }: { clinicMembership: ClinicMember | null }) {
-  const navigate = useNavigate();
   const [progress, setProgress] = useState<Progress | null>(null);
   const [error, setError] = useState("");
   const [finishing, setFinishing] = useState(false);
@@ -104,7 +107,7 @@ function ProfessionalOnboarding({ clinicMembership }: { clinicMembership: Clinic
     setError("");
     try {
       await finishMemberOnboarding(clinicMembership.id);
-      navigate("/admin/mi-agenda");
+      window.location.href = "/admin/mi-agenda";
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos finalizar el onboarding.");
     } finally {
@@ -138,7 +141,6 @@ const RECEPTIONIST_TOUR_CARDS = [
 ];
 
 function ReceptionistOnboarding({ clinicMembership }: { clinicMembership: ClinicMember | null }) {
-  const navigate = useNavigate();
   const [error, setError] = useState("");
   const [finishing, setFinishing] = useState(false);
 
@@ -148,7 +150,7 @@ function ReceptionistOnboarding({ clinicMembership }: { clinicMembership: Clinic
     setError("");
     try {
       await finishMemberOnboarding(clinicMembership.id);
-      navigate("/admin/agenda");
+      window.location.href = "/admin/agenda";
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos guardar.");
     } finally {
