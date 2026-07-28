@@ -65,7 +65,7 @@ export const ADMIN_MODULES: AdminModuleDefinition[] = [
 
   { key: "payments", label: "Pagos", path: "/admin/pagos", icon: WalletCards, group: "administration", status: "active", moduleFlag: ["pagos", "mercado_pago"] },
   { key: "financing", label: "Financiación", path: "/admin/financiacion", icon: Banknote, group: "administration", status: "coming_soon", moduleFlag: "financiacion", description: "Opciones de financiación y simulaciones para tratamientos." },
-  { key: "billing", label: "Facturación", path: "/admin/facturacion", icon: ReceiptText, group: "administration", status: "coming_soon", moduleFlag: "facturacion", description: "Comprobantes internos e integración fiscal cuando esté lista." },
+  { key: "billing", label: "Facturación", path: "/admin/facturacion/comprobantes", icon: ReceiptText, group: "administration", status: "active", moduleFlag: "facturacion", description: "Comprobantes electrónicos y configuración fiscal." },
 
   { key: "notifications", label: "Notificaciones", path: "/admin/notificaciones", icon: Bell, group: "communication", status: "hidden" },
   { key: "messages", label: "Mensajes", path: "/admin/mensajes", icon: MessageCircle, group: "communication", status: "beta", moduleFlag: "mensajes" },
