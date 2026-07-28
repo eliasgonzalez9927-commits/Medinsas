@@ -265,7 +265,7 @@ export function PublicBookingPage() {
         }
         setCheckoutUrl(paymentData.checkout_url);
       } else {
-        const linkResponse = await fetch(`/api/appointments/${booking.appointment_id}/public-link`, { method: "POST" });
+        const linkResponse = await fetch(`/api/appointments/${booking.appointment_id}/calendar.ics`, { method: "POST" });
         const linkData = await linkResponse.json().catch(() => ({}));
         if (linkResponse.ok && linkData.url) {
           setPrivateUrl(linkData.url);

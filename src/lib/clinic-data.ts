@@ -24,6 +24,9 @@ import {
   ClinicHours,
   ClinicInput,
   ClinicMemberWithProfile,
+  FiscalSettings,
+  Invoice,
+  InvoiceItem,
   Location,
   LocationInput,
   MedicalRecord,
@@ -935,6 +938,167 @@ export async function updatePaymentSettings(id: string, data: Partial<PaymentSet
     console.error("Failed to update payment settings", error);
     throw new FriendlyDataError("No pudimos guardar la configuracion de pagos.");
   }
+}
+
+// arca_wsaa_token/arca_wsaa_sign/arca_wsaa_expires_at nunca se seleccionan
+// aca: son el ticket de autenticacion contra ARCA y solo los toca el
+// endpoint serverless con la service-role key (ver api/_lib/afipSdk.js).
+const FISCAL_SETTINGS_COLUMNS =
+  "id, clinic_id, legal_name, trade_name, cuit, fiscal_condition, fiscal_address, sale_points, receipt_types, arca_integration_status, arca_provider, arca_environment, created_at, updated_at";
+
+export async function getFiscalSettings(clinicId: string): Promise<FiscalSettings | null> {
+  try {
+    const { data, error } = await supabase
+      .from("fiscal_settings")
+      .select(FISCAL_SETTINGS_COLUMNS)
+      .eq("clinic_id", clinicId)
+      .maybeSingle();
+    if (error) throw error;
+    return data as FiscalSettings | null;
+  } catch (error) {
+    console.error("Failed to load fiscal settings", error);
+    throw new FriendlyDataError("No pudimos cargar la configuracion fiscal.");
+  }
+}
+
+export async function updateFiscalSettings(id: string, data: Partial<FiscalSettings>): Promise<FiscalSettings> {
+  try {
+    const { data: updated, error } = await supabase
+      .from("fiscal_settings")
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select(FISCAL_SETTINGS_COLUMNS)
+      .single();
+    if (error) throw error;
+    return updated as FiscalSettings;
+  } catch (error) {
+    console.error("Failed to update fiscal settings", error);
+    throw new FriendlyDataError("No pudimos guardar la configuracion fiscal.");
+  }
+}
+
+export async function getInvoices(clinicId: string, filters: PaymentFilters = {}): Promise<Invoice[]> {
+  try {
+    let query = supabase
+      .from("invoices")
+      .select("*, patients(*), payments(*)")
+      .eq("clinic_id", clinicId)
+      .order("created_at", { ascending: false });
+    if (filters.dateFrom) {
+      query = query.gte("created_at", zonedDateTimeToUtcIso(filters.dateFrom, "00:00", filters.timezone ?? "America/Argentina/Mendoza"));
+    }
+    if (filters.dateTo) {
+      query = query.lt("created_at", zonedDateTimeToUtcIso(addDaysToDateString(filters.dateTo, 1), "00:00", filters.timezone ?? "America/Argentina/Mendoza"));
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []) as Invoice[];
+  } catch (error) {
+    console.error("Failed to load invoices", error);
+    throw new FriendlyDataError("No pudimos cargar los comprobantes.");
+  }
+}
+
+export async function getInvoiceById(id: string): Promise<(Invoice & { invoice_items: InvoiceItem[]; clinics: Clinic | null; fiscal_settings: FiscalSettings | null; patients: Patient | null }) | null> {
+  try {
+    const { data, error } = await supabase
+      .from("invoices")
+      .select("*, invoice_items(*), patients(*), payments(*), clinics(*), fiscal_settings(*)")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw error;
+    return data as (Invoice & { invoice_items: InvoiceItem[]; clinics: Clinic | null; fiscal_settings: FiscalSettings | null; patients: Patient | null }) | null;
+  } catch (error) {
+    console.error("Failed to load invoice", error);
+    throw new FriendlyDataError("No pudimos cargar el comprobante.");
+  }
+}
+
+export type DraftInvoiceItemInput = {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  taxRate: number;
+};
+
+export type DraftInvoiceInput = {
+  clinicId: string;
+  paymentId: string;
+  patientId: string | null;
+  fiscalSettingId: string;
+  documentType: "factura_b" | "factura_c";
+  items: DraftInvoiceItemInput[];
+};
+
+export async function createDraftInvoice(input: DraftInvoiceInput): Promise<Invoice> {
+  try {
+    const subtotal = input.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const taxAmount = input.items.reduce((sum, item) => sum + item.quantity * item.unitPrice * (item.taxRate / 100), 0);
+    const { data: invoice, error } = await supabase
+      .from("invoices")
+      .insert({
+        clinic_id: input.clinicId,
+        patient_id: input.patientId,
+        payment_id: input.paymentId,
+        fiscal_setting_id: input.fiscalSettingId,
+        document_type: input.documentType,
+        status: "draft",
+        arca_status: "pending_configuration",
+        subtotal,
+        tax_amount: taxAmount,
+        total: subtotal + taxAmount
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    if (input.items.length) {
+      const { error: itemsError } = await supabase.from("invoice_items").insert(
+        input.items.map((item) => ({
+          invoice_id: invoice.id,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          tax_rate: item.taxRate,
+          total: item.quantity * item.unitPrice * (1 + item.taxRate / 100)
+        }))
+      );
+      if (itemsError) throw itemsError;
+    }
+    // Deja el pago apuntando a su comprobante para que la ficha de pago
+    // pueda mostrar "Ver comprobante" en vez de "Facturar" de nuevo.
+    const { error: paymentError } = await supabase
+      .from("payments")
+      .update({ invoice_id: invoice.id })
+      .eq("id", input.paymentId);
+    if (paymentError) throw paymentError;
+    return invoice as Invoice;
+  } catch (error) {
+    console.error("Failed to create draft invoice", error);
+    throw new FriendlyDataError("No pudimos crear el borrador del comprobante.");
+  }
+}
+
+export async function issueInvoice(invoiceId: string): Promise<Invoice> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) throw new FriendlyDataError("Tu sesión expiró. Volvé a iniciar sesión.");
+  const response = await fetch(`/api/invoices/${invoiceId}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionData.session.access_token}` }
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (body?.error === "ARCA_FLOW_DISABLED") {
+      throw new FriendlyDataError("La emision fiscal todavia no esta habilitada.");
+    }
+    if (body?.error === "ARCA_REJECTED") {
+      throw new FriendlyDataError(body.message ?? "ARCA rechazo el comprobante.");
+    }
+    if (body?.error === "INVOICE_ALREADY_PROCESSING") {
+      throw new FriendlyDataError("Este comprobante ya se esta procesando.");
+    }
+    throw new FriendlyDataError("No pudimos emitir el comprobante.");
+  }
+  return body as Invoice;
 }
 
 export async function getSpecialties(clinicId: string): Promise<Specialty[]> {
