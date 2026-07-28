@@ -51,7 +51,9 @@ import {
   ServiceInput,
   ServiceWithRelations,
   Specialty,
-  UserInvitation
+  UserInvitation,
+  WhatsAppMessageTemplate,
+  WhatsAppSettings
 } from "../types/clinic";
 
 export class FriendlyDataError extends Error {
@@ -953,6 +955,59 @@ export async function createSupportTicket(input: { subject: string; message: str
   if (!response.ok) {
     throw new FriendlyDataError("No pudimos enviar tu consulta. Probá de nuevo en un rato.");
   }
+}
+
+// access_token_encrypted nunca se selecciona aca - mismo cuidado que
+// fiscal_settings/payment_settings, es un secreto que solo toca el
+// endpoint serverless con la service-role key.
+const WHATSAPP_SETTINGS_COLUMNS =
+  "id, clinic_id, waba_id, phone_number_id, display_phone_number, verified_name, status, connected_at, created_at, updated_at";
+
+export async function getWhatsAppSettings(clinicId: string): Promise<WhatsAppSettings | null> {
+  try {
+    const { data, error } = await supabase
+      .from("whatsapp_settings")
+      .select(WHATSAPP_SETTINGS_COLUMNS)
+      .eq("clinic_id", clinicId)
+      .maybeSingle();
+    if (error) throw error;
+    return data as WhatsAppSettings | null;
+  } catch (error) {
+    console.error("Failed to load whatsapp settings", error);
+    throw new FriendlyDataError("No pudimos cargar la configuracion de WhatsApp.");
+  }
+}
+
+export async function getWhatsAppTemplates(clinicId: string): Promise<WhatsAppMessageTemplate[]> {
+  try {
+    const { data, error } = await supabase
+      .from("whatsapp_message_templates")
+      .select("*")
+      .eq("clinic_id", clinicId);
+    if (error) throw error;
+    return (data ?? []) as WhatsAppMessageTemplate[];
+  } catch (error) {
+    console.error("Failed to load whatsapp templates", error);
+    throw new FriendlyDataError("No pudimos cargar las plantillas de WhatsApp.");
+  }
+}
+
+export async function connectWhatsAppAccount(input: { code: string; wabaId: string; phoneNumberId: string }): Promise<WhatsAppSettings> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) throw new FriendlyDataError("Tu sesión expiró. Volvé a iniciar sesión.");
+  const response = await fetch("/api/notifications/dispatch", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${sessionData.session.access_token}`
+    },
+    body: JSON.stringify({ type: "whatsapp_connect", code: input.code, waba_id: input.wabaId, phone_number_id: input.phoneNumberId })
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new FriendlyDataError(body?.message ?? "No pudimos conectar WhatsApp.");
+  }
+  return body.settings as WhatsAppSettings;
 }
 
 export async function startMercadoPagoConnection(): Promise<string> {

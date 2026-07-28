@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { ClinicModuleKey } from "./modules";
 import type { UserRole } from "../types/database";
+import { CONFIG_ROLES } from "./auth-roles";
 
 export type AdminNavigationGroup =
   | "summary"
@@ -69,7 +70,7 @@ export const ADMIN_MODULES: AdminModuleDefinition[] = [
 
   { key: "notifications", label: "Notificaciones", path: "/admin/notificaciones", icon: Bell, group: "communication", status: "hidden" },
   { key: "messages", label: "Mensajes", path: "/admin/mensajes", icon: MessageCircle, group: "communication", status: "beta", moduleFlag: "mensajes" },
-  { key: "whatsapp", label: "WhatsApp", path: "/admin/whatsapp", icon: MessageCircle, group: "communication", status: "coming_soon", moduleFlag: "whatsapp", description: "Automatizaciones y conversaciones por WhatsApp con integración oficial." },
+  { key: "whatsapp", label: "WhatsApp", path: "/admin/whatsapp", icon: MessageCircle, group: "communication", status: "active", moduleFlag: "whatsapp", allowedRoles: CONFIG_ROLES, description: "Conectá el WhatsApp de la clínica para confirmaciones y recordatorios." },
 
   { key: "reports", label: "Reportes", path: "/admin/reportes", icon: PieChart, group: "administration", status: "beta", moduleFlag: "reportes" },
   { key: "my_plan", label: "Mi plan", path: "/admin/mi-plan", icon: ReceiptText, group: "administration", status: "active" },
