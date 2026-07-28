@@ -138,6 +138,7 @@ export function App() {
       </Route>
       <Route element={<ProtectedRoute roles={PROFESSIONAL_ROLES} />}>
         <Route path="/admin/mi-agenda" element={<AgendaPage />} />
+        <Route path="/admin/mi-agenda/onboarding" element={<OnboardingPage />} />
         <Route path="/admin/mi-agenda/pacientes/:id" element={<PatientFichaProfessionalPage />} />
         <Route path="/admin/mi-agenda/ingresos" element={<ProfessionalIncomePage />} />
         <Route path="/admin/mi-agenda/atencion/:appointmentId" element={<MedicalAttentionPage />} />

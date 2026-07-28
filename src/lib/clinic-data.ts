@@ -193,6 +193,38 @@ export async function updateClinic(id: string, data: ClinicInput): Promise<Clini
   }
 }
 
+// "Finalizar" es una accion explicita del usuario (boton en Onboarding),
+// nunca se marca sola con el progreso - asi el checklist solo informa,
+// no decide por la clinica.
+export async function finishClinicOnboarding(clinicId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("clinics")
+      .update({ onboarding_completed_at: new Date().toISOString() })
+      .eq("id", clinicId);
+    if (error) throw error;
+  } catch (error) {
+    console.error("Failed to finish clinic onboarding", error);
+    throw new FriendlyDataError("No pudimos marcar el onboarding como terminado.");
+  }
+}
+
+// Mismo botón "Finalizar"/"Listo, entendido" para profesional y recepcion -
+// cada membresia marca su propio onboarding, no se comparte con el resto
+// del equipo de la clinica.
+export async function finishMemberOnboarding(clinicMemberId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("clinic_members")
+      .update({ onboarding_completed_at: new Date().toISOString() })
+      .eq("id", clinicMemberId);
+    if (error) throw error;
+  } catch (error) {
+    console.error("Failed to finish member onboarding", error);
+    throw new FriendlyDataError("No pudimos marcar el onboarding como terminado.");
+  }
+}
+
 export async function getLocations(clinicId: string): Promise<Location[]> {
   try {
     const { data, error } = await supabase
@@ -904,6 +936,22 @@ export async function getPaymentSettings(clinicId: string): Promise<PaymentSetti
   } catch (error) {
     console.error("Failed to load payment settings", error);
     throw new FriendlyDataError("No pudimos cargar la configuracion de pagos.");
+  }
+}
+
+export async function createSupportTicket(input: { subject: string; message: string }): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) throw new FriendlyDataError("Tu sesión expiró. Volvé a iniciar sesión.");
+  const response = await fetch("/api/notifications/dispatch", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${sessionData.session.access_token}`
+    },
+    body: JSON.stringify({ type: "support_ticket", subject: input.subject, message: input.message })
+  });
+  if (!response.ok) {
+    throw new FriendlyDataError("No pudimos enviar tu consulta. Probá de nuevo en un rato.");
   }
 }
 

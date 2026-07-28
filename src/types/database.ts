@@ -33,6 +33,7 @@ export type ClinicMember = {
   role: UserRole;
   active: boolean;
   professional_id: string | null;
+  onboarding_completed_at: string | null;
   created_at: string;
   updated_at: string;
 };
