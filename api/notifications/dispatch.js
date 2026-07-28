@@ -187,6 +187,9 @@ export default async function handler(req, res) {
     if (req.body?.type === "whatsapp_connect") {
       return await handleWhatsAppConnect(client, req, res);
     }
+    if (req.body?.type === "user_invitation") {
+      return await handleUserInvitation(client, req, res);
+    }
     const appointmentId = req.body?.appointment_id ?? null;
     const limit = Math.min(Math.max(Number(req.body?.limit) || DEFAULT_LIMIT, 1), MAX_LIMIT);
     const summary = await processPendingDeliveries(client, { appointmentId, limit });
@@ -230,6 +233,55 @@ async function handleSupportTicket(client, req, res) {
   }
 
   return res.status(200).json({ ok: true, id: ticket.id });
+}
+
+// El mail de invitacion de usuario se manda desde aca en vez de un endpoint
+// nuevo (mismo motivo que support_ticket/whatsapp_connect - tope de 12
+// funciones en Vercel Hobby). Antes esto le pegaba a /api/messages/send,
+// que nunca existio - la invitacion se guardaba en la base pero el mail
+// jamas salia, 404 silencioso tragado por el frontend.
+async function handleUserInvitation(client, req, res) {
+  const auth = await authenticate(client, req);
+  if (!auth) return res.status(401).json({ error: "UNAUTHORIZED" });
+  if (!["platform_admin", "clinic_admin", "admin"].includes(auth.role)) {
+    return res.status(403).json({ error: "FORBIDDEN" });
+  }
+
+  const invitationId = String(req.body?.invitation_id ?? "");
+  if (!invitationId) return res.status(400).json({ error: "MISSING_FIELDS" });
+
+  const { data: invitation, error: invitationError } = await client
+    .from("user_invitations")
+    .select("id, clinic_id, email, full_name, role, invitation_token, clinics(name)")
+    .eq("id", invitationId)
+    .maybeSingle();
+  if (invitationError) throw invitationError;
+  if (!invitation) return res.status(404).json({ error: "INVITATION_NOT_FOUND" });
+  if (auth.role !== "platform_admin" && invitation.clinic_id !== auth.clinicId) {
+    return res.status(403).json({ error: "FORBIDDEN" });
+  }
+  if (!invitation.invitation_token) return res.status(200).json({ ok: true, sent: false });
+
+  if (!process.env.RESEND_API_KEY) return res.status(200).json({ ok: true, sent: false });
+
+  const publicUrl = (process.env.APP_PUBLIC_URL || "https://app.medin.com.ar").replace(/\/$/, "");
+  const invitationUrl = `${publicUrl}/invitacion/${invitation.invitation_token}`;
+  const clinicName = invitation.clinics?.name ?? "Medin";
+  const text = [
+    `Hola ${invitation.full_name || ""},`,
+    "",
+    `Te invitaron a sumarte a ${clinicName} en Medin.`,
+    "",
+    `Ingresá acá para activar tu cuenta: ${invitationUrl}`
+  ].join("\n");
+
+  try {
+    await sendTransactionalEmail({ to: invitation.email, subject: `Te invitaron a ${clinicName}`, text, html: textToHtml(text) });
+    return res.status(200).json({ ok: true, sent: true });
+  } catch (err) {
+    console.error("Failed to email user invitation", err);
+    return res.status(200).json({ ok: true, sent: false });
+  }
 }
 
 async function handleWhatsAppConnect(client, req, res) {
