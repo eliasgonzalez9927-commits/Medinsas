@@ -34,7 +34,6 @@ export function AvailabilityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [fromFallback, setFromFallback] = useState(false);
   const [ruleForm, setRuleForm] = useState({
     day_of_week: 1,
     start_time: "09:00",
@@ -71,7 +70,6 @@ export function AvailabilityPage() {
         getAvailabilityBlocks(loadedClinic.id)
       ]);
       setProfessionals(professionalsResult.data);
-      setFromFallback(professionalsResult.fromFallback || rulesResult.fromFallback);
       setLocations(loadedLocations);
       setRules(rulesResult.data);
       setBlocks(loadedBlocks);
@@ -162,11 +160,6 @@ export function AvailabilityPage() {
       title="Disponibilidad"
     >
       {notice && <Message tone="success">{notice}</Message>}
-      {fromFallback && (
-        <Message tone="warning">
-          Mostrando datos demo. Ejecuta `004_connect_operational_base.sql` para usar Supabase real.
-        </Message>
-      )}
       {error && <Message tone="error">{error}</Message>}
 
       <section className="grid gap-4 lg:grid-cols-4">

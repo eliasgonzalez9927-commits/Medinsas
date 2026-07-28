@@ -1,11 +1,6 @@
 import { supabase } from "./supabase";
 import { getActiveClinicOverride, setActiveClinicOverride } from "./active-clinic";
 import {
-  availabilityRules as fallbackAvailabilityRules,
-  professionals as fallbackProfessionals,
-  services as fallbackServices
-} from "../data/clinicMockData";
-import {
   AvailabilityBlock,
   AvailabilityBlockInput,
   AvailabilityRule,
@@ -1239,17 +1234,17 @@ export async function getProfessionals(clinicId: string): Promise<ClinicDataResu
       .eq("clinic_id", clinicId)
       .order("last_name");
     if (error) throw error;
-    const professionals = (data ?? []).map(mapProfessional);
-    return professionals.length > 0
-      ? { data: professionals, fromFallback: false }
-      : { data: fallbackProfessionals.map(mapFallbackProfessional), fromFallback: true };
+    return { data: (data ?? []).map(mapProfessional), fromFallback: false };
   } catch (error) {
     console.error("Failed to load professionals", error);
-    return { data: fallbackProfessionals.map(mapFallbackProfessional), fromFallback: true };
+    throw new FriendlyDataError("No pudimos cargar los profesionales.");
   }
 }
 
-export async function getProfessionalById(idOrSlug: string): Promise<ProfessionalWithRelations | null> {
+// idOrSlug se busca siempre acotado a clinicId - sin este filtro un id/slug
+// de OTRA clinica podia devolver el profesional equivocado (el slug no es
+// unico a nivel global, solo por clinica).
+export async function getProfessionalById(clinicId: string, idOrSlug: string): Promise<ProfessionalWithRelations | null> {
   try {
     const query = supabase
       .from("professionals")
@@ -1260,15 +1255,16 @@ export async function getProfessionalById(idOrSlug: string): Promise<Professiona
         professional_services(services(*)),
         availability_rules(*)
       `
-      );
+      )
+      .eq("clinic_id", clinicId);
     const { data, error } = isUuid(idOrSlug)
       ? await query.eq("id", idOrSlug).maybeSingle()
       : await query.eq("slug", idOrSlug).maybeSingle();
     if (error) throw error;
-    return data ? mapProfessional(data) : mapFallbackProfessionalById(idOrSlug);
+    return data ? mapProfessional(data) : null;
   } catch (error) {
     console.error("Failed to load professional", error);
-    return mapFallbackProfessionalById(idOrSlug);
+    throw new FriendlyDataError("No pudimos cargar el profesional.");
   }
 }
 
@@ -1321,13 +1317,10 @@ export async function getServices(clinicId: string): Promise<ClinicDataResult<Se
       .eq("clinic_id", clinicId)
       .order("name");
     if (error) throw error;
-    const services = (data ?? []).map(mapService);
-    return services.length > 0
-      ? { data: services, fromFallback: false }
-      : { data: fallbackServices.map(mapFallbackService), fromFallback: true };
+    return { data: (data ?? []).map(mapService), fromFallback: false };
   } catch (error) {
     console.error("Failed to load services", error);
-    return { data: fallbackServices.map(mapFallbackService), fromFallback: true };
+    throw new FriendlyDataError("No pudimos cargar los servicios.");
   }
 }
 
@@ -1380,13 +1373,10 @@ export async function getAvailabilityRules(
     if (professionalId) query = query.eq("professional_id", professionalId);
     const { data, error } = await query;
     if (error) throw error;
-    const rules = (data ?? []).map(mapAvailabilityRule);
-    return rules.length > 0
-      ? { data: rules, fromFallback: false }
-      : { data: fallbackAvailabilityRules.map(mapFallbackAvailabilityRule), fromFallback: true };
+    return { data: (data ?? []).map(mapAvailabilityRule), fromFallback: false };
   } catch (error) {
     console.error("Failed to load availability rules", error);
-    return { data: fallbackAvailabilityRules.map(mapFallbackAvailabilityRule), fromFallback: true };
+    throw new FriendlyDataError("No pudimos cargar la disponibilidad.");
   }
 }
 
@@ -2028,99 +2018,6 @@ function mapAvailabilityRule(row: any): AvailabilityRuleWithRelations {
   };
 }
 
-function mapFallbackProfessional(item: any): ProfessionalWithRelations {
-  return {
-    id: item.id,
-    clinic_id: "demo",
-    name: item.name,
-    last_name: item.lastName,
-    slug: item.id,
-    email: item.email,
-    phone: item.phone,
-    license_number: item.licenseNumber,
-    bio: item.bio,
-    avatar_url: null,
-    consultation_minutes: item.consultationMinutes,
-    active: item.active,
-    created_at: new Date().toISOString(),
-    specialties: item.specialties.map((name: string) => ({
-      id: name,
-      clinic_id: "demo",
-      name,
-      description: null,
-      active: true
-    })),
-    services: []
-  };
-}
-
-function mapFallbackProfessionalById(idOrSlug: string) {
-  const found = fallbackProfessionals.find((item) => item.id === idOrSlug);
-  return found ? mapFallbackProfessional(found) : null;
-}
-
-function mapFallbackService(item: any): ServiceWithRelations {
-  return {
-    id: item.id,
-    clinic_id: "demo",
-    specialty_id: item.specialty,
-    name: item.name,
-    slug: item.id,
-    description: null,
-    duration_minutes: item.durationMinutes,
-    price: item.price,
-    active: item.active,
-    financing_enabled: item.financingEnabled,
-    deposit_required: item.depositRequired,
-    public_booking_enabled: true,
-    specialty: {
-      id: item.specialty,
-      clinic_id: "demo",
-      name: item.specialty,
-      description: null,
-      active: true
-    },
-    professionals: []
-  };
-}
-
-function mapFallbackAvailabilityRule(item: any): AvailabilityRuleWithRelations {
-  return {
-    id: item.id,
-    clinic_id: "demo",
-    professional_id: item.professionalName,
-    location_id: null,
-    day_of_week: dayLabelToNumber(item.day),
-    start_time: item.startTime,
-    end_time: item.endTime,
-    slot_duration_minutes: item.slotDurationMinutes,
-    active: item.active,
-    professional: {
-      id: item.professionalName,
-      clinic_id: "demo",
-      name: item.professionalName,
-      last_name: "",
-      slug: item.professionalName,
-      email: null,
-      phone: null,
-      license_number: null,
-      bio: null,
-      avatar_url: null,
-      consultation_minutes: item.slotDurationMinutes,
-      active: true,
-      created_at: new Date().toISOString()
-    },
-    location: {
-      id: item.location,
-      clinic_id: "demo",
-      name: item.location,
-      address: null,
-      phone: null,
-      active: true
-    }
-  };
-}
-
 export function slugify(value: string) {
   return value
     .normalize("NFD")
@@ -2201,10 +2098,6 @@ function getMinutesInTimeZone(date: Date, timezone: string) {
 function addDaysToDateString(date: string, days: number) {
   const [year, month, day] = date.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
-}
-
-function dayLabelToNumber(day: string) {
-  return ["Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"].indexOf(day);
 }
 
 function isUuid(value: string) {
