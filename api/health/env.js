@@ -21,6 +21,8 @@ export default async function handler(req, res) {
     metaAppId: Boolean(process.env.META_APP_ID),
     metaAppSecret: Boolean(process.env.META_APP_SECRET),
     whatsappWebhookVerifyToken: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN),
-    cronSecret: Boolean(process.env.CRON_SECRET)
+    cronSecret: Boolean(process.env.CRON_SECRET),
+    resendApiKey: Boolean(process.env.RESEND_API_KEY),
+    resendFromEmail: Boolean(process.env.RESEND_FROM_EMAIL)
   });
 }
