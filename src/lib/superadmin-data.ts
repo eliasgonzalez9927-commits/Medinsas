@@ -296,7 +296,7 @@ export async function getOnboardingProgress(clinicId: string) {
     "Finalizar",
     readyToFinish,
     "/admin",
-    readyToFinish ? "Tu clínica ya está lista para operar." : "Completá los pasos anteriores para terminar."
+    readyToFinish ? "Tu clínica ya está lista para operar." : "Podés terminar y explorar el resto de Medin a partir de la mitad del checklist."
   ));
   const completed = steps.filter((item) => item.status === "completed").length;
   return { steps, percent: Math.round((completed / steps.length) * 100) };
@@ -319,7 +319,7 @@ export async function getProfessionalOnboardingProgress(professionalId: string) 
     "Finalizar",
     readyToFinish,
     "/admin/mi-agenda",
-    readyToFinish ? "Ya podés empezar a atender." : "Completá los pasos anteriores para terminar."
+    readyToFinish ? "Ya podés empezar a atender." : "Podés terminar y explorar el resto de Medin a partir de la mitad del checklist."
   ));
   const completed = steps.filter((item) => item.status === "completed").length;
   return { steps, percent: Math.round((completed / steps.length) * 100) };
