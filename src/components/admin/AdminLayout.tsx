@@ -71,6 +71,12 @@ export function AdminLayout({
     // onboarding SOLO en el aterrizaje inicial (pathname === "/admin"), no
     // en cada navegacion, para no bloquear el resto del panel.
     if (location.pathname !== "/admin" || !role) return;
+    // "Ver más tarde" en el onboarding guarda esta marca para no volver a
+    // interceptar el aterrizaje en /admin en esta sesion - a diferencia de
+    // "Finalizar", no marca el onboarding como terminado: la proxima vez
+    // que inicie sesion (nueva pestana/sessionStorage vacio) vuelve a
+    // aparecer el redirect, sin tapar el dashboard para siempre.
+    if (window.sessionStorage.getItem("medin_onboarding_skip") === "true") return;
     const done = isAdminChecklistRole ? Boolean(clinic?.onboarding_completed_at) : Boolean(clinicMembership?.onboarding_completed_at);
     if (!done && (isAdminChecklistRole || role === "professional" || role === "doctor" || role === "receptionist")) {
       navigate("/admin/onboarding", { replace: true });
