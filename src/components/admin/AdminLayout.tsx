@@ -1,6 +1,6 @@
 import { Building2, Check, ChevronDown, CirclePlus, LogOut, Menu, Search, UserRound, X } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import { ADMIN_MODULES, ADMIN_NAVIGATION_GROUPS, AdminModuleDefinition } from "../../lib/admin-navigation";
@@ -61,6 +61,21 @@ export function AdminLayout({
       return moduleFlags.some((flag) => modules[flag] ?? false);
     });
   }, [modules, role, clinic, clinicMembership, isAdminChecklistRole]);
+
+  const location = useLocation();
+  useEffect(() => {
+    // Aterrizar en el dashboard vacio sin haber visto el checklist de
+    // "Puesta en marcha" es justo lo que reporto el usuario probando una
+    // clinica nueva - nadie encuentra el item de menu solo. Se manda al
+    // onboarding SOLO en el aterrizaje inicial (pathname === "/admin"), no
+    // en cada navegacion, para no bloquear el resto del panel.
+    if (location.pathname !== "/admin" || !role) return;
+    const done = isAdminChecklistRole ? Boolean(clinic?.onboarding_completed_at) : Boolean(clinicMembership?.onboarding_completed_at);
+    if (!done && (isAdminChecklistRole || role === "professional" || role === "doctor" || role === "receptionist")) {
+      navigate("/admin/onboarding", { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, clinic?.onboarding_completed_at, clinicMembership?.onboarding_completed_at, role]);
 
   useEffect(() => {
     const query = globalSearch.trim();
