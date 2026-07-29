@@ -12,6 +12,16 @@ import { ClinicMember } from "../../../types/database";
 type Step = { stepKey: string; label: string; status: string; to: string; summary: string };
 type Progress = { steps: Step[]; percent: number };
 
+// "Ver más tarde" no marca el onboarding como terminado (a diferencia de
+// "Finalizar") - solo evita que AdminLayout vuelva a interceptar el
+// aterrizaje en /admin en esta misma sesion, para poder ver el dashboard
+// sin perder el checklist (la proxima vez que inicie sesion, vuelve a
+// aparecer).
+function skipForNow(navigate: (path: string) => void, path: string) {
+  window.sessionStorage.setItem("medin_onboarding_skip", "true");
+  navigate(path);
+}
+
 export function OnboardingPage() {
   const { role, clinicMembership } = useAuth();
   if (role === "professional" || role === "doctor") return <ProfessionalOnboarding clinicMembership={clinicMembership} />;
@@ -75,16 +85,20 @@ function AdminOnboarding() {
       {error && <ErrorBanner text={error} />}
       <ProgressHeader percent={progress?.percent ?? 0} />
       <ChecklistSteps steps={progress?.steps ?? []} />
-      {readyToFinish && (
-        <Button onClick={handleFinish} disabled={finishing} variant="primary">
-          {finishing ? "Finalizando..." : "Finalizar"}
-        </Button>
-      )}
+      <div className="flex gap-2">
+        {readyToFinish && (
+          <Button onClick={handleFinish} disabled={finishing} variant="primary">
+            {finishing ? "Finalizando..." : "Finalizar"}
+          </Button>
+        )}
+        <Button onClick={() => skipForNow(navigate, "/admin")}>Ver más tarde</Button>
+      </div>
     </AdminPageShell>
   );
 }
 
 function ProfessionalOnboarding({ clinicMembership }: { clinicMembership: ClinicMember | null }) {
+  const navigate = useNavigate();
   const [progress, setProgress] = useState<Progress | null>(null);
   const [error, setError] = useState("");
   const [finishing, setFinishing] = useState(false);
@@ -129,11 +143,14 @@ function ProfessionalOnboarding({ clinicMembership }: { clinicMembership: Clinic
       {error && <ErrorBanner text={error} />}
       <ProgressHeader percent={progress?.percent ?? 0} />
       <ChecklistSteps steps={progress?.steps ?? []} />
-      {readyToFinish && (
-        <Button onClick={handleFinish} disabled={finishing} variant="primary">
-          {finishing ? "Finalizando..." : "Finalizar"}
-        </Button>
-      )}
+      <div className="flex gap-2">
+        {readyToFinish && (
+          <Button onClick={handleFinish} disabled={finishing} variant="primary">
+            {finishing ? "Finalizando..." : "Finalizar"}
+          </Button>
+        )}
+        <Button onClick={() => skipForNow(navigate, "/admin/mi-agenda")}>Ver más tarde</Button>
+      </div>
     </AdminPageShell>
   );
 }
@@ -160,6 +177,7 @@ const RECEPTIONIST_TOUR_CARDS = [
 ];
 
 function ReceptionistOnboarding({ clinicMembership }: { clinicMembership: ClinicMember | null }) {
+  const navigate = useNavigate();
   const [error, setError] = useState("");
   const [finishing, setFinishing] = useState(false);
 
@@ -194,9 +212,12 @@ function ReceptionistOnboarding({ clinicMembership }: { clinicMembership: Clinic
           </article>
         ))}
       </section>
-      <Button onClick={handleFinish} disabled={finishing} variant="primary">
-        {finishing ? "Guardando..." : "Listo, entendido"}
-      </Button>
+      <div className="flex gap-2">
+        <Button onClick={handleFinish} disabled={finishing} variant="primary">
+          {finishing ? "Guardando..." : "Listo, entendido"}
+        </Button>
+        <Button onClick={() => skipForNow(navigate, "/admin/agenda")}>Ver más tarde</Button>
+      </div>
     </AdminPageShell>
   );
 }
