@@ -41,7 +41,10 @@ function AdminOnboarding() {
     load();
   }, []);
 
-  const readyToFinish = progress?.steps.find((item) => item.stepKey === "finish")?.status === "completed";
+  // A partir del 50% ya se puede terminar el onboarding y explorar el
+  // resto de la app - no hace falta completar los 8 pasos para salir del
+  // checklist, se puede volver a este mismo lugar despues.
+  const readyToFinish = (progress?.percent ?? 0) >= 50;
 
   async function handleFinish() {
     if (!clinicId) return;
@@ -100,7 +103,7 @@ function ProfessionalOnboarding({ clinicMembership }: { clinicMembership: Clinic
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clinicMembership?.professional_id]);
 
-  const readyToFinish = progress?.steps.find((item) => item.stepKey === "finish")?.status === "completed";
+  const readyToFinish = (progress?.percent ?? 0) >= 50;
 
   async function handleFinish() {
     if (!clinicMembership) return;
