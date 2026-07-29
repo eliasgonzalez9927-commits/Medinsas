@@ -30,6 +30,18 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: "INVALID_SIGNATURE" });
     }
 
+    // Suscripcion de la clinica A Medin: usa el token propio de Medin, no
+    // el OAuth de ninguna clinica - marcado con ?scope=platform en el
+    // notification_url (create-preference.js).
+    if (readFirst(req.query?.scope) === "platform") {
+      const accessToken = process.env.MEDIN_MERCADO_PAGO_ACCESS_TOKEN;
+      if (!accessToken) return res.status(200).json({ ignored: true });
+      const mpPayment = await fetchMercadoPagoPayment(paymentId, accessToken);
+      if (!mpPayment) return res.status(200).json({ ignored: true });
+      await syncPlatformBillingPayment(client, mpPayment);
+      return res.status(200).json({ ok: true });
+    }
+
     // Every clinic pays into its own Mercado Pago account, so looking up a
     // payment requires that clinic's own token - create-preference.js puts
     // clinic_id on the notification_url query string precisely so this
@@ -149,6 +161,53 @@ const APPOINTMENT_PAYMENT_STATUS_RANK = {
   deposit_paid: 2,
   paid: 3
 };
+
+// Distinto de syncPayment: no toca appointments/payments (eso es
+// clinica-a-paciente), avanza clinic_subscriptions (clinica-a-Medin) al
+// aprobarse - un ciclo mas de 30 dias y status vuelve a 'active' (saca el
+// banner de pago pendiente y el bloqueo si estaba suspendida).
+async function syncPlatformBillingPayment(client, mpPayment) {
+  const { data: record, error: findError } = await client
+    .from("saas_billing_records")
+    .select("*")
+    .eq("external_reference", mpPayment.external_reference ?? "")
+    .maybeSingle();
+  if (findError) throw findError;
+  if (!record) return;
+
+  const status = STATUS_MAP[mpPayment.status] ?? mpPayment.status;
+  if (record.status === "approved" && String(record.mp_payment_id) === String(mpPayment.id)) return;
+
+  const wasApproved = record.status === "approved";
+  const paidAt = mpPayment.status === "approved" ? mpPayment.date_approved ?? new Date().toISOString() : record.paid_at;
+
+  const { error: updateError } = await client
+    .from("saas_billing_records")
+    .update({
+      status,
+      mp_payment_id: String(mpPayment.id),
+      paid_at: paidAt,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", record.id);
+  if (updateError) throw updateError;
+
+  if (mpPayment.status === "approved" && !wasApproved) {
+    const nextPeriodStart = record.period_end;
+    const nextPeriodEnd = new Date(new Date(record.period_end).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { error: subError } = await client
+      .from("clinic_subscriptions")
+      .update({
+        status: "active",
+        current_period_start: nextPeriodStart,
+        current_period_end: nextPeriodEnd,
+        suspended_at: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", record.subscription_id);
+    if (subError) throw subError;
+  }
+}
 
 async function syncPayment(client, mpPayment) {
   const payment = await findInternalPayment(client, mpPayment);

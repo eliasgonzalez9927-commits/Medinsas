@@ -30,6 +30,14 @@ export default async function handler(req, res) {
     }
   }
 
+  // Cobro de la suscripcion de la clinica A Medin (no un turno de un
+  // paciente) - usa el Access Token de la cuenta propia de Medin, nunca el
+  // OAuth de la clinica. Rama separada, con su propio feature flag, antes
+  // del gate de turnos de mas abajo.
+  if (req.body?.type === "platform_subscription") {
+    return handlePlatformSubscriptionPreference(client, req, res);
+  }
+
   // Feature gate: kept explicit even now that the webhook exists (see
   // webhook.js), so this stays off until it's been verified end-to-end
   // against a real Mercado Pago sandbox account. Each clinic also needs its
@@ -132,6 +140,170 @@ export default async function handler(req, res) {
       return res.status(err.statusCode ?? 502).json({ error: "CREATE_PREFERENCE_FAILED", message: "Mercado Pago no pudo generar el link de pago." });
     }
     return handleError(res, err);
+  }
+}
+
+// Genera (o reutiliza) el link de pago del periodo actual de la
+// suscripcion de una clinica a Medin. Distinto del resto del archivo:
+// el dinero entra a la cuenta PROPIA de Medin (MEDIN_MERCADO_PAGO_ACCESS_TOKEN),
+// no a la del OAuth de la clinica.
+async function handlePlatformSubscriptionPreference(client, req, res) {
+  if (process.env.PLATFORM_BILLING_ENABLED !== "true") {
+    return res.status(503).json({ error: "PLATFORM_BILLING_DISABLED" });
+  }
+  const accessToken = process.env.MEDIN_MERCADO_PAGO_ACCESS_TOKEN;
+  if (!accessToken) return res.status(503).json({ error: "MEDIN_MERCADO_PAGO_NOT_CONFIGURED" });
+
+  try {
+    const auth = await authenticateMember(client, req);
+    if (!auth) return res.status(401).json({ error: "UNAUTHORIZED" });
+
+    const clinicId = String(req.body?.clinicId ?? auth.clinicId ?? "");
+    if (!UUID_RE.test(clinicId)) return res.status(400).json({ error: "INVALID_CLINIC_ID" });
+    if (auth.role !== "platform_admin" && auth.clinicId !== clinicId) {
+      return res.status(403).json({ error: "FORBIDDEN_CLINIC" });
+    }
+
+    const { data: subscription, error: subError } = await client
+      .from("clinic_subscriptions")
+      .select("id, clinic_id, status, current_period_start, current_period_end, subscription_plans(name, monthly_price, currency)")
+      .eq("clinic_id", clinicId)
+      .maybeSingle();
+    if (subError) throw subError;
+    if (!subscription) return res.status(404).json({ error: "SUBSCRIPTION_NOT_FOUND" });
+
+    const amount = Number(subscription.subscription_plans?.monthly_price ?? 0);
+    if (!amount || amount <= 0) return res.status(400).json({ error: "INVALID_PLAN_AMOUNT" });
+
+    // Idempotencia: si ya hay una fila "pending" con link para este mismo
+    // periodo, se reutiliza en vez de generar una preferencia nueva en
+    // cada click.
+    const { data: existing, error: existingError } = await client
+      .from("saas_billing_records")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .eq("subscription_id", subscription.id)
+      .eq("period_start", subscription.current_period_start.slice(0, 10))
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingError) throw existingError;
+
+    if (existing?.checkout_url) {
+      return res.status(200).json({ billing_record_id: existing.id, checkout_url: existing.checkout_url, reused: true });
+    }
+
+    const externalReference = existing?.external_reference ?? `medin_subscription_${subscription.id}_${Date.now()}`;
+    const billingRecord =
+      existing ??
+      (await createBillingRecord(client, {
+        clinicId,
+        subscriptionId: subscription.id,
+        amount,
+        currency: subscription.subscription_plans?.currency ?? "ARS",
+        periodStart: subscription.current_period_start,
+        periodEnd: subscription.current_period_end,
+        externalReference
+      }));
+
+    const preference = await createPlatformMercadoPagoPreference({
+      clinicName: req.body?.clinicName,
+      planName: subscription.subscription_plans?.name ?? "Plan Medin",
+      amount,
+      currency: subscription.subscription_plans?.currency ?? "ARS",
+      externalReference,
+      accessToken
+    });
+    const checkoutUrl = preference.init_point ?? preference.sandbox_init_point ?? null;
+
+    const { error: updateError } = await client
+      .from("saas_billing_records")
+      .update({ mp_preference_id: preference.id, checkout_url: checkoutUrl, updated_at: new Date().toISOString() })
+      .eq("id", billingRecord.id);
+    if (updateError) throw updateError;
+
+    return res.status(200).json({ billing_record_id: billingRecord.id, checkout_url: checkoutUrl, reused: false });
+  } catch (err) {
+    if (err?.code === "MERCADO_PAGO_ERROR") {
+      return res.status(err.statusCode ?? 502).json({ error: "CREATE_PREFERENCE_FAILED", message: "Mercado Pago no pudo generar el link de pago." });
+    }
+    return handleError(res, err);
+  }
+}
+
+async function authenticateMember(client, req) {
+  const header = req.headers?.authorization ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  if (!token) return null;
+  const { data, error } = await client.auth.getUser(token);
+  if (error || !data.user) return null;
+  const { data: member, error: memberError } = await client
+    .from("clinic_members")
+    .select("clinic_id, role")
+    .eq("user_id", data.user.id)
+    .eq("active", true)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (memberError) throw memberError;
+  return { userId: data.user.id, clinicId: member?.clinic_id ?? null, role: member?.role ?? null };
+}
+
+async function createBillingRecord(client, { clinicId, subscriptionId, amount, currency, periodStart, periodEnd, externalReference }) {
+  const { data, error } = await client
+    .from("saas_billing_records")
+    .insert({
+      clinic_id: clinicId,
+      subscription_id: subscriptionId,
+      type: "subscription",
+      amount,
+      currency,
+      status: "pending",
+      due_date: String(periodEnd).slice(0, 10),
+      period_start: String(periodStart).slice(0, 10),
+      period_end: String(periodEnd).slice(0, 10),
+      external_reference: externalReference,
+      payment_method: "mercado_pago"
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function createPlatformMercadoPagoPreference({ clinicName, planName, amount, currency, externalReference, accessToken }) {
+  const publicUrl = (process.env.APP_PUBLIC_URL || "https://app.medin.com.ar").replace(/\/$/, "");
+  const preferencePayload = {
+    items: [
+      {
+        title: `Suscripción Medin - ${planName}${clinicName ? ` (${clinicName})` : ""}`,
+        quantity: 1,
+        unit_price: Number(amount),
+        currency_id: currency || "ARS"
+      }
+    ],
+    external_reference: externalReference,
+    back_urls: {
+      success: `${publicUrl}/admin/mi-plan?pago=exitoso`,
+      failure: `${publicUrl}/admin/mi-plan?pago=fallido`,
+      pending: `${publicUrl}/admin/mi-plan?pago=pendiente`
+    },
+    // scope=platform es como el webhook (endpoint compartido con los pagos
+    // de clinica-a-paciente) distingue que este cobro usa el token propio
+    // de Medin, no el OAuth de una clinica.
+    notification_url: `${publicUrl}/api/payments/mercadopago/webhook?scope=platform`,
+    metadata: { external_reference: externalReference }
+  };
+
+  try {
+    const client = new MercadoPagoConfig({ accessToken });
+    return await new Preference(client).create({ body: preferencePayload });
+  } catch (mpError) {
+    const err = new Error("Mercado Pago preference failed");
+    err.statusCode = mpError?.status ?? mpError?.statusCode ?? 502;
+    err.code = "MERCADO_PAGO_ERROR";
+    throw err;
   }
 }
 
