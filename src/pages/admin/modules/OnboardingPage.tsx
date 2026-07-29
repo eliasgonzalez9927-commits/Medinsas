@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { CalendarDays, CheckCircle2, CircleDashed, ReceiptText, WalletCards } from "lucide-react";
 import { AdminPageShell } from "./AdminPageShell";
 import { Button } from "../../../components/ui/Button";
+import { InfoTooltip } from "../../../components/ui/InfoTooltip";
 import { useAuth } from "../../../contexts/AuthContext";
 import { finishClinicOnboarding, finishMemberOnboarding, getDefaultClinic } from "../../../lib/clinic-data";
 import { getOnboardingProgress, getProfessionalOnboardingProgress } from "../../../lib/superadmin-data";
@@ -135,9 +136,24 @@ function ProfessionalOnboarding({ clinicMembership }: { clinicMembership: Clinic
 }
 
 const RECEPTIONIST_TOUR_CARDS = [
-  { icon: CalendarDays, title: "Agenda", text: "Confirmá, cancelá o reprogramá turnos, y marcá ausencias desde ahí." },
-  { icon: WalletCards, title: "Pagos", text: "Registrá pagos manuales o revisá los que se cobraron por Mercado Pago." },
-  { icon: ReceiptText, title: "Facturación", text: "Emití el comprobante de un pago acreditado con un click, cuando la clínica lo pida." }
+  {
+    icon: CalendarDays,
+    title: "Agenda",
+    text: "Confirmá, cancelá o reprogramá turnos, y marcá ausencias desde ahí.",
+    detail: "Cada turno tiene un botón \"⋮ Más acciones\" con confirmar, marcar atendido, registrar pago, generar link de pago y cancelar. El ícono de WhatsApp abre el chat directo con el paciente."
+  },
+  {
+    icon: WalletCards,
+    title: "Pagos",
+    text: "Registrá pagos manuales o revisá los que se cobraron por Mercado Pago.",
+    detail: "Si el paciente paga en efectivo o transferencia, registralo vos desde el turno (\"Registrar pago\"). Los pagos por Mercado Pago se acreditan solos, no hace falta cargarlos a mano."
+  },
+  {
+    icon: ReceiptText,
+    title: "Facturación",
+    text: "Emití el comprobante de un pago acreditado con un click, cuando la clínica lo pida.",
+    detail: "Entrá a Pagos, abrí el pago ya acreditado y usá el botón \"Facturar\". Solo aparece si la clínica tiene la facturación electrónica configurada."
+  }
 ];
 
 function ReceptionistOnboarding({ clinicMembership }: { clinicMembership: ClinicMember | null }) {
@@ -162,12 +178,15 @@ function ReceptionistOnboarding({ clinicMembership }: { clinicMembership: Clinic
     <AdminPageShell description="Un repaso rápido de dónde está cada cosa." eyebrow="Onboarding" title="Bienvenida/o a Medin">
       {error && <ErrorBanner text={error} />}
       <section className="grid gap-3 md:grid-cols-3">
-        {RECEPTIONIST_TOUR_CARDS.map(({ icon: Icon, title, text }) => (
+        {RECEPTIONIST_TOUR_CARDS.map(({ icon: Icon, title, text, detail }) => (
           <article key={title} className="rounded-lg border border-clinic-line bg-white p-4 shadow-sm">
             <div className="grid h-10 w-10 place-items-center rounded-lg bg-teal-50 text-clinic-brand">
               <Icon size={20} />
             </div>
-            <h3 className="mt-3 font-semibold text-clinic-ink">{title}</h3>
+            <h3 className="mt-3 flex items-center gap-1.5 font-semibold text-clinic-ink">
+              {title}
+              <InfoTooltip text={detail} />
+            </h3>
             <p className="mt-1 text-sm text-clinic-muted">{text}</p>
           </article>
         ))}
