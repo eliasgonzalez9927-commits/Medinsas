@@ -8,6 +8,7 @@ import { roleLabels } from "../../lib/auth-roles";
 import { getSwitchableClinics, searchPatients, SwitchableClinic } from "../../lib/clinic-data";
 import { setActiveClinicOverride } from "../../lib/active-clinic";
 import { NotificationBell } from "./NotificationBell";
+import { InstallAppButton } from "../ui/InstallAppButton";
 import { HelpWidget } from "./HelpWidget";
 import { BASE_MODULES } from "../../lib/modules";
 import { PatientWithAppointments } from "../../types/clinic";
@@ -369,6 +370,7 @@ export function AdminLayout({
             <div className="ml-auto flex items-center gap-2">
               <p className="hidden whitespace-nowrap text-xs text-clinic-muted xl:block">Última actualización: {formatRefreshLabel(lastRefreshAt)}</p>
               <div className="hidden min-w-0 text-right xl:block"><p className="truncate text-sm font-semibold text-clinic-ink">{clinic?.name ?? "Medin"}</p><p className="text-xs text-clinic-muted">{displayRole}</p></div>
+              <InstallAppButton />
               <Button className="hidden sm:inline-flex" onClick={handleRefresh} variant="secondary">Actualizar</Button>
               {!isProfessionalRole && <Button onClick={onCreateAppointment} variant="primary">Nuevo turno</Button>}
               {!isProfessionalRole && <NotificationBell clinicId={clinic?.id} />}
