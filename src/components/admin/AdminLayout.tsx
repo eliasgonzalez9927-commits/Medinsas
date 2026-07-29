@@ -13,6 +13,8 @@ import { HelpWidget } from "./HelpWidget";
 import { BASE_MODULES } from "../../lib/modules";
 import { PatientWithAppointments } from "../../types/clinic";
 import { Button } from "../ui/Button";
+import { getClinicSubscription } from "../../lib/subscriptions";
+import { supabase } from "../../lib/supabase";
 
 export function AdminLayout({
   children,
@@ -41,6 +43,50 @@ export function AdminLayout({
   const isPlatformAdmin = role === "platform_admin";
 
   const isAdminChecklistRole = role === "platform_admin" || role === "clinic_admin" || role === "admin";
+
+  // Cobro de la suscripcion de la clinica a Medin (no de un paciente).
+  // past_due: banner de aviso, nadie se queda afuera todavia. suspended:
+  // se corto el acceso de recepcion/profesional por completo, pero el
+  // admin sigue entrando normal (para poder pagar y ver sus propios
+  // datos) - decision explicita del producto, no un descuido.
+  const [subscriptionStatus, setSubscriptionStatus] = useState<{ status: string; currentPeriodEnd: string | null } | null>(null);
+  const [payingSubscription, setPayingSubscription] = useState(false);
+  useEffect(() => {
+    if (!clinic?.id) return;
+    let cancelled = false;
+    getClinicSubscription(clinic.id)
+      .then((sub) => {
+        if (!cancelled) setSubscriptionStatus(sub ? { status: sub.status, currentPeriodEnd: sub.current_period_end } : null);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [clinic?.id]);
+  const isPastDue = subscriptionStatus?.status === "past_due";
+  const isSuspended = subscriptionStatus?.status === "suspended";
+  const isBlockedByBilling = isSuspended && !isAdminChecklistRole;
+
+  async function handlePaySubscription() {
+    if (!clinic?.id || payingSubscription) return;
+    setPayingSubscription(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return;
+      const response = await fetch("/api/payments/mercadopago/create-preference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ type: "platform_subscription", clinicId: clinic.id, clinicName: clinic.name })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (response.ok && body.checkout_url) {
+        window.location.href = body.checkout_url;
+      }
+    } finally {
+      setPayingSubscription(false);
+    }
+  }
 
   const visibleModules = useMemo(() => {
     return ADMIN_MODULES.filter((item) => {
@@ -323,8 +369,32 @@ export function AdminLayout({
     </div>
   );
 
+  if (isBlockedByBilling) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-clinic-surface p-6 text-center">
+        <div className="max-w-md rounded-2xl border border-amber-200 bg-white p-8 shadow-sm">
+          <h1 className="text-xl font-semibold text-clinic-ink">Acceso suspendido</h1>
+          <p className="mt-3 text-sm text-clinic-muted">
+            La suscripción de {clinic?.name ?? "esta clínica"} a Medin está vencida. Pedile al administrador de tu clínica que regularice el pago para volver a acceder.
+          </p>
+          <Button className="mt-6" onClick={signOut}>Cerrar sesión</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-clinic-surface text-clinic-ink">
+      {(isPastDue || (isSuspended && isAdminChecklistRole)) && (
+        <div className={`px-4 py-2.5 text-center text-sm font-semibold text-white sm:px-6 lg:px-8 ${isSuspended ? "bg-red-600" : "bg-amber-500"}`}>
+          {isSuspended
+            ? "El acceso de tu equipo (recepción/profesionales) está suspendido por falta de pago. "
+            : "Tu suscripción a Medin está vencida. Regularizá el pago para no perder el acceso. "}
+          <button onClick={handlePaySubscription} disabled={payingSubscription} className="ml-2 underline underline-offset-2">
+            {payingSubscription ? "Generando link..." : "Pagar ahora"}
+          </button>
+        </div>
+      )}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-clinic-line lg:block">{sidebarContent}</aside>
       {mobileNavOpen && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Navegación">

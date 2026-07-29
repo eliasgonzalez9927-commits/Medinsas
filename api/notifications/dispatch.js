@@ -172,10 +172,14 @@ export default async function handler(req, res) {
     // protegido con CRON_SECRET (Vercel manda ese Authorization solo si
     // la env var existe con ese nombre exacto).
     if (req.method === "GET") {
-      if (req.query?.type !== "reminders_sweep") return res.status(404).json({ error: "NOT_FOUND" });
       if (!isCronAuthorized(req)) return res.status(401).json({ error: "UNAUTHORIZED" });
-      const summary = await runRemindersSweep(client);
-      return res.status(200).json(summary);
+      if (req.query?.type === "reminders_sweep") {
+        return res.status(200).json(await runRemindersSweep(client));
+      }
+      if (req.query?.type === "billing_sweep") {
+        return res.status(200).json(await runBillingSweep(client));
+      }
+      return res.status(404).json({ error: "NOT_FOUND" });
     }
 
     // Boton global de "Necesitas ayuda?" (HelpWidget) - comparte este
@@ -376,6 +380,50 @@ async function handleWhatsAppConnect(client, req, res) {
 // (columnas reminder_24h_sent_at/reminder_2h_sent_at de la migracion 050).
 // La ventana de busqueda (30 min) es mas ancha que el intervalo del cron (15
 // min) a proposito, para no perder turnos si una corrida se atrasa o falla.
+// Cron diario (alcanza el nativo de Vercel, no hace falta uno externo
+// como el de reminders_sweep - esto solo necesita precision de dia, no de
+// minuto). Recorre las suscripciones activas/en mora: si paso la fecha de
+// vencimiento pasa a 'past_due' (banner de pago pendiente en la app), y a
+// los 10 dias sin pagar pasa a 'suspended' (bloqueo). Reactivar es cosa
+// del webhook de Mercado Pago (syncPlatformBillingPayment), no de este
+// cron.
+const BILLING_GRACE_PERIOD_DAYS = 10;
+
+async function runBillingSweep(client) {
+  const now = new Date();
+  const { data: subscriptions, error } = await client
+    .from("clinic_subscriptions")
+    .select("id, clinic_id, status, current_period_end")
+    .in("status", ["active", "past_due"]);
+  if (error) throw error;
+
+  const summary = { checked: subscriptions?.length ?? 0, marked_past_due: 0, suspended: 0 };
+  for (const subscription of subscriptions ?? []) {
+    const periodEnd = new Date(subscription.current_period_end);
+    if (now <= periodEnd) continue;
+
+    const daysOverdue = Math.floor((now.getTime() - periodEnd.getTime()) / (24 * 60 * 60 * 1000));
+    if (daysOverdue >= BILLING_GRACE_PERIOD_DAYS) {
+      if (subscription.status !== "suspended") {
+        const { error: updateError } = await client
+          .from("clinic_subscriptions")
+          .update({ status: "suspended", suspended_at: now.toISOString(), updated_at: now.toISOString() })
+          .eq("id", subscription.id);
+        if (updateError) throw updateError;
+        summary.suspended += 1;
+      }
+    } else if (subscription.status !== "past_due") {
+      const { error: updateError } = await client
+        .from("clinic_subscriptions")
+        .update({ status: "past_due", updated_at: now.toISOString() })
+        .eq("id", subscription.id);
+      if (updateError) throw updateError;
+      summary.marked_past_due += 1;
+    }
+  }
+  return summary;
+}
+
 async function runRemindersSweep(client) {
   const windowMinutes = 30;
   const results24h = await sweepReminderWindow(client, {
