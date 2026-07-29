@@ -393,12 +393,16 @@ async function runBillingSweep(client) {
   const now = new Date();
   const { data: subscriptions, error } = await client
     .from("clinic_subscriptions")
-    .select("id, clinic_id, status, current_period_end")
+    .select("id, clinic_id, status, current_period_end, subscription_plans(monthly_price)")
     .in("status", ["active", "past_due"]);
   if (error) throw error;
 
   const summary = { checked: subscriptions?.length ?? 0, marked_past_due: 0, suspended: 0 };
   for (const subscription of subscriptions ?? []) {
+    // Planes sin costo (ej. Free Beta) nunca se suspenden por falta de
+    // pago - no hay nada que cobrarles.
+    if (Number(subscription.subscription_plans?.monthly_price ?? 0) <= 0) continue;
+
     const periodEnd = new Date(subscription.current_period_end);
     if (now <= periodEnd) continue;
 
