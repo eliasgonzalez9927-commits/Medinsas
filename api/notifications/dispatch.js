@@ -252,7 +252,7 @@ async function handleUserInvitation(client, req, res) {
 
   const { data: invitation, error: invitationError } = await client
     .from("user_invitations")
-    .select("id, clinic_id, email, full_name, role, invitation_token, clinics(name)")
+    .select("id, clinic_id, email, full_name, role, invitation_token, invited_by, clinics(name)")
     .eq("id", invitationId)
     .maybeSingle();
   if (invitationError) throw invitationError;
@@ -264,24 +264,72 @@ async function handleUserInvitation(client, req, res) {
 
   if (!process.env.RESEND_API_KEY) return res.status(200).json({ ok: true, sent: false });
 
+  let inviterName = null;
+  if (invitation.invited_by) {
+    const { data: inviterProfile } = await client.from("profiles").select("full_name").eq("id", invitation.invited_by).maybeSingle();
+    inviterName = inviterProfile?.full_name ?? null;
+  }
+
   const publicUrl = (process.env.APP_PUBLIC_URL || "https://app.medin.com.ar").replace(/\/$/, "");
   const invitationUrl = `${publicUrl}/invitacion/${invitation.invitation_token}`;
   const clinicName = invitation.clinics?.name ?? "Medin";
+  const firstName = (invitation.full_name || "").trim().split(/\s+/)[0] || "";
   const text = [
-    `Hola ${invitation.full_name || ""},`,
+    `Hola ${firstName},`,
     "",
-    `Te invitaron a sumarte a ${clinicName} en Medin.`,
+    `${inviterName ?? clinicName} te invitó a sumarte a su espacio de trabajo en Medin.`,
     "",
-    `Ingresá acá para activar tu cuenta: ${invitationUrl}`
+    `Activá tu cuenta para acceder a la plataforma y comenzar a gestionar tu perfil: ${invitationUrl}`
   ].join("\n");
 
   try {
-    await sendTransactionalEmail({ to: invitation.email, subject: `Te invitaron a ${clinicName}`, text, html: textToHtml(text) });
+    await sendTransactionalEmail({
+      to: invitation.email,
+      subject: "Te invitaron a Medin",
+      text,
+      html: renderInvitationEmailHtml({ firstName, inviterName: inviterName ?? clinicName, invitationUrl })
+    });
     return res.status(200).json({ ok: true, sent: true });
   } catch (err) {
     console.error("Failed to email user invitation", err);
     return res.status(200).json({ ok: true, sent: false });
   }
+}
+
+function renderInvitationEmailHtml({ firstName, inviterName, invitationUrl }) {
+  const safeFirstName = escapeHtml(firstName);
+  const safeInviterName = escapeHtml(inviterName);
+  const safeUrl = escapeHtml(invitationUrl);
+  return `
+<div style="background:#F1F7F6;padding:32px 16px;font-family:Inter,Arial,sans-serif;color:#0D3642">
+  <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:20px;padding:40px;border:1px solid #E1EEEC">
+    <table cellpadding="0" cellspacing="0" role="presentation"><tr>
+      <td style="width:44px;height:44px;border-radius:999px;border:2px solid #0D766E;text-align:center;vertical-align:middle;font-size:22px;font-weight:700;color:#0D766E">+</td>
+      <td style="padding-left:12px;vertical-align:middle">
+        <div style="font-size:19px;font-weight:700;color:#0D3642;line-height:1.2">Medin</div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.12em;color:#54AAA0;text-transform:uppercase">Gestión clínica</div>
+      </td>
+    </tr></table>
+    <hr style="border:none;border-top:1px solid #E1EEEC;margin:24px 0" />
+    <h1 style="font-size:26px;margin:0 0 20px;color:#0D3642">Te invitaron a Medin</h1>
+    <p style="font-size:15px;line-height:1.6;margin:0 0 16px">Hola ${safeFirstName},</p>
+    <p style="font-size:15px;line-height:1.6;margin:0 0 16px"><strong style="color:#0D766E">${safeInviterName}</strong> te invitó a sumarte a su espacio de trabajo en Medin.</p>
+    <p style="font-size:15px;line-height:1.6;margin:0 0 28px">Activá tu cuenta para acceder a la plataforma y comenzar a gestionar tu perfil.</p>
+    <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto 28px"><tr>
+      <td style="border-radius:12px;background:#0D766E">
+        <a href="${safeUrl}" style="display:inline-block;padding:16px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none">Activar cuenta</a>
+      </td>
+    </tr></table>
+    <hr style="border:none;border-top:1px solid #E1EEEC;margin:24px 0" />
+    <p style="font-size:14px;color:#5B7D79;margin:0 0 12px">Si el botón no funciona, copiá y pegá este enlace en tu navegador:</p>
+    <div style="background:#F6FAF9;border:1px solid #E1EEEC;border-radius:10px;padding:14px;font-size:13px;color:#0D766E;word-break:break-all;margin:0 0 20px">${safeUrl}</div>
+    <div style="background:#F1F9F6;border:1px solid #D3ECE4;border-radius:12px;padding:16px;font-size:13px;line-height:1.5;color:#0D3642;margin:0 0 24px">
+      🛡️ Este enlace es personal y tiene una vigencia limitada. Si no esperabas esta invitación, podés ignorar este email.
+    </div>
+    <hr style="border:none;border-top:1px solid #E1EEEC;margin:0 0 16px" />
+    <p style="font-size:12px;color:#8AA3A0;margin:0">Este es un email automático de Medin. Por seguridad, no compartas este enlace.</p>
+  </div>
+</div>`.trim();
 }
 
 async function handleWhatsAppConnect(client, req, res) {
