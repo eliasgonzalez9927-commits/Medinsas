@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { BadgeDollarSign, Clock3, Download, Edit3, FileUp, Plus, SlidersHorizontal } from "lucide-react";
+import { BadgeDollarSign, Clock3, Download, Edit3, FileUp, Plus, SlidersHorizontal, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
@@ -215,8 +215,20 @@ export function ServicesPage() {
       {bulkOpen && <SectionCard className="p-5"><h2 className="font-semibold">Vista previa de cambios</h2><p className="mt-1 text-sm text-clinic-muted">Seleccioná servicios y confirmá el cambio antes de aplicarlo.</p><div className="mt-4 grid gap-3 md:grid-cols-[1fr_180px_auto]"><select value={bulkMode} onChange={(event) => setBulkMode(event.target.value as typeof bulkMode)} className="h-10 rounded-lg border border-clinic-line px-3 text-sm"><option value="percent">Aumentar precio por porcentaje</option><option value="fixed">Aumentar precio por monto fijo</option><option value="deposit">Reemplazar seña</option><option value="duration">Reemplazar duración</option></select><input value={bulkValue} onChange={(event) => setBulkValue(event.target.value)} type="number" placeholder={bulkMode === "percent" ? "Ej. 20" : "Monto / minutos"} className="h-10 rounded-lg border border-clinic-line px-3 text-sm"/><Button disabled={!selected.size || !bulkValue || saving} onClick={applyBulk} variant="primary">Aplicar a {selected.size} servicios</Button></div></SectionCard>}
 
       {formOpen && (
-        <SectionCard className="p-5">
-          <h2 className="font-semibold text-clinic-ink">{form.id ? "Editar servicio" : "Crear servicio"}</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setFormOpen(false)} aria-hidden="true" />
+          <div className="relative z-10 my-8 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-clinic-line bg-white p-5 shadow-2xl">
+          <div className="flex items-start justify-between">
+            <h2 className="font-semibold text-clinic-ink">{form.id ? "Editar servicio" : "Crear servicio"}</h2>
+            <button
+              type="button"
+              onClick={() => setFormOpen(false)}
+              className="rounded-lg p-1 text-clinic-muted hover:bg-[#e6f4f1] hover:text-clinic-ink"
+              aria-label="Cerrar"
+            >
+              <X size={18} />
+            </button>
+          </div>
           <form onSubmit={handleSubmit} className="mt-5 grid gap-4 md:grid-cols-2">
             <Input label="Nombre" value={form.name} onChange={(value) => setForm({ ...form, name: value })} required />
             <label>
@@ -264,7 +276,8 @@ export function ServicesPage() {
               <Button onClick={() => setFormOpen(false)}>Cancelar</Button>
             </div>
           </form>
-        </SectionCard>
+          </div>
+        </div>
       )}
 
       {loading ? (
