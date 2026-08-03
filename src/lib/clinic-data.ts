@@ -540,6 +540,21 @@ export async function getPaymentsByPatient(clinicId: string, patientId: string):
   }
 }
 
+export async function getPaymentsByAppointment(appointmentId: string): Promise<PaymentWithRelations[]> {
+  try {
+    const { data, error } = await supabase
+      .from("payments")
+      .select("*, services(*)")
+      .eq("appointment_id", appointmentId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as PaymentWithRelations[];
+  } catch (error) {
+    console.error("Failed to load payments by appointment", error);
+    throw new FriendlyDataError("No pudimos cargar los pagos del turno.");
+  }
+}
+
 // Scoped production totals for the professional-role ficha. Deliberately
 // separate from getPaymentsByPatient: selects only amount/status (no payer
 // info, no notes, no payment method), and the !inner join on appointments

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Download, Edit3, FileUp, Search, UserPlus } from "lucide-react";
+import { Download, Edit3, FileUp, Search, UserPlus, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
@@ -262,8 +262,20 @@ export function PatientsPage() {
       </section>
 
       {formOpen && (
-        <SectionCard className="p-5">
-          <h2 className="font-semibold text-clinic-ink">{form.id ? "Editar paciente" : "Crear paciente"}</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setFormOpen(false)} aria-hidden="true" />
+          <div className="relative z-10 my-8 w-full max-w-2xl rounded-xl border border-clinic-line bg-white p-5 shadow-2xl">
+          <div className="flex items-start justify-between">
+            <h2 className="font-semibold text-clinic-ink">{form.id ? "Editar paciente" : "Crear paciente"}</h2>
+            <button
+              type="button"
+              onClick={() => setFormOpen(false)}
+              className="rounded-lg p-1 text-clinic-muted hover:bg-[#e6f4f1] hover:text-clinic-ink"
+              aria-label="Cerrar"
+            >
+              <X size={18} />
+            </button>
+          </div>
           <form onSubmit={handleSubmit} className="mt-5 grid gap-4 md:grid-cols-2">
             <Input label="Nombre" value={form.first_name} onChange={(value) => setForm({ ...form, first_name: value })} required />
             <Input label="Apellido" value={form.last_name} onChange={(value) => setForm({ ...form, last_name: value })} required />
@@ -306,7 +318,8 @@ export function PatientsPage() {
               <Button onClick={() => setFormOpen(false)}>Cancelar</Button>
             </div>
           </form>
-        </SectionCard>
+          </div>
+        </div>
       )}
 
       <SectionCard className="p-5">
