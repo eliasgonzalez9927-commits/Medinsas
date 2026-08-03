@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { CalendarDays, Copy, Download, Edit3, FileUp, Plus } from "lucide-react";
+import { CalendarDays, Copy, Download, Edit3, FileUp, Plus, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
@@ -180,10 +180,22 @@ export function ProfessionalsPage() {
       <div className="flex flex-wrap gap-2"><Link to="/admin/importaciones" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink"><FileUp size={16} /> Importar profesionales</Link><Button icon={<Download size={16} />} onClick={exportProfessionals}>Exportar profesionales</Button><Button icon={<Download size={16} />} onClick={downloadTemplate}>Descargar plantilla CSV</Button></div>
 
       {formOpen && (
-        <SectionCard className="p-5">
-          <h2 className="font-semibold text-clinic-ink">
-            {form.id ? "Editar profesional" : "Crear profesional"}
-          </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setFormOpen(false)} aria-hidden="true" />
+          <div className="relative z-10 my-8 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-clinic-line bg-white p-5 shadow-2xl">
+          <div className="flex items-start justify-between">
+            <h2 className="font-semibold text-clinic-ink">
+              {form.id ? "Editar profesional" : "Crear profesional"}
+            </h2>
+            <button
+              type="button"
+              onClick={() => setFormOpen(false)}
+              className="rounded-lg p-1 text-clinic-muted hover:bg-[#e6f4f1] hover:text-clinic-ink"
+              aria-label="Cerrar"
+            >
+              <X size={18} />
+            </button>
+          </div>
           <form onSubmit={handleSubmit} className="mt-5 grid gap-4 md:grid-cols-2">
             <Input label="Nombre" value={form.name} onChange={(value) => setForm({ ...form, name: value })} required />
             <Input label="Apellido" value={form.last_name} onChange={(value) => setForm({ ...form, last_name: value })} required />
@@ -211,7 +223,8 @@ export function ProfessionalsPage() {
               <Button onClick={() => setFormOpen(false)}>Cancelar</Button>
             </div>
           </form>
-        </SectionCard>
+          </div>
+        </div>
       )}
 
       {loading ? (
