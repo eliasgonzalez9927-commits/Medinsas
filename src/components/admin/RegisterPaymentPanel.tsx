@@ -1,7 +1,7 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { Button } from "../ui/Button";
-import { createPayment, PaymentAppointmentSyncError } from "../../lib/clinic-data";
+import { createPayment, getPaymentsByAppointment, PaymentAppointmentSyncError } from "../../lib/clinic-data";
 import { PaymentKind, PaymentStatus } from "../../types/clinic";
 
 type DefaultValues = {
@@ -12,8 +12,13 @@ type DefaultValues = {
   patientName?: string;
   professionalName?: string;
   serviceName?: string;
+  servicePrice?: number | null;
   appointmentAt?: string;
 };
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value);
+}
 
 type Props = {
   open: boolean;
@@ -55,10 +60,46 @@ export function RegisterPaymentPanel({ open, onClose, onSaved, clinicId, default
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [alreadyPaid, setAlreadyPaid] = useState(0);
+  const [loadingBalance, setLoadingBalance] = useState(false);
+
+  const appointmentId = defaultValues?.appointmentId;
+  const servicePrice = defaultValues?.servicePrice ?? null;
+
+  useEffect(() => {
+    if (!open || !appointmentId) {
+      setAlreadyPaid(0);
+      return;
+    }
+    let cancelled = false;
+    setLoadingBalance(true);
+    getPaymentsByAppointment(appointmentId)
+      .then((payments) => {
+        if (cancelled) return;
+        const paid = payments
+          .filter((payment) => payment.status === "approved")
+          .reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
+        setAlreadyPaid(paid);
+        if (servicePrice != null) {
+          const remaining = Math.max(servicePrice - paid, 0);
+          setForm((current) => ({ ...current, amount: remaining > 0 ? String(remaining) : current.amount }));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAlreadyPaid(0);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBalance(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, appointmentId, servicePrice]);
 
   if (!open) return null;
 
   const missingContext = !defaultValues?.professionalId || !defaultValues?.serviceId;
+  const remainingBalance = servicePrice != null ? Math.max(servicePrice - alreadyPaid, 0) : null;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -164,6 +205,28 @@ export function RegisterPaymentPanel({ open, onClose, onSaved, clinicId, default
                 rendición.
               </span>
             </div>
+          )}
+
+          {servicePrice != null && (
+            <div className="mb-4 grid grid-cols-3 gap-3 rounded-lg border border-clinic-line bg-clinic-surface px-4 py-3 text-sm">
+              <div>
+                <p className="text-clinic-muted">Precio del servicio</p>
+                <p className="font-semibold text-clinic-ink">{formatMoney(servicePrice)}</p>
+              </div>
+              <div>
+                <p className="text-clinic-muted">Ya cobrado</p>
+                <p className="font-semibold text-clinic-ink">{loadingBalance ? "..." : formatMoney(alreadyPaid)}</p>
+              </div>
+              <div>
+                <p className="text-clinic-muted">Saldo pendiente</p>
+                <p className="font-semibold text-clinic-ink">{loadingBalance ? "..." : formatMoney(remainingBalance ?? 0)}</p>
+              </div>
+            </div>
+          )}
+          {alreadyPaid > 0 && (
+            <p className="mb-4 -mt-2 text-xs text-clinic-muted">
+              Este turno ya tiene {formatMoney(alreadyPaid)} cobrados (por ejemplo, una seña). El monto de abajo es lo que falta cobrar, no el precio total.
+            </p>
           )}
 
           <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { CalendarClock, Plus, Trash2 } from "lucide-react";
+import { CalendarClock, Pencil, Plus, Trash2 } from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
 import {
@@ -11,7 +11,8 @@ import {
   getAvailabilityRules,
   getDefaultClinic,
   getLocations,
-  getProfessionals
+  getProfessionals,
+  updateAvailabilityRule
 } from "../../../lib/clinic-data";
 import {
   AvailabilityBlock,
@@ -41,6 +42,7 @@ export function AvailabilityPage() {
     slot_duration_minutes: 30,
     location_id: ""
   });
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [blockForm, setBlockForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     start_time: "10:30",
@@ -93,21 +95,51 @@ export function AvailabilityPage() {
       return;
     }
     try {
-      await createAvailabilityRule({
-        clinic_id: clinic.id,
-        professional_id: professionalId,
-        location_id: ruleForm.location_id || null,
-        day_of_week: Number(ruleForm.day_of_week),
-        start_time: ruleForm.start_time,
-        end_time: ruleForm.end_time,
-        slot_duration_minutes: Number(ruleForm.slot_duration_minutes),
-        active: true
-      });
-      setNotice("Horario creado correctamente.");
+      if (editingRuleId) {
+        await updateAvailabilityRule(editingRuleId, {
+          location_id: ruleForm.location_id || null,
+          day_of_week: Number(ruleForm.day_of_week),
+          start_time: ruleForm.start_time,
+          end_time: ruleForm.end_time,
+          slot_duration_minutes: Number(ruleForm.slot_duration_minutes)
+        });
+        setNotice("Horario actualizado correctamente.");
+        setEditingRuleId(null);
+      } else {
+        await createAvailabilityRule({
+          clinic_id: clinic.id,
+          professional_id: professionalId,
+          location_id: ruleForm.location_id || null,
+          day_of_week: Number(ruleForm.day_of_week),
+          start_time: ruleForm.start_time,
+          end_time: ruleForm.end_time,
+          slot_duration_minutes: Number(ruleForm.slot_duration_minutes),
+          active: true
+        });
+        setNotice("Horario creado correctamente.");
+      }
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos crear el horario.");
+      setError(err instanceof Error ? err.message : "No pudimos guardar el horario.");
     }
+  }
+
+  function handleEditRule(rule: AvailabilityRuleWithRelations) {
+    setEditingRuleId(rule.id);
+    setRuleForm({
+      day_of_week: rule.day_of_week,
+      start_time: rule.start_time.slice(0, 5),
+      end_time: rule.end_time.slice(0, 5),
+      slot_duration_minutes: rule.slot_duration_minutes,
+      location_id: rule.location_id ?? ""
+    });
+    setNotice("");
+    setError("");
+  }
+
+  function handleCancelEdit() {
+    setEditingRuleId(null);
+    setRuleForm({ day_of_week: 1, start_time: "09:00", end_time: "13:00", slot_duration_minutes: 30, location_id: "" });
   }
 
   async function handleDeleteRule(rule: AvailabilityRuleWithRelations) {
@@ -118,6 +150,7 @@ export function AvailabilityPage() {
     try {
       await deleteAvailabilityRule(rule.id);
       setNotice("Horario eliminado.");
+      if (editingRuleId === rule.id) handleCancelEdit();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos eliminar el horario.");
@@ -212,38 +245,57 @@ export function AvailabilityPage() {
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-clinic-line">
-              {visibleRules.map((rule) => (
-                <article key={rule.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1fr_140px_180px_180px_100px] lg:items-center">
-                  <div className="flex items-start gap-3">
-                    <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-blue-700">
-                      <CalendarClock size={18} />
+            <div className="overflow-x-auto">
+              <div className="min-w-[820px] divide-y divide-clinic-line">
+                {visibleRules.map((rule) => (
+                  <article
+                    key={rule.id}
+                    className={`grid grid-cols-[1fr_130px_170px_150px_170px] items-center gap-4 px-5 py-4 ${
+                      editingRuleId === rule.id ? "bg-[#f6faf9]" : ""
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
+                        <CalendarClock size={18} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-clinic-ink">
+                          {rule.professional
+                            ? `Dr/a. ${rule.professional.name} ${rule.professional.last_name}`
+                            : "Profesional"}
+                        </p>
+                        <p className="text-sm text-clinic-muted">{rule.location?.name ?? "Sin sede (todas)"}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold text-clinic-ink">
-                        {rule.professional
-                          ? `Dr/a. ${rule.professional.name} ${rule.professional.last_name}`
-                          : "Profesional"}
-                      </p>
-                      <p className="text-sm text-clinic-muted">{rule.location?.name ?? "Sin sede"}</p>
+                    <p className="font-medium text-clinic-ink">{dayLabels[rule.day_of_week]}</p>
+                    <p className="text-sm text-clinic-muted">
+                      {rule.start_time.slice(0, 5)} a {rule.end_time.slice(0, 5)}
+                    </p>
+                    <p className="text-sm text-clinic-muted">Turnos de {rule.slot_duration_minutes} min</p>
+                    <div className="flex gap-2">
+                      <Button icon={<Pencil size={15} />} onClick={() => handleEditRule(rule)}>
+                        Editar
+                      </Button>
+                      <Button icon={<Trash2 size={15} />} onClick={() => handleDeleteRule(rule)}>
+                        Eliminar
+                      </Button>
                     </div>
-                  </div>
-                  <p className="font-medium text-clinic-ink">{dayLabels[rule.day_of_week]}</p>
-                  <p className="text-sm text-clinic-muted">
-                    {rule.start_time.slice(0, 5)} a {rule.end_time.slice(0, 5)}
-                  </p>
-                  <p className="text-sm text-clinic-muted">Turnos de {rule.slot_duration_minutes} min</p>
-                  <Button icon={<Trash2 size={15} />} onClick={() => handleDeleteRule(rule)}>
-                    Eliminar
-                  </Button>
-                </article>
-              ))}
+                  </article>
+                ))}
+              </div>
             </div>
           )}
         </SectionCard>
 
         <SectionCard className="p-5">
-          <h2 className="font-semibold text-clinic-ink">Crear horario</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-clinic-ink">{editingRuleId ? "Editar horario" : "Crear horario"}</h2>
+            {editingRuleId && (
+              <button type="button" onClick={handleCancelEdit} className="text-sm font-semibold text-clinic-brand">
+                Cancelar edicion
+              </button>
+            )}
+          </div>
           <form onSubmit={handleCreateRule} className="mt-4 grid gap-3">
             <SelectNumber label="Dia" value={ruleForm.day_of_week} onChange={(value) => setRuleForm({ ...ruleForm, day_of_week: value })} />
             <Input label="Desde" type="time" value={ruleForm.start_time} onChange={(value) => setRuleForm({ ...ruleForm, start_time: value })} />
@@ -261,16 +313,19 @@ export function AvailabilityPage() {
                 onChange={(event) => setRuleForm({ ...ruleForm, location_id: event.target.value })}
                 className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
               >
-                <option value="">Sin sede</option>
+                <option value="">Todas las sedes</option>
                 {locations.map((location) => (
                   <option key={location.id} value={location.id}>
                     {location.name}
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-xs text-clinic-muted">
+                Es opcional. Dejalo en "Todas las sedes" si este horario aplica a cualquier sede de la clinica; elegi una sede solo si este profesional atiende ese horario en un lugar especifico.
+              </p>
             </label>
             <Button icon={<Plus size={16} />} type="submit" variant="primary">
-              Agregar horario
+              {editingRuleId ? "Guardar cambios" : "Agregar horario"}
             </Button>
           </form>
         </SectionCard>

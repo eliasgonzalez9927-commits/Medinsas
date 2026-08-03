@@ -785,6 +785,7 @@ export function AgendaPage() {
               ? `Dr/a. ${paymentAppt.professional.name} ${paymentAppt.professional.last_name}`.trim()
               : undefined,
             serviceName: paymentAppt.service?.name,
+            servicePrice: paymentAppt.service?.price ?? null,
             appointmentAt: paymentAppt.starts_at,
           } : undefined}
         />
@@ -891,8 +892,20 @@ export function AgendaPage() {
       </section>
 
       {formOpen && (
-        <SectionCard className="p-5">
-          <h2 className="font-semibold text-clinic-ink">Crear turno manual</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setFormOpen(false)} aria-hidden="true" />
+          <div className="relative z-10 my-8 max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-clinic-line bg-white p-5 shadow-2xl">
+          <div className="flex items-start justify-between">
+            <h2 className="font-semibold text-clinic-ink">Crear turno manual</h2>
+            <button
+              type="button"
+              onClick={() => setFormOpen(false)}
+              className="rounded-lg p-1 text-clinic-muted hover:bg-[#e6f4f1] hover:text-clinic-ink"
+              aria-label="Cerrar"
+            >
+              <CloseIcon size={18} />
+            </button>
+          </div>
           <form onSubmit={handleSubmit} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <Select label="Paciente" value={form.patient_id} onChange={(value) => setForm({ ...form, patient_id: value })} required>
               {patients.map((patient) => (
@@ -1016,7 +1029,8 @@ export function AgendaPage() {
               <Button onClick={() => setFormOpen(false)}>Cancelar</Button>
             </div>
           </form>
-        </SectionCard>
+          </div>
+        </div>
       )}
 
       {overbookingOpen && (
