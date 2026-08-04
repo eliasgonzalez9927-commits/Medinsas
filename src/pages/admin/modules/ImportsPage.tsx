@@ -26,7 +26,13 @@ export function ImportsPage() {
   const preview = useMemo(() => rows.slice(0, 5), [rows]);
   const patientImportMode = new URLSearchParams(search).get("type") === "patients";
 
-  function downloadTemplate() { downloadCsv("pacientes_template.csv", ["nombre,apellido,telefono,email,dni,fecha_nacimiento,obra_social,plan,numero_afiliado,notas,email_opt_in,whatsapp_opt_in"]); }
+  function downloadTemplate() {
+    downloadCsv("pacientes_template.csv", [
+      "nombre,apellido,telefono,email,dni,fecha_nacimiento,obra_social,plan,numero_afiliado,notas,email_opt_in,whatsapp_opt_in",
+      csvLine(["Juana", "Perez", "3511234567", "juana.perez@gmail.com", "30111222", "1985-03-15", "OSDE", "310", "123456", "Alergia a la penicilina", "si", "si"]),
+      csvLine(["Carlos", "Gomez", "3517654321", "", "27333444", "", "", "", "", "", "si", "no"])
+    ]);
+  }
 
   async function exportPatients() {
     if (!clinic) return;
@@ -58,8 +64,9 @@ export function ImportsPage() {
     const { data: job, error: jobError } = await supabase.from("import_jobs").insert({ clinic_id: clinic.id, type: "patients_csv", filename, status: "processing", total_rows: rows.length, created_by: session.user?.id ?? null, metadata: { mode } }).select("id").single();
     if (jobError || !job) { setSaving(false); return setError("No pudimos iniciar la importación."); }
     for (let index = 0; index < rows.length; index += 1) {
-      const row = normalizeRow(rows[index]);
+      let row: ReturnType<typeof normalizeRow> | null = null;
       try {
+        row = normalizeRow(rows[index]);
         if (!row.first_name || !row.last_name || !row.phone) throw new Error("Faltan nombre, apellido o teléfono.");
         const existing = await findPatient(clinic.id, row);
         let entityId: string | null = null; let status = "skipped";
@@ -78,14 +85,38 @@ export function ImportsPage() {
 
   return <AdminPageShell title="Historial de importaciones" eyebrow="Auditoría de datos" description="Las importaciones se inician desde Pacientes, Servicios o Profesionales. Acá podés revisar sus resultados.">
     {notice && <Alert tone="success">{notice}</Alert>}{error && <Alert tone="error">{error}</Alert>}
-    {patientImportMode && <section className="grid gap-6 xl:grid-cols-[.8fr_1.2fr]"><SectionCard className="p-5"><h2 className="font-semibold">Importar pacientes</h2><p className="mt-1 text-sm text-clinic-muted">La deduplicación usa DNI, email y luego teléfono. Revisá el archivo antes de confirmar.</p><div className="mt-5 flex flex-wrap gap-2"><Button onClick={downloadTemplate} icon={<Download size={16} />}>Descargar plantilla</Button><Button onClick={exportPatients} icon={<Download size={16} />}>Exportar pacientes</Button></div><label className="mt-5 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-clinic-line bg-clinic-surface px-4 py-8 text-sm font-semibold text-clinic-ink"><Upload size={18} /> Seleccionar CSV<input type="file" accept=".csv,text/csv" className="hidden" onChange={readFile} /></label>{filename && <p className="mt-3 text-sm text-clinic-muted">{filename} · {rows.length} filas</p>}<label className="mt-5 block text-sm font-medium">Modo<select value={mode} onChange={(event) => setMode(event.target.value as ImportMode)} className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3"><option value="upsert">Crear y actualizar</option><option value="create">Crear solamente</option><option value="update">Actualizar existentes</option></select></label><Button className="mt-5" disabled={!rows.length || saving} onClick={importPatients} icon={<FileSpreadsheet size={16} />} variant="primary">{saving ? "Importando..." : "Confirmar importación"}</Button></SectionCard><SectionCard className="overflow-hidden"><div className="border-b border-clinic-line px-5 py-4"><h2 className="font-semibold">Previsualización</h2></div>{preview.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-clinic-surface text-clinic-muted"><tr>{Object.keys(preview[0]).slice(0, 7).map((key) => <th className="px-4 py-3 font-medium" key={key}>{key}</th>)}</tr></thead><tbody>{preview.map((row, index) => <tr className="border-t border-clinic-line" key={index}>{Object.keys(preview[0]).slice(0, 7).map((key) => <td className="px-4 py-3" key={key}>{row[key]}</td>)}</tr>)}</tbody></table></div> : <p className="px-5 py-8 text-sm text-clinic-muted">Seleccioná un CSV para ver una vista previa.</p>}</SectionCard></section>}
+    {patientImportMode && <section className="grid gap-6 xl:grid-cols-[.8fr_1.2fr]"><SectionCard className="p-5"><h2 className="font-semibold">Importar pacientes</h2><p className="mt-1 text-sm text-clinic-muted">La deduplicación usa DNI, email y luego teléfono. Revisá el archivo antes de confirmar.</p><div className="mt-3 rounded-lg border border-clinic-line bg-clinic-surface px-3 py-2.5 text-xs text-clinic-muted">Descargá la plantilla: ya trae un ejemplo cargado para copiar el formato. Solo nombre, apellido y teléfono son obligatorios. Fecha de nacimiento en formato AAAA-MM-DD (ej. 1985-03-15). En "email_opt_in" y "whatsapp_opt_in" usá si/no.</div><div className="mt-3 flex flex-wrap gap-2"><Button onClick={downloadTemplate} icon={<Download size={16} />}>Descargar plantilla</Button><Button onClick={exportPatients} icon={<Download size={16} />}>Exportar pacientes</Button></div><label className="mt-5 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-clinic-line bg-clinic-surface px-4 py-8 text-sm font-semibold text-clinic-ink"><Upload size={18} /> Seleccionar CSV<input type="file" accept=".csv,text/csv" className="hidden" onChange={readFile} /></label>{filename && <p className="mt-3 text-sm text-clinic-muted">{filename} · {rows.length} filas</p>}<label className="mt-5 block text-sm font-medium">Modo<select value={mode} onChange={(event) => setMode(event.target.value as ImportMode)} className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3"><option value="upsert">Crear y actualizar</option><option value="create">Crear solamente</option><option value="update">Actualizar existentes</option></select></label><Button className="mt-5" disabled={!rows.length || saving} onClick={importPatients} icon={<FileSpreadsheet size={16} />} variant="primary">{saving ? "Importando..." : "Confirmar importación"}</Button></SectionCard><SectionCard className="overflow-hidden"><div className="border-b border-clinic-line px-5 py-4"><h2 className="font-semibold">Previsualización</h2></div>{preview.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-clinic-surface text-clinic-muted"><tr>{Object.keys(preview[0]).slice(0, 7).map((key) => <th className="px-4 py-3 font-medium" key={key}>{key}</th>)}</tr></thead><tbody>{preview.map((row, index) => <tr className="border-t border-clinic-line" key={index}>{Object.keys(preview[0]).slice(0, 7).map((key) => <td className="px-4 py-3" key={key}>{row[key]}</td>)}</tr>)}</tbody></table></div> : <p className="px-5 py-8 text-sm text-clinic-muted">Seleccioná un CSV para ver una vista previa.</p>}</SectionCard></section>}
     <SectionCard className="overflow-hidden"><div className="border-b border-clinic-line px-5 py-4"><h2 className="font-semibold">Últimas ejecuciones</h2></div>{jobs.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-clinic-surface text-clinic-muted"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Archivo</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Resultado</th></tr></thead><tbody>{jobs.map((job) => <tr className="border-t border-clinic-line" key={job.id}><td className="px-4 py-3">{new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(job.created_at))}</td><td className="px-4 py-3">{job.type}</td><td className="px-4 py-3">{job.filename ?? "Sin archivo"}</td><td className="px-4 py-3">{job.status}</td><td className="px-4 py-3">{job.created_count} creados · {job.updated_count} actualizados · {job.error_count} errores</td></tr>)}</tbody></table></div> : <p className="px-5 py-8 text-sm text-clinic-muted">Todavía no hay importaciones registradas.</p>}</SectionCard>
   </AdminPageShell>;
 }
 
 function parseCsv(text: string): CsvRow[] { const [header, ...lines] = text.replace(/^\uFEFF/, "").trim().split(/\r?\n/); const keys = parseLine(header).map((key) => key.trim().toLowerCase()); return lines.filter(Boolean).map((line) => Object.fromEntries(parseLine(line).map((value, index) => [keys[index] ?? `columna_${index + 1}`, value.trim()]))); }
 function parseLine(line: string) { const values: string[] = []; let current = ""; let quoted = false; for (let i = 0; i < line.length; i += 1) { const char = line[i]; if (char === '"' && line[i + 1] === '"') { current += '"'; i += 1; } else if (char === '"') quoted = !quoted; else if (char === "," && !quoted) { values.push(current); current = ""; } else current += char; } values.push(current); return values; }
-function normalizeRow(row: CsvRow) { const first_name = row.nombre ?? row.first_name ?? (row.nombre_completo ?? "").split(" ")[0] ?? ""; const last_name = row.apellido ?? row.last_name ?? (row.nombre_completo ?? "").split(" ").slice(1).join(" "); return { first_name, last_name, phone: row.telefono ?? row.phone ?? "", email: row.email || null, document_number: row.dni ?? row.document_number ?? null, birth_date: row.fecha_nacimiento ?? row.birth_date ?? null, insurance: row.obra_social ?? row.prepaga ?? row.insurance ?? null, plan_name: row.plan ?? row.plan_name ?? null, affiliate_number: row.numero_afiliado ?? row.affiliate_number ?? null, notes: row.notas ?? row.notes ?? null, email_opt_in: row.email_opt_in !== "false", whatsapp_opt_in: row.whatsapp_opt_in !== "false" }; }
+// Acepta "si"/"no" (con o sin tilde), "true"/"false", "1"/"0", en cualquier
+// mayuscula/minuscula - antes solo reconocia el string exacto "false" en
+// minuscula, asi que alguien tipeando "No" o "FALSE" en Excel quedaba
+// opteado-in sin darse cuenta.
+function parseOptIn(value: string | undefined): boolean {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (["no", "false", "0", "n"].includes(normalized)) return false;
+  return true;
+}
+
+// Solo acepta fechas en formato ISO (AAAA-MM-DD), que es lo unico que
+// Postgres interpreta sin ambiguedad. "15/03/1985" es ambiguo (dia/mes vs
+// mes/dia segun configuracion) y podia guardarse invertido en silencio -
+// mejor rechazar la fila con un error claro que corromper una fecha de
+// nacimiento real.
+function parseBirthDate(value: string | undefined): string | null {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    throw new Error(`Fecha de nacimiento inválida: "${trimmed}". Usá el formato AAAA-MM-DD (ej. 1985-03-15).`);
+  }
+  return trimmed;
+}
+
+function normalizeRow(row: CsvRow) { const first_name = row.nombre ?? row.first_name ?? (row.nombre_completo ?? "").split(" ")[0] ?? ""; const last_name = row.apellido ?? row.last_name ?? (row.nombre_completo ?? "").split(" ").slice(1).join(" "); return { first_name, last_name, phone: row.telefono ?? row.phone ?? "", email: row.email || null, document_number: row.dni ?? row.document_number ?? null, birth_date: parseBirthDate(row.fecha_nacimiento ?? row.birth_date), insurance: row.obra_social ?? row.prepaga ?? row.insurance ?? null, plan_name: row.plan ?? row.plan_name ?? null, affiliate_number: row.numero_afiliado ?? row.affiliate_number ?? null, notes: row.notas ?? row.notes ?? null, email_opt_in: parseOptIn(row.email_opt_in), whatsapp_opt_in: parseOptIn(row.whatsapp_opt_in) }; }
 async function findPatient(clinicId: string, row: ReturnType<typeof normalizeRow>) { const fields = row.document_number ? ["document_number", row.document_number] : row.email ? ["email", row.email] : ["phone", row.phone]; const { data } = await supabase.from("patients").select("id").eq("clinic_id", clinicId).eq(fields[0], fields[1]).maybeSingle(); return data; }
 function csvLine(values: string[]) { return values.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","); }
 function downloadCsv(filename: string, lines: string[]) { const anchor = document.createElement("a"); anchor.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" })); anchor.download = filename; anchor.click(); URL.revokeObjectURL(anchor.href); }
