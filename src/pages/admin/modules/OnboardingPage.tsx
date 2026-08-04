@@ -56,17 +56,12 @@ function AdminOnboarding() {
   // checklist, se puede volver a este mismo lugar despues.
   const readyToFinish = (progress?.percent ?? 0) >= 50;
 
-  async function handleFinish() {
+  async function markFinished() {
     if (!clinicId) return;
     setFinishing(true);
     setError("");
     try {
       await finishClinicOnboarding(clinicId);
-      // navigate() no alcanza: WorkspaceContext ya tiene "clinic" en memoria
-      // desde que se cargo la pagina, y no se re-consulta solo. Recarga
-      // completa para que el menu deje de mostrar "Onboarding" ya mismo,
-      // no recien la proxima vez que se refresque la app por otro motivo.
-      window.location.href = "/admin";
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos finalizar el onboarding.");
     } finally {
@@ -74,14 +69,31 @@ function AdminOnboarding() {
     }
   }
 
+  async function handleFinish() {
+    await markFinished();
+    // navigate() no alcanza: WorkspaceContext ya tiene "clinic" en memoria
+    // desde que se cargo la pagina, y no se re-consulta solo. Recarga
+    // completa para que el menu deje de mostrar "Onboarding" ya mismo,
+    // no recien la proxima vez que se refresque la app por otro motivo.
+    // Solo se usa en el click manual: hacerlo tambien en el autocompletado
+    // de mas abajo causaba un loop de recargas (ver comentario ahi).
+    window.location.href = "/admin";
+  }
+
   // Llegar al 100% no marcaba el onboarding como terminado por si solo -
-  // hacia falta un click manual en "Finalizar" que nadie daba, entonces
-  // AdminLayout seguia interceptando el aterrizaje en /admin cada vez que
-  // se iniciaba sesion aunque no quedara nada pendiente. Con todo cargado
-  // no tiene sentido seguir pidiendo esa confirmacion.
+  // hacia falta un click manual en "Finalizar" que nadie daba. Marcamos
+  // el onboarding como terminado en la base de datos en cuanto se llega
+  // al 100%, PERO sin recargar la pagina: AdminLayout redirige a
+  // /admin/onboarding apenas "clinic" carga si onboarding_completed_at
+  // todavia esta en null, y como esa carga es asincronica hay una carrera
+  // real (se aterriza aca antes de que "clinic" termine de resolverse).
+  // Si esto disparara una recarga completa cada vez, cada recarga volvia a
+  // pisar la misma carrera y aterrizaba aca de nuevo - un loop infinito de
+  // recargas (bug real, reportado en vivo). Guardar el dato alcanza: la
+  // proxima vez que se aterrice en /admin, ya lo va a ver terminado.
   useEffect(() => {
     if (progress?.percent === 100 && !finishing) {
-      handleFinish();
+      markFinished();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress?.percent]);
@@ -131,13 +143,12 @@ function ProfessionalOnboarding({ clinicMembership }: { clinicMembership: Clinic
 
   const readyToFinish = (progress?.percent ?? 0) >= 50;
 
-  async function handleFinish() {
+  async function markFinished() {
     if (!clinicMembership) return;
     setFinishing(true);
     setError("");
     try {
       await finishMemberOnboarding(clinicMembership.id);
-      window.location.href = "/admin/mi-agenda";
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos finalizar el onboarding.");
     } finally {
@@ -145,11 +156,17 @@ function ProfessionalOnboarding({ clinicMembership }: { clinicMembership: Clinic
     }
   }
 
-  // Mismo criterio que el checklist de admin: al 100% se autocompleta, no
-  // hace falta un click manual en "Finalizar".
+  async function handleFinish() {
+    await markFinished();
+    window.location.href = "/admin/mi-agenda";
+  }
+
+  // Mismo criterio que el checklist de admin: al 100% se marca terminado
+  // en la base, pero sin recargar (ver comentario largo en AdminOnboarding
+  // sobre el loop de recargas que causaba hacerlo con window.location).
   useEffect(() => {
     if (progress?.percent === 100 && !finishing) {
-      handleFinish();
+      markFinished();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress?.percent]);
