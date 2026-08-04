@@ -1034,8 +1034,26 @@ export function AgendaPage() {
       )}
 
       {overbookingOpen && (
-        <SectionCard className="border-amber-200 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-clinic-ink">Crear sobreturno</h2><p className="mt-1 text-sm text-clinic-muted">Excepción interna. No modifica ni genera disponibilidad pública.</p></div><span className="rounded-lg bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">Controlado</span></div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setOverbookingOpen(false)} aria-hidden="true" />
+          <div className="relative z-10 my-8 max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-amber-200 bg-white p-5 shadow-2xl">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-clinic-ink">Crear sobreturno</h2>
+              <p className="mt-1 text-sm text-clinic-muted">Excepción interna. No modifica ni genera disponibilidad pública.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-lg bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">Controlado</span>
+              <button
+                type="button"
+                onClick={() => setOverbookingOpen(false)}
+                className="rounded-lg p-1 text-clinic-muted hover:bg-[#e6f4f1] hover:text-clinic-ink"
+                aria-label="Cerrar"
+              >
+                <CloseIcon size={18} />
+              </button>
+            </div>
+          </div>
           <form onSubmit={handleCreateOverbooking} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {!quickPatientOpen ? <Select label="Paciente" value={overbookingForm.patient_id} onChange={(value) => setOverbookingForm({ ...overbookingForm, patient_id: value })} required>{patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.first_name} {patient.last_name} · {patient.phone}</option>)}</Select> : <><Input label="Nombre" value={quickPatient.first_name} onChange={(value) => setQuickPatient({ ...quickPatient, first_name: value })} required /><Input label="Apellido" value={quickPatient.last_name} onChange={(value) => setQuickPatient({ ...quickPatient, last_name: value })} required /><Input label="Teléfono" value={quickPatient.phone} onChange={(value) => setQuickPatient({ ...quickPatient, phone: value })} required /></>}
             <button type="button" onClick={() => setQuickPatientOpen((current) => !current)} className="self-end text-left text-sm font-semibold text-clinic-brand">{quickPatientOpen ? "Usar paciente existente" : "Crear paciente rápido"}</button>
@@ -1051,7 +1069,8 @@ export function AgendaPage() {
             <label className="md:col-span-2 xl:col-span-3 flex items-start gap-2 rounded-lg bg-clinic-surface p-3 text-sm text-clinic-ink"><input checked={overbookingForm.confirmed} onChange={(event) => setOverbookingForm({ ...overbookingForm, confirmed: event.target.checked })} type="checkbox" className="mt-0.5" /><span>Confirmo que este turno es una excepción interna autorizada y no debe habilitar disponibilidad pública.</span></label>
             <div className="md:col-span-2 xl:col-span-3 flex gap-2"><Button disabled={overbookingSaving || !overbookingForm.confirmed} type="submit" variant="primary">{overbookingSaving ? "Creando..." : "Crear sobreturno"}</Button><Button onClick={() => setOverbookingOpen(false)}>Cancelar</Button></div>
           </form>
-        </SectionCard>
+          </div>
+        </div>
       )}
 
       {/* Layout principal: agenda + columna lateral */}

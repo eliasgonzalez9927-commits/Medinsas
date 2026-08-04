@@ -74,6 +74,18 @@ function AdminOnboarding() {
     }
   }
 
+  // Llegar al 100% no marcaba el onboarding como terminado por si solo -
+  // hacia falta un click manual en "Finalizar" que nadie daba, entonces
+  // AdminLayout seguia interceptando el aterrizaje en /admin cada vez que
+  // se iniciaba sesion aunque no quedara nada pendiente. Con todo cargado
+  // no tiene sentido seguir pidiendo esa confirmacion.
+  useEffect(() => {
+    if (progress?.percent === 100 && !finishing) {
+      handleFinish();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress?.percent]);
+
   return (
     <AdminPageShell
       description="Checklist asistido para dejar la clínica lista para operar."
@@ -132,6 +144,15 @@ function ProfessionalOnboarding({ clinicMembership }: { clinicMembership: Clinic
       setFinishing(false);
     }
   }
+
+  // Mismo criterio que el checklist de admin: al 100% se autocompleta, no
+  // hace falta un click manual en "Finalizar".
+  useEffect(() => {
+    if (progress?.percent === 100 && !finishing) {
+      handleFinish();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress?.percent]);
 
   return (
     <AdminPageShell
