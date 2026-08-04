@@ -26,7 +26,7 @@ export function AdminLayout({
   onCreateAppointment: () => void;
 }) {
   const { profile, role, signOut, user, clinicMembership } = useAuth();
-  const { clinic, modules } = useWorkspace();
+  const { clinic, modules, loading: workspaceLoading } = useWorkspace();
   const isProfessionalRole = role === "professional" || role === "doctor";
   const navigate = useNavigate();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -117,6 +117,14 @@ export function AdminLayout({
     // onboarding SOLO en el aterrizaje inicial (pathname === "/admin"), no
     // en cada navegacion, para no bloquear el resto del panel.
     if (location.pathname !== "/admin" || !role) return;
+    // Esperar a que WorkspaceContext termine de resolver "clinic" - antes de
+    // esto clinic es null y clinic?.onboarding_completed_at da undefined,
+    // que se lee como "no terminado" aunque en realidad todavia no sabemos.
+    // Sin esta espera, aterrizar en /admin mandaba de rebote a onboarding
+    // por una carrera (clinic aun cargando), y como el checklist se
+    // autocompleta al 100% con una recarga completa, esa recarga volvia a
+    // pisar la misma carrera - un loop de recargas real, reportado en vivo.
+    if (isAdminChecklistRole && workspaceLoading) return;
     // "Ver más tarde" en el onboarding guarda esta marca para no volver a
     // interceptar el aterrizaje en /admin en esta sesion - a diferencia de
     // "Finalizar", no marca el onboarding como terminado: la proxima vez
@@ -128,7 +136,7 @@ export function AdminLayout({
       navigate("/admin/onboarding", { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, clinic?.onboarding_completed_at, clinicMembership?.onboarding_completed_at, role]);
+  }, [location.pathname, clinic?.onboarding_completed_at, clinicMembership?.onboarding_completed_at, role, workspaceLoading]);
 
   useEffect(() => {
     const query = globalSearch.trim();
