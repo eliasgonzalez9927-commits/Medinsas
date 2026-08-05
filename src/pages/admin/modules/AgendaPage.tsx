@@ -346,6 +346,7 @@ export function AgendaPage() {
     if (!clinic || !form.professional_id || !form.service_id) {
       setAvailableDates([]);
       setAvailabilityMessage("");
+      setAvailabilityLoading(false);
       return;
     }
 
@@ -459,6 +460,16 @@ export function AgendaPage() {
   function openCreate() {
     setFormOpen(true);
     setNotice("");
+    // Se pone availabilityLoading en true ya mismo (no solo dentro del
+    // effect) porque profesional/servicio se completan en el mismo tick de
+    // abajo - sin esto, el primer render pintaba availableDates=[] con
+    // availabilityLoading todavia en false (valor del render anterior) y
+    // se veia por un instante el cartel amarillo de "sin disponibilidad"
+    // con datos viejos o vacios, antes de que la busqueda real terminara.
+    setAvailabilityLoading(true);
+    setAvailableDates([]);
+    setSlots([]);
+    setAvailabilityMessage("");
     setForm((current) => ({
       ...current,
       date: "",
@@ -474,6 +485,7 @@ export function AgendaPage() {
   function occupySlot(hueco: HuecoSlot) {
     setFormOpen(true);
     setNotice("");
+    setAvailabilityLoading(true);
     setAvailableDates([]);
     setSlots([hueco]);
     setForm((current) => ({
@@ -489,6 +501,7 @@ export function AgendaPage() {
   }
 
   function resetAvailabilitySelection(update: Partial<AppointmentForm>) {
+    setAvailabilityLoading(true);
     setSlots([]);
     setAvailableDates([]);
     setAvailabilityMessage("");
@@ -993,7 +1006,11 @@ export function AgendaPage() {
                 <Input label="Fecha manual" value={form.date} onChange={selectManualDate} type="date" required />
                 <div>
                   <p className="text-sm font-semibold text-clinic-ink">Horarios disponibles</p>
-                  {slots.length === 0 ? (
+                  {!form.date ? (
+                    <p className="mt-2 rounded-lg border border-clinic-line bg-white px-4 py-3 text-sm text-clinic-muted">
+                      Elegí una fecha para ver los horarios.
+                    </p>
+                  ) : slots.length === 0 ? (
                     <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                       No hay horarios disponibles para esta combinación.
                     </div>
