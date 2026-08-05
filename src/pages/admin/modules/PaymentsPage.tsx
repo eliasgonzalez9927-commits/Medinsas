@@ -1,6 +1,27 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ChevronDown, CreditCard, ExternalLink, FileCheck2, RefreshCw, Settings, WalletCards } from "lucide-react";
+import {
+  Activity,
+  Banknote,
+  CalendarCheck2,
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  CircleDashed,
+  Clock3,
+  Copy,
+  CreditCard,
+  ExternalLink,
+  FileCheck2,
+  Hourglass,
+  LucideIcon,
+  RefreshCw,
+  Settings,
+  Tag,
+  Timer,
+  Wallet,
+  WalletCards
+} from "lucide-react";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { DateRangeFilter } from "../../../components/admin/DateRangeFilter";
 import { Button } from "../../../components/ui/Button";
@@ -384,6 +405,16 @@ export function PaymentDetailPage() {
     }
   }
 
+  async function copyTurnoId() {
+    if (!payment?.appointment_id) return;
+    try {
+      await navigator.clipboard.writeText(payment.appointment_id);
+      setNotice("ID de turno copiado.");
+    } catch {
+      setError(`No pudimos copiar. ID: ${payment.appointment_id}`);
+    }
+  }
+
   return (
     <AdminPageShell
       description="Detalle operativo del pago, relacion con turno y eventos recibidos desde Mercado Pago."
@@ -396,107 +427,159 @@ export function PaymentDetailPage() {
       {!payment ? (
         <SectionCard className="p-8 text-center text-clinic-muted">Cargando pago...</SectionCard>
       ) : (
-        <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-          <SectionCard className="p-5">
-            <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-lg bg-teal-50 text-clinic-brand">
-                <CreditCard size={20} />
-              </span>
-              <div>
-                <h2 className="font-semibold text-clinic-ink">{formatMoney(payment.amount)}</h2>
-                <p className="mt-1 text-sm text-clinic-muted">
-                  {payment.patients && payment.patient_id ? (
-                    <Link to={`/admin/pacientes/${payment.patient_id}`} className="font-semibold text-clinic-brand hover:underline">
-                      {payment.patients.first_name} {payment.patients.last_name}
-                    </Link>
-                  ) : (
-                    "Sin paciente"
-                  )}
-                </p>
+        <>
+          <SectionCard className="p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex items-start gap-4">
+                <span className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-[#e6f4f1] text-clinic-brand">
+                  <CreditCard size={24} />
+                </span>
+                <div>
+                  <p className="text-sm text-clinic-muted">Monto total</p>
+                  <p className="mt-1 text-3xl font-semibold text-clinic-ink">{formatMoney(payment.amount)}</p>
+                  <p className="mt-1 text-sm text-clinic-muted">
+                    {payment.patients && payment.patient_id ? (
+                      <Link to={`/admin/pacientes/${payment.patient_id}`} className="font-semibold text-clinic-brand hover:underline">
+                        {payment.patients.first_name} {payment.patients.last_name}
+                      </Link>
+                    ) : (
+                      "Sin paciente"
+                    )}
+                  </p>
+                </div>
               </div>
-            </div>
-            <dl className="mt-5 grid gap-3 text-sm">
-              <Info label="Estado del pago" value={paymentStatusLabel(getEffectivePaymentStatus(payment))} />
-              <Info label="Turno asociado" value={payment.appointment_id ?? "Sin turno asociado"} />
-              <Info label="Fecha y hora del turno" value={payment.appointments?.starts_at ? formatDate(payment.appointments.starts_at, payment.clinics?.timezone ?? undefined) : "Sin fecha/hora"} />
-              <Info label="Fecha/hora del pago" value={payment.paid_at ? formatDate(payment.paid_at, payment.clinics?.timezone ?? undefined) : "Sin acreditacion"} />
-              <Info label="Creado" value={formatDate(payment.created_at, payment.clinics?.timezone ?? undefined)} />
-              <Info label="Vencimiento" value={payment.expires_at ? formatDate(payment.expires_at, payment.clinics?.timezone ?? undefined) : "Sin vencimiento"} />
-              <Info label="Estado del turno" value={payment.appointments?.status ?? "Sin turno"} />
-              <Info label="Estado pago turno" value={payment.appointments?.payment_status ?? "Sin estado"} />
-              <Info label="Tipo de pago" value={getPaymentKind(payment).label} />
-              <Info label="Monto pagado" value={formatMoney(payment.amount)} />
-              <Info label="Saldo pendiente" value={formatRemaining(getPaymentKind(payment).remainingAmount)} />
-              <Info label="Método de pago" value={payment.payment_method ?? "Pendiente"} />
-            </dl>
-            <div className="mt-5">
-              <Button icon={<RefreshCw size={16} />} onClick={syncCurrentPayment} disabled={syncing}>
-                {syncing ? "Actualizando..." : "Actualizar estado"}
-              </Button>
-            </div>
-            {(!payment.appointment_id || !payment.appointments?.starts_at) && (
-              <p className="mt-5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                Advertencia: este pago no tiene un turno asociado con fecha y hora. Revisar la reserva original antes de contactar al paciente.
-              </p>
-            )}
-            {invoice ? (
-              <Link
-                to={`/admin/facturacion/comprobantes/${invoice.id}`}
-                className="mt-5 flex items-center gap-2 rounded-lg bg-teal-50 px-3 py-2 text-sm font-semibold text-clinic-brand hover:underline"
-              >
-                <FileCheck2 size={16} />
-                Ver comprobante ({invoiceStatusLabel(invoice.arca_status)})
-              </Link>
-            ) : getEffectivePaymentStatus(payment) === "approved" && fiscalSettings?.arca_integration_status === "configured" ? (
-              <Button className="mt-5" icon={<FileCheck2 size={16} />} onClick={handleFacturar} disabled={invoicing}>
-                {invoicing ? "Generando..." : "Facturar"}
-              </Button>
-            ) : (
-              <p className="mt-5 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                {getEffectivePaymentStatus(payment) !== "approved"
-                  ? "La emision fiscal solo esta disponible para pagos acreditados."
-                  : "Facturacion electronica todavia no esta configurada para esta clinica."}
-              </p>
-            )}
-            <div className="mt-4 border-t border-clinic-line pt-4">
-              <button
-                type="button"
-                className="flex items-center gap-1 text-xs font-semibold text-clinic-muted hover:text-clinic-ink"
-                onClick={() => setShowTech(v => !v)}
-              >
-                <ChevronDown size={12} className={`transition-transform ${showTech ? "rotate-180" : ""}`} />
-                Datos técnicos (soporte)
-              </button>
-              {showTech && (
-                <dl className="mt-3 grid gap-3 text-sm">
-                  <Info label="Proveedor" value={payment.provider ?? "manual"} />
-                  <Info label="Provider payment id" value={payment.provider_payment_id ?? "Sin ID"} />
-                  <Info label="Preference id" value={payment.provider_preference_id ?? "Sin ID"} />
-                  <Info label="External reference" value={payment.external_reference ?? "Sin referencia"} />
-                  {payment.checkout_url && (
-                    <a className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-clinic-line px-3 py-2 text-sm font-semibold" href={payment.checkout_url}>
-                      <ExternalLink size={14} /> Abrir checkout
-                    </a>
-                  )}
-                </dl>
-              )}
+              <div className="text-right">
+                <p className="text-sm text-clinic-muted">Estado del pago</p>
+                <div className="mt-1"><StatusPill status={getEffectivePaymentStatus(payment)} /></div>
+              </div>
             </div>
           </SectionCard>
 
-          <SectionCard className="overflow-hidden">
-            <div className="border-b border-clinic-line px-5 py-4"><h2 className="font-semibold">Eventos</h2></div>
-            <div className="divide-y divide-clinic-line">
-              {events.length === 0 ? (
-                <p className="px-5 py-8 text-sm text-clinic-muted">Sin eventos registrados.</p>
-              ) : events.map((event) => (
-                <article key={event.id} className="px-5 py-4">
-                  <p className="font-semibold text-clinic-ink">{event.event_type}</p>
-                  <p className="mt-1 text-sm text-clinic-muted">{formatDate(event.created_at, payment.clinics?.timezone ?? undefined)} · {event.provider_event_id ?? "Sin id proveedor"}</p>
-                </article>
-              ))}
+          {(!payment.appointment_id || !payment.appointments?.starts_at) && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              Advertencia: este pago no tiene un turno asociado con fecha y hora. Revisar la reserva original antes de contactar al paciente.
+            </p>
+          )}
+
+          <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+            <div className="grid gap-6">
+              <NumberedSection number={1} title="Resumen del pago">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FieldWithIcon icon={CheckCircle2} label="Estado del pago" value={paymentStatusLabel(getEffectivePaymentStatus(payment))} />
+                  <FieldWithIcon icon={Tag} label="Tipo de pago" value={getPaymentKind(payment).label} />
+                  <FieldWithIcon icon={Wallet} label="Método de pago" value={payment.payment_method ?? "Pendiente"} />
+                  <FieldWithIcon icon={Clock3} label="Fecha y hora del pago" value={payment.paid_at ? formatDate(payment.paid_at, payment.clinics?.timezone ?? undefined) : "Sin acreditación"} />
+                  <FieldWithIcon icon={Banknote} label="Monto pagado" value={formatMoney(payment.amount)} />
+                  <FieldWithIcon icon={Hourglass} label="Saldo pendiente" value={formatRemaining(getPaymentKind(payment).remainingAmount)} />
+                  <FieldWithIcon icon={Timer} label="Vencimiento" value={payment.expires_at ? formatDate(payment.expires_at, payment.clinics?.timezone ?? undefined) : "Sin vencimiento"} />
+                </div>
+              </NumberedSection>
+
+              <NumberedSection number={2} title="Turno asociado">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FieldWithIcon
+                    icon={CalendarDays}
+                    label="Turno asociado"
+                    value={payment.appointment_id ?? "Sin turno asociado"}
+                    action={payment.appointment_id ? <button type="button" onClick={copyTurnoId} className="text-clinic-muted hover:text-clinic-brand" aria-label="Copiar ID de turno"><Copy size={13} /></button> : undefined}
+                  />
+                  <FieldWithIcon icon={Clock3} label="Fecha y hora del turno" value={payment.appointments?.starts_at ? formatDate(payment.appointments.starts_at, payment.clinics?.timezone ?? undefined) : "Sin fecha/hora"} />
+                  <FieldWithIcon icon={CircleDashed} label="Estado del turno" value={payment.appointments?.status ?? "Sin turno"} />
+                  <FieldWithIcon icon={WalletCards} label="Estado pago turno" value={payment.appointments?.payment_status ?? "Sin estado"} />
+                </div>
+              </NumberedSection>
+
+              <NumberedSection number={3} title="Acciones">
+                <div className="flex flex-wrap gap-2">
+                  <Button icon={<RefreshCw size={16} />} onClick={syncCurrentPayment} disabled={syncing}>
+                    {syncing ? "Actualizando..." : "Actualizar estado"}
+                  </Button>
+                  {invoice ? (
+                    <Link
+                      to={`/admin/facturacion/comprobantes/${invoice.id}`}
+                      className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-teal-50 px-4 py-2 text-sm font-semibold text-clinic-brand hover:underline"
+                    >
+                      <FileCheck2 size={16} />
+                      Ver comprobante ({invoiceStatusLabel(invoice.arca_status)})
+                    </Link>
+                  ) : getEffectivePaymentStatus(payment) === "approved" && fiscalSettings?.arca_integration_status === "configured" ? (
+                    <Button icon={<FileCheck2 size={16} />} onClick={handleFacturar} disabled={invoicing} variant="primary">
+                      {invoicing ? "Generando..." : "Facturar"}
+                    </Button>
+                  ) : null}
+                </div>
+                {!invoice && (getEffectivePaymentStatus(payment) !== "approved" || fiscalSettings?.arca_integration_status !== "configured") && (
+                  <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {getEffectivePaymentStatus(payment) !== "approved"
+                      ? "La emisión fiscal solo está disponible para pagos acreditados."
+                      : "Facturación electrónica todavía no está configurada para esta clínica."}
+                  </p>
+                )}
+                <div className="mt-4 border-t border-clinic-line pt-4">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-xs font-semibold text-clinic-muted hover:text-clinic-ink"
+                    onClick={() => setShowTech(v => !v)}
+                  >
+                    <ChevronDown size={12} className={`transition-transform ${showTech ? "rotate-180" : ""}`} />
+                    Datos técnicos (soporte)
+                  </button>
+                  {showTech && (
+                    <dl className="mt-3 grid gap-3 text-sm">
+                      <Info label="Proveedor" value={payment.provider ?? "manual"} />
+                      <Info label="Provider payment id" value={payment.provider_payment_id ?? "Sin ID"} />
+                      <Info label="Preference id" value={payment.provider_preference_id ?? "Sin ID"} />
+                      <Info label="External reference" value={payment.external_reference ?? "Sin referencia"} />
+                      <Info label="Creado" value={formatDate(payment.created_at, payment.clinics?.timezone ?? undefined)} />
+                      {payment.checkout_url && (
+                        <a className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-clinic-line px-3 py-2 text-sm font-semibold" href={payment.checkout_url}>
+                          <ExternalLink size={14} /> Abrir checkout
+                        </a>
+                      )}
+                    </dl>
+                  )}
+                </div>
+              </NumberedSection>
             </div>
-          </SectionCard>
-        </section>
+
+            <div className="grid gap-6">
+              <SectionCard className="overflow-hidden">
+                <div className="flex items-center gap-2 border-b border-clinic-line px-5 py-4">
+                  <CalendarCheck2 size={18} className="text-clinic-muted" />
+                  <h2 className="font-semibold text-clinic-ink">Eventos</h2>
+                </div>
+                {events.length === 0 ? (
+                  <EmptyPanel
+                    icon={CalendarCheck2}
+                    title="Sin eventos registrados todavía"
+                    description="Los eventos que reciba Mercado Pago se mostrarán acá."
+                  />
+                ) : (
+                  <div className="divide-y divide-clinic-line">
+                    {events.map((event) => (
+                      <article key={event.id} className="px-5 py-4">
+                        <p className="font-semibold text-clinic-ink">{event.event_type}</p>
+                        <p className="mt-1 text-sm text-clinic-muted">{formatDate(event.created_at, payment.clinics?.timezone ?? undefined)} · {event.provider_event_id ?? "Sin id proveedor"}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </SectionCard>
+
+              <SectionCard className="overflow-hidden">
+                <div className="flex items-center gap-2 border-b border-clinic-line px-5 py-4">
+                  <Activity size={18} className="text-clinic-muted" />
+                  <h2 className="font-semibold text-clinic-ink">Trazabilidad</h2>
+                </div>
+                <EmptyPanel
+                  icon={Activity}
+                  title="Sin actividad registrada"
+                  description="La trazabilidad del pago se mostrará acá cuando existan actualizaciones."
+                />
+              </SectionCard>
+            </div>
+          </section>
+        </>
       )}
     </AdminPageShell>
   );
@@ -750,6 +833,66 @@ function StatusBadge({ status }: { status: string }) {
 
 function Info({ label, value }: { label: string; value: string }) {
   return <div className="rounded-lg border border-clinic-line px-3 py-2"><dt className="text-clinic-muted">{label}</dt><dd className="mt-1 font-medium text-clinic-ink">{value}</dd></div>;
+}
+
+function StatusPill({ status }: { status: string }) {
+  const tone: Record<string, string> = {
+    approved: "bg-emerald-50 text-emerald-700",
+    pending: "bg-amber-50 text-amber-700",
+    in_process: "bg-amber-50 text-amber-700",
+    rejected: "bg-red-50 text-red-700",
+    cancelled: "bg-slate-100 text-slate-600",
+    refunded: "bg-slate-100 text-slate-600",
+    charged_back: "bg-red-50 text-red-700",
+    expired: "bg-red-50 text-red-700"
+  };
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold ${tone[status] ?? "bg-slate-100 text-slate-600"}`}>
+      <CheckCircle2 size={14} />
+      {paymentStatusLabel(status)}
+    </span>
+  );
+}
+
+function NumberedSection({ number, title, children }: { number: number; title: string; children: ReactNode }) {
+  return (
+    <SectionCard className="p-5">
+      <div className="flex items-center gap-2">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#e6f4f1] text-xs font-semibold text-clinic-brand">{number}</span>
+        <h2 className="font-semibold text-clinic-ink">{title}</h2>
+      </div>
+      <div className="mt-4">{children}</div>
+    </SectionCard>
+  );
+}
+
+function FieldWithIcon({ icon: Icon, label, value, action }: { icon: LucideIcon; label: string; value: string; action?: ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-clinic-surface text-clinic-muted">
+        <Icon size={16} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-clinic-muted">{label}</p>
+        <div className="mt-0.5 flex items-center gap-2">
+          <p className="truncate text-sm font-medium text-clinic-ink">{value}</p>
+          {action}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyPanel({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
+  return (
+    <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+      <span className="grid h-16 w-16 place-items-center rounded-full bg-[#e6f4f1] text-clinic-brand">
+        <Icon size={28} />
+      </span>
+      <p className="font-semibold text-clinic-ink">{title}</p>
+      <p className="max-w-xs text-sm text-clinic-muted">{description}</p>
+    </div>
+  );
 }
 
 function Input({ label, value, onChange, type = "text", disabled }: { label: string; value: string; onChange: (value: string) => void; type?: string; disabled?: boolean }) {
