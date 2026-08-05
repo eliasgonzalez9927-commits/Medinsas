@@ -81,10 +81,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    // Si fetchAuthSnapshot tira (un error transitorio de red, RLS, lo que
+    // sea) sin este try/catch el "await" rechaza la promesa del callback
+    // entero y setLoading(false) nunca se ejecuta - la app queda mostrando
+    // "Cargando sesion..." para siempre hasta que el usuario recarga a
+    // mano. Peor todavia en onAuthStateChange: Supabase dispara ese evento
+    // periodicamente (refresh de token), asi que un solo error transitorio
+    // ahi podia dejar la app trabada en cualquier momento, no solo al
+    // entrar. Bug real reportado en vivo.
     supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
       if (data.session?.user) {
-        applySnapshot(await fetchAuthSnapshot(data.session.user.id));
+        try {
+          applySnapshot(await fetchAuthSnapshot(data.session.user.id));
+        } catch (error) {
+          console.error("Failed to load auth snapshot", error);
+        }
       }
       setLoading(false);
     });
@@ -94,7 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
       setSession(nextSession);
       if (nextSession?.user) {
-        applySnapshot(await fetchAuthSnapshot(nextSession.user.id));
+        try {
+          applySnapshot(await fetchAuthSnapshot(nextSession.user.id));
+        } catch (error) {
+          console.error("Failed to load auth snapshot", error);
+        }
       } else {
         applySnapshot({ profile: null, clinicMembership: null, role: null });
       }
