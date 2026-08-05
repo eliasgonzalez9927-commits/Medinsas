@@ -122,6 +122,15 @@ export function AgendaPage() {
   const [availableDates, setAvailableDates] = useState<DateAvailability[]>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityMessage, setAvailabilityMessage] = useState("");
+  // Se incrementa cada vez que se dispara una busqueda manual de
+  // disponibilidad (abrir el modal, ocupar un hueco, cambiar profesional
+  // o servicio). Esta en la dependencia del effect de abajo para forzar
+  // que corra SIEMPRE, incluso cuando professional_id/service_id terminan
+  // con el mismo valor que ya tenian - si no, poner availabilityLoading en
+  // true de entrada (para evitar el flash del cartel amarillo) podia
+  // quedar trabado en true para siempre, porque el effect nunca volvia a
+  // correr y nunca lo apagaba.
+  const [availabilityRequestId, setAvailabilityRequestId] = useState(0);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [paymentLinks, setPaymentLinks] = useState<Record<string, string>>({});
@@ -406,7 +415,7 @@ export function AgendaPage() {
     return () => {
       cancelled = true;
     };
-  }, [clinic, form.professional_id, form.service_id, form.location_id]);
+  }, [clinic, form.professional_id, form.service_id, form.location_id, availabilityRequestId]);
 
   const metrics = useMemo(() => {
     return {
@@ -467,6 +476,7 @@ export function AgendaPage() {
     // se veia por un instante el cartel amarillo de "sin disponibilidad"
     // con datos viejos o vacios, antes de que la busqueda real terminara.
     setAvailabilityLoading(true);
+    setAvailabilityRequestId((id) => id + 1);
     setAvailableDates([]);
     setSlots([]);
     setAvailabilityMessage("");
@@ -486,6 +496,7 @@ export function AgendaPage() {
     setFormOpen(true);
     setNotice("");
     setAvailabilityLoading(true);
+    setAvailabilityRequestId((id) => id + 1);
     setAvailableDates([]);
     setSlots([hueco]);
     setForm((current) => ({
@@ -502,6 +513,7 @@ export function AgendaPage() {
 
   function resetAvailabilitySelection(update: Partial<AppointmentForm>) {
     setAvailabilityLoading(true);
+    setAvailabilityRequestId((id) => id + 1);
     setSlots([]);
     setAvailableDates([]);
     setAvailabilityMessage("");
