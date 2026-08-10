@@ -152,7 +152,7 @@ export function ProfessionalsPage() {
 
   function downloadTemplate() {
     const anchor = document.createElement("a");
-    anchor.href = URL.createObjectURL(new Blob(["nombre,apellido,email,telefono,especialidad,matricula,activo,bio"], { type: "text/csv;charset=utf-8" }));
+    anchor.href = URL.createObjectURL(new Blob(["nombre,apellido,email,telefono,matricula,activo,bio"], { type: "text/csv;charset=utf-8" }));
     anchor.download = "profesionales_template.csv";
     anchor.click();
     URL.revokeObjectURL(anchor.href);
@@ -177,7 +177,7 @@ export function ProfessionalsPage() {
     >
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
-      <div className="flex flex-wrap gap-2"><Link to="/admin/importaciones" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink"><FileUp size={16} /> Importar profesionales</Link><Button icon={<Download size={16} />} onClick={exportProfessionals}>Exportar profesionales</Button><Button icon={<Download size={16} />} onClick={downloadTemplate}>Descargar plantilla CSV</Button></div>
+      <div className="flex flex-wrap gap-2"><Link to="/admin/importaciones?type=professionals" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink"><FileUp size={16} /> Importar profesionales</Link><Button icon={<Download size={16} />} onClick={exportProfessionals}>Exportar profesionales</Button><Button icon={<Download size={16} />} onClick={downloadTemplate}>Descargar plantilla CSV</Button></div>
 
       {formOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" role="dialog" aria-modal="true">

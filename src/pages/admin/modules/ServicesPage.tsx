@@ -208,7 +208,7 @@ export function ServicesPage() {
       onAction={openCreate}
       title="Servicios y tratamientos"
     >
-      <div className="flex flex-wrap gap-2"><Link to="/admin/importaciones" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink"><FileUp size={16} /> Importar servicios</Link><Button icon={<Download size={16} />} onClick={exportServices}>Exportar servicios</Button><Button icon={<Download size={16} />} onClick={() => downloadServicesTemplate()}>Descargar plantilla CSV</Button><Button icon={<SlidersHorizontal size={16} />} onClick={() => setBulkOpen((open) => !open)}>{bulkOpen ? "Cerrar edición masiva" : "Actualizar precios"}</Button></div>
+      <div className="flex flex-wrap gap-2"><Link to="/admin/importaciones?type=services" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-clinic-line bg-white px-3 py-2 text-sm font-semibold text-clinic-ink"><FileUp size={16} /> Importar servicios</Link><Button icon={<Download size={16} />} onClick={exportServices}>Exportar servicios</Button><Button icon={<Download size={16} />} onClick={() => downloadServicesTemplate()}>Descargar plantilla CSV</Button><Button icon={<SlidersHorizontal size={16} />} onClick={() => setBulkOpen((open) => !open)}>{bulkOpen ? "Cerrar edición masiva" : "Actualizar precios"}</Button></div>
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
 
