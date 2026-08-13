@@ -1893,6 +1893,93 @@ export async function getAvailableSlots({
   });
 }
 
+// Escanea disponibilidad para un rango de días con solo 4 queries a Supabase
+// (rules, blocks, services, appointments en rango), en vez de una query por día.
+// getAvailableSlots hace 4 queries por día — con 60 días paralelos eran 240
+// requests simultáneos que saturaban el pool de conexiones.
+export async function scanUpcomingAvailability({
+  clinicId,
+  professionalId,
+  serviceId,
+  locationId,
+  timezone = "America/Argentina/Mendoza",
+  maxDays = 60,
+  maxResults = 7
+}: {
+  clinicId: string;
+  professionalId: string;
+  serviceId: string;
+  locationId?: string | null;
+  timezone?: string;
+  maxDays?: number;
+  maxResults?: number;
+}): Promise<{ date: string; slots: AvailableSlot[] }[]> {
+  const startDate = getDateInTimeZone(new Date(), timezone);
+  const endDate = addDaysToDateString(startDate, maxDays);
+
+  const [rulesResult, blocks, serviceResult, appointments] = await Promise.all([
+    getAvailabilityRules(clinicId, professionalId),
+    getAvailabilityBlocks(clinicId, professionalId),
+    getServices(clinicId),
+    getAppointments(clinicId, { dateFrom: startDate, dateTo: endDate, timezone, professionalId })
+  ]);
+
+  const service = serviceResult.data.find((item) => item.id === serviceId);
+  if (!service || !service.active) return [];
+
+  const duration = service.duration_minutes ?? 30;
+  const busyAppointments = appointments.filter((appointment) =>
+    ["pending", "confirmed", "urgent", "rescheduled"].includes(appointment.status)
+  );
+  const now = new Date();
+  const found: { date: string; slots: AvailableSlot[] }[] = [];
+
+  for (let i = 0; i < maxDays && found.length < maxResults; i++) {
+    const date = addDaysToDateString(startDate, i);
+    const dayOfWeek = new Date(`${date}T12:00:00`).getDay();
+    const rules = rulesResult.data.filter(
+      (rule) =>
+        rule.day_of_week === dayOfWeek &&
+        rule.active &&
+        (!locationId || !rule.location_id || rule.location_id === locationId)
+    );
+    const dayBlocks = blocks.filter((block) => block.date === date);
+    const dayBusy = busyAppointments.filter(
+      (appointment) => getDateInTimeZone(new Date(appointment.starts_at), timezone) === date
+    );
+    const slots: AvailableSlot[] = rules.flatMap((rule) => {
+      const result: AvailableSlot[] = [];
+      let cursor = timeToMinutes(rule.start_time);
+      const end = timeToMinutes(rule.end_time);
+      while (cursor + duration <= end) {
+        const slot = minutesToTime(cursor);
+        const startsAt = zonedDateTimeToUtcIso(date, slot, timezone);
+        const endTime = new Date(new Date(startsAt).getTime() + duration * 60000).toISOString();
+        const blocked = dayBlocks.some(
+          (block) => cursor < timeToMinutes(block.end_time) && cursor + duration > timeToMinutes(block.start_time)
+        );
+        const occupied = dayBusy.some((appointment) =>
+          rangesOverlap(
+            startsAt,
+            endTime,
+            appointment.starts_at,
+            appointment.end_time ?? new Date(new Date(appointment.starts_at).getTime() + duration * 60000).toISOString()
+          )
+        );
+        const isPastToday =
+          date === getDateInTimeZone(now, timezone) &&
+          cursor <= getMinutesInTimeZone(now, timezone);
+        if (!blocked && !occupied && !isPastToday) result.push({ time: slot, startsAt, endTime });
+        cursor += duration;
+      }
+      return result;
+    });
+    if (slots.length > 0) found.push({ date, slots });
+  }
+
+  return found;
+}
+
 export async function createPublicBooking(payload: PublicBookingPayload): Promise<PublicBookingResult> {
   try {
     const { data, error } = await supabase.rpc("create_public_booking", {

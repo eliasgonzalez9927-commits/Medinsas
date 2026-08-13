@@ -29,6 +29,7 @@ import {
   createPatient,
   getAppointments,
   getAvailableSlots,
+  scanUpcomingAvailability,
   getDefaultClinic,
   getLocations,
   getClinicMembers,
@@ -36,8 +37,8 @@ import {
   getProfessionals,
   getServices,
   markAppointmentCompleted,
-  markAppointmentNoShow
-  ,zonedDateTimeToUtcIso
+  markAppointmentNoShow,
+  zonedDateTimeToUtcIso
 } from "../../../lib/clinic-data";
 import { supabase } from "../../../lib/supabase";
 import { addDays, getDateInTimeZone } from "../../../lib/date-range";
@@ -368,26 +369,18 @@ export function AgendaPage() {
       setAvailabilityLoading(true);
       setAvailabilityMessage("Buscando próximas fechas disponibles...");
       try {
-        // Todos los días en paralelo en vez de secuencial — antes eran hasta
-        // 60 requests uno por uno (~30-60 s), ahora todos salen a la vez y
-        // resuelven en el tiempo de un solo request.
-        const days = Array.from({ length: 60 }, (_, i) => addDaysToDateString(today, i));
-        const results = await Promise.all(
-          days.map((date) =>
-            getAvailableSlots({
-              clinicId: activeClinic.id,
-              professionalId: snapProfId,
-              serviceId: snapServiceId,
-              locationId: snapLocationId || null,
-              date,
-              timezone: activeClinic.timezone ?? "America/Argentina/Mendoza"
-            })
-              .then((slots) => (slots.length > 0 ? { date, slots } : null))
-              .catch(() => null)
-          )
-        );
+        // scanUpcomingAvailability hace 4 queries en total para 60 días
+        // (rules + blocks + services + appointments en rango). Antes era
+        // getAvailableSlots por día → 4 queries × 60 días = 240 requests
+        // simultáneos que saturaban el pool de Supabase.
+        const found = await scanUpcomingAvailability({
+          clinicId: activeClinic.id,
+          professionalId: snapProfId,
+          serviceId: snapServiceId,
+          locationId: snapLocationId || null,
+          timezone: activeClinic.timezone ?? "America/Argentina/Mendoza"
+        });
         if (cancelled) return;
-        const found = results.filter((item): item is DateAvailability => item !== null).slice(0, 7);
         setAvailableDates(found);
         if (found[0]) {
           setForm((current) => {
