@@ -317,7 +317,7 @@ export function AgendaPage() {
   }, [clinic, calendarMonth, timezone]);
 
   useEffect(() => {
-    if (!clinic || !form.professional_id || !form.service_id || !form.date) {
+    if (!formOpen || !clinic || !form.professional_id || !form.service_id || !form.date) {
       setSlots([]);
       return;
     }
@@ -349,10 +349,10 @@ export function AgendaPage() {
     return () => {
       cancelled = true;
     };
-  }, [clinic, form.professional_id, form.service_id, form.location_id, form.date, timezone]);
+  }, [formOpen, clinic, form.professional_id, form.service_id, form.location_id, form.date, timezone]);
 
   useEffect(() => {
-    if (!clinic || !form.professional_id || !form.service_id) {
+    if (!formOpen || !clinic || !form.professional_id || !form.service_id) {
       setAvailableDates([]);
       setAvailabilityMessage("");
       setAvailabilityLoading(false);
@@ -360,33 +360,41 @@ export function AgendaPage() {
     }
 
     const activeClinic = clinic;
+    const snapProfId = form.professional_id;
+    const snapServiceId = form.service_id;
+    const snapLocationId = form.location_id;
     let cancelled = false;
     async function loadUpcomingAvailability() {
       setAvailabilityLoading(true);
       setAvailabilityMessage("Buscando próximas fechas disponibles...");
       try {
-        const found: DateAvailability[] = [];
-        for (let index = 0; index < 60 && found.length < 7; index += 1) {
-          const date = addDaysToDateString(today, index);
-          const available = await getAvailableSlots({
-            clinicId: activeClinic.id,
-            professionalId: form.professional_id,
-            serviceId: form.service_id,
-            locationId: form.location_id || null,
-            date,
-            timezone: activeClinic.timezone ?? "America/Argentina/Mendoza"
-          });
-          if (cancelled) return;
-          if (available.length > 0) found.push({ date, slots: available });
-        }
+        // Todos los días en paralelo en vez de secuencial — antes eran hasta
+        // 60 requests uno por uno (~30-60 s), ahora todos salen a la vez y
+        // resuelven en el tiempo de un solo request.
+        const days = Array.from({ length: 60 }, (_, i) => addDaysToDateString(today, i));
+        const results = await Promise.all(
+          days.map((date) =>
+            getAvailableSlots({
+              clinicId: activeClinic.id,
+              professionalId: snapProfId,
+              serviceId: snapServiceId,
+              locationId: snapLocationId || null,
+              date,
+              timezone: activeClinic.timezone ?? "America/Argentina/Mendoza"
+            })
+              .then((slots) => (slots.length > 0 ? { date, slots } : null))
+              .catch(() => null)
+          )
+        );
         if (cancelled) return;
+        const found = results.filter((item): item is DateAvailability => item !== null).slice(0, 7);
         setAvailableDates(found);
         if (found[0]) {
           setForm((current) => {
             if (
-              current.professional_id !== form.professional_id ||
-              current.service_id !== form.service_id ||
-              current.location_id !== form.location_id
+              current.professional_id !== snapProfId ||
+              current.service_id !== snapServiceId ||
+              current.location_id !== snapLocationId
             ) {
               return current;
             }
@@ -415,7 +423,7 @@ export function AgendaPage() {
     return () => {
       cancelled = true;
     };
-  }, [clinic, form.professional_id, form.service_id, form.location_id, availabilityRequestId]);
+  }, [formOpen, clinic, form.professional_id, form.service_id, form.location_id, availabilityRequestId]);
 
   const metrics = useMemo(() => {
     return {
@@ -935,7 +943,7 @@ export function AgendaPage() {
             <Select label="Paciente" value={form.patient_id} onChange={(value) => setForm({ ...form, patient_id: value })} required>
               {patients.map((patient) => (
                 <option key={patient.id} value={patient.id}>
-                  {patient.first_name} {patient.last_name} - {patient.phone}
+                  {patient.first_name} {patient.last_name}
                 </option>
               ))}
             </Select>
@@ -1084,7 +1092,7 @@ export function AgendaPage() {
             </div>
           </div>
           <form onSubmit={handleCreateOverbooking} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {!quickPatientOpen ? <Select label="Paciente" value={overbookingForm.patient_id} onChange={(value) => setOverbookingForm({ ...overbookingForm, patient_id: value })} required>{patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.first_name} {patient.last_name} · {patient.phone}</option>)}</Select> : <><Input label="Nombre" value={quickPatient.first_name} onChange={(value) => setQuickPatient({ ...quickPatient, first_name: value })} required /><Input label="Apellido" value={quickPatient.last_name} onChange={(value) => setQuickPatient({ ...quickPatient, last_name: value })} required /><Input label="Teléfono" value={quickPatient.phone} onChange={(value) => setQuickPatient({ ...quickPatient, phone: value })} required /></>}
+            {!quickPatientOpen ? <Select label="Paciente" value={overbookingForm.patient_id} onChange={(value) => setOverbookingForm({ ...overbookingForm, patient_id: value })} required>{patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.first_name} {patient.last_name}</option>)}</Select> : <><Input label="Nombre" value={quickPatient.first_name} onChange={(value) => setQuickPatient({ ...quickPatient, first_name: value })} required /><Input label="Apellido" value={quickPatient.last_name} onChange={(value) => setQuickPatient({ ...quickPatient, last_name: value })} required /><Input label="Teléfono" value={quickPatient.phone} onChange={(value) => setQuickPatient({ ...quickPatient, phone: value })} required /></>}
             <button type="button" onClick={() => setQuickPatientOpen((current) => !current)} className="self-end text-left text-sm font-semibold text-clinic-brand">{quickPatientOpen ? "Usar paciente existente" : "Crear paciente rápido"}</button>
             <Select label="Profesional" value={overbookingForm.professional_id} onChange={(value) => setOverbookingForm({ ...overbookingForm, professional_id: value })} required>{professionals.map((professional) => <option key={professional.id} value={professional.id}>Dr/a. {professional.name} {professional.last_name}</option>)}</Select>
             <Select label="Servicio" value={overbookingForm.service_id} onChange={(value) => { const service = services.find((item) => item.id === value); setOverbookingForm({ ...overbookingForm, service_id: value, duration_minutes: String(service?.duration_minutes ?? overbookingForm.duration_minutes) }); }} required>{services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</Select>
