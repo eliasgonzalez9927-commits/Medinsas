@@ -11,6 +11,7 @@ import {
   SuperadminClinic,
   addClinicAdmin,
   createClinic,
+  deleteClinic,
   getClinicDetail,
   getOnboardingProgress,
   getSubscriptionPlans,
@@ -133,7 +134,10 @@ export function SuperadminClinicDetailPage() {
   const [onboarding, setOnboarding] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
   const publicBookingUrl = clinic ? `${getPublicAppUrl()}/reservar/${clinic.slug}` : "";
 
   async function load() {
@@ -142,6 +146,18 @@ export function SuperadminClinicDetailPage() {
       setOnboarding(await getOnboardingProgress(id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No pudimos cargar la clínica.");
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await deleteClinic(id);
+      navigate("/superadmin/clinicas");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos eliminar la clínica.");
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   }
 
@@ -180,7 +196,25 @@ export function SuperadminClinicDetailPage() {
                 <Button onClick={() => setEditing(true)}>Editar clínica</Button>
                 <Button onClick={() => navigator.clipboard.writeText(publicBookingUrl)} icon={<Copy size={16} />}>Copiar link público</Button>
                 <LinkButton to="/admin">Ir al admin</LinkButton>
+                <Button onClick={() => setConfirmDelete(true)} className="text-red-600 hover:bg-red-50 border-red-200">Eliminar clínica</Button>
               </div>
+              {confirmDelete && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4">
+                  <p className="text-sm font-semibold text-red-800">¿Eliminar "{clinic.name}"?</p>
+                  <p className="mt-1 text-sm text-red-700">Se borrará la clínica y todos sus datos (profesionales, servicios, turnos, pagos). Las cuentas de usuario de Supabase Auth quedan intactas. Esta acción no se puede deshacer.</p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={deleting}
+                      onClick={handleDelete}
+                      className="inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {deleting ? "Eliminando..." : "Sí, eliminar"}
+                    </button>
+                    <Button onClick={() => setConfirmDelete(false)}>Cancelar</Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </Card>

@@ -246,6 +246,11 @@ export async function setClinicModule(clinicId: string, moduleKey: ClinicModuleK
   await logAudit({ clinicId, action: enabled ? "module_enabled" : "module_disabled", entityType: "clinic_module", metadata: { moduleKey } });
 }
 
+export async function deleteClinic(clinicId: string) {
+  const { error } = await supabase.from("clinics").delete().eq("id", clinicId);
+  if (error) throw error;
+}
+
 export async function addClinicAdmin(payload: AddClinicAdminPayload) {
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
