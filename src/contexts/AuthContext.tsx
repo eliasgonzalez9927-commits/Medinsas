@@ -67,6 +67,17 @@ async function fetchAuthSnapshot(userId: string): Promise<AuthSnapshot> {
   };
 }
 
+// fetchAuthSnapshot puede colgar para siempre si la red cae sin error (la
+// query sale pero la respuesta nunca llega). Con Promise.race forzamos un
+// timeout: si no resuelve en 7s, rechazamos y el catch exterior llama
+// setLoading(false) igual.
+function fetchAuthSnapshotWithTimeout(userId: string): Promise<AuthSnapshot> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("auth_snapshot_timeout")), 7000)
+  );
+  return Promise.race([fetchAuthSnapshot(userId), timeout]);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -81,33 +92,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    // Si fetchAuthSnapshot tira (un error transitorio de red, RLS, lo que
-    // sea) sin este try/catch el "await" rechaza la promesa del callback
-    // entero y setLoading(false) nunca se ejecuta - la app queda mostrando
-    // "Cargando sesion..." para siempre hasta que el usuario recarga a
-    // mano. Peor todavia en onAuthStateChange: Supabase dispara ese evento
-    // periodicamente (refresh de token), asi que un solo error transitorio
-    // ahi podia dejar la app trabada en cualquier momento, no solo al
-    // entrar. Bug real reportado en vivo.
-    supabase.auth.getSession().then(async ({ data }) => {
-      setSession(data.session);
-      if (data.session?.user) {
-        try {
-          applySnapshot(await fetchAuthSnapshot(data.session.user.id));
-        } catch (error) {
-          console.error("Failed to load auth snapshot", error);
-        }
+    // Fallback global: si ni getSession() ni onAuthStateChange resuelven en
+    // 10s (ej. refresh de token colgado a nivel de red sin error), forzamos
+    // loading=false para no dejar la pantalla "Cargando sesion..." para siempre.
+    let loadingCleared = false;
+    const globalFallback = setTimeout(() => {
+      if (!loadingCleared) {
+        console.warn("auth init timeout — forcing loading=false");
+        loadingCleared = true;
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    }, 10000);
+
+    const clearFallback = () => {
+      if (!loadingCleared) {
+        loadingCleared = true;
+        clearTimeout(globalFallback);
+      }
+    };
+
+    supabase.auth.getSession()
+      .then(async ({ data }) => {
+        clearFallback();
+        setSession(data.session);
+        if (data.session?.user) {
+          try {
+            applySnapshot(await fetchAuthSnapshotWithTimeout(data.session.user.id));
+          } catch (error) {
+            console.error("Failed to load auth snapshot", error);
+          }
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        clearFallback();
+        setLoading(false);
+      });
 
     const {
       data: { subscription }
     } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+      clearFallback();
       setSession(nextSession);
       if (nextSession?.user) {
         try {
-          applySnapshot(await fetchAuthSnapshot(nextSession.user.id));
+          applySnapshot(await fetchAuthSnapshotWithTimeout(nextSession.user.id));
         } catch (error) {
           console.error("Failed to load auth snapshot", error);
         }
@@ -117,7 +146,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(globalFallback);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const value = useMemo<AuthContextValue>(
