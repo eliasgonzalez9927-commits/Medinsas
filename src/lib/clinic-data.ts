@@ -1263,7 +1263,7 @@ export async function getProfessionals(clinicId: string): Promise<ClinicDataResu
         `
         *,
         professional_specialties(specialties(*)),
-        professional_services(services(*), duration_minutes)
+        professional_services(services(*))
       `
       )
       .eq("clinic_id", clinicId)
@@ -1287,7 +1287,7 @@ export async function getProfessionalById(clinicId: string, idOrSlug: string): P
         `
         *,
         professional_specialties(specialties(*)),
-        professional_services(services(*), duration_minutes),
+        professional_services(services(*)),
         availability_rules(*)
       `
       )
@@ -2171,7 +2171,7 @@ function mapProfessional(row: any): ProfessionalWithRelations {
       .filter(Boolean),
     services: (row.professional_services ?? [])
       .filter((item: any) => Boolean(item.services))
-      .map((item: any) => ({ ...item.services, professional_duration_minutes: item.duration_minutes ?? null })),
+      .map((item: any) => ({ ...item.services, professional_duration_minutes: item.duration_minutes ?? null })), // duration_minutes available after migration
     availability_rules: row.availability_rules ?? []
   };
 }
