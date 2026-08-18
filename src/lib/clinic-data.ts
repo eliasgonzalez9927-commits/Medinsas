@@ -1263,7 +1263,7 @@ export async function getProfessionals(clinicId: string): Promise<ClinicDataResu
         `
         *,
         professional_specialties(specialties(*)),
-        professional_services(services(*))
+        professional_services(services(*), duration_minutes)
       `
       )
       .eq("clinic_id", clinicId)
@@ -1287,7 +1287,7 @@ export async function getProfessionalById(clinicId: string, idOrSlug: string): P
         `
         *,
         professional_specialties(specialties(*)),
-        professional_services(services(*)),
+        professional_services(services(*), duration_minutes),
         availability_rules(*)
       `
       )
@@ -1336,6 +1336,19 @@ export async function updateProfessional(id: string, data: Partial<ProfessionalI
 
 export async function toggleProfessionalStatus(id: string, active: boolean): Promise<void> {
   await updateProfessional(id, { active });
+}
+
+export async function setProfessionalServiceDuration(
+  professionalId: string,
+  serviceId: string,
+  durationMinutes: number | null
+): Promise<void> {
+  const { error } = await supabase
+    .from("professional_services")
+    .update({ duration_minutes: durationMinutes })
+    .eq("professional_id", professionalId)
+    .eq("service_id", serviceId);
+  if (error) throw new FriendlyDataError("No pudimos actualizar la duración del servicio.");
 }
 
 export async function getServices(clinicId: string): Promise<ClinicDataResult<ServiceWithRelations[]>> {
@@ -1885,15 +1898,22 @@ export async function getAvailableSlots({
   date: string;
   timezone?: string;
 }): Promise<AvailableSlot[]> {
-  const [rulesResult, blocks, serviceResult, appointments] = await Promise.all([
+  const [rulesResult, blocks, serviceResult, appointments, psRow] = await Promise.all([
     getAvailabilityRules(clinicId, professionalId),
     getAvailabilityBlocks(clinicId, professionalId),
     getServices(clinicId),
-    getAppointments(clinicId, { date, timezone })
+    getAppointments(clinicId, { date, timezone }),
+    supabase
+      .from("professional_services")
+      .select("duration_minutes")
+      .eq("professional_id", professionalId)
+      .eq("service_id", serviceId)
+      .maybeSingle()
   ]);
   const service = serviceResult.data.find((item) => item.id === serviceId);
   if (!service || !service.active) return [];
-  const duration = service?.duration_minutes ?? 30;
+  // appointmentDuration: how long the turn lasts (from professional_services or service fallback)
+  const appointmentDuration = psRow.data?.duration_minutes ?? service.duration_minutes ?? 30;
   const dayOfWeek = new Date(`${date}T12:00:00`).getDay();
   const rules = rulesResult.data.filter((rule) =>
     rule.day_of_week === dayOfWeek &&
@@ -1908,29 +1928,31 @@ export async function getAvailableSlots({
   );
 
   return rules.flatMap((rule) => {
+    // startInterval: how often a slot can begin (from availability_rules)
+    const startInterval = rule.slot_duration_minutes;
     const slots: AvailableSlot[] = [];
     let cursor = timeToMinutes(rule.start_time);
     const end = timeToMinutes(rule.end_time);
-    while (cursor + duration <= end) {
+    while (cursor + appointmentDuration <= end) {
       const slot = minutesToTime(cursor);
       const startsAt = zonedDateTimeToUtcIso(date, slot, timezone);
-      const endTime = new Date(new Date(startsAt).getTime() + duration * 60000).toISOString();
+      const endTime = new Date(new Date(startsAt).getTime() + appointmentDuration * 60000).toISOString();
       const blocked = dayBlocks.some(
-        (block) => cursor < timeToMinutes(block.end_time) && cursor + duration > timeToMinutes(block.start_time)
+        (block) => cursor < timeToMinutes(block.end_time) && cursor + appointmentDuration > timeToMinutes(block.start_time)
       );
       const occupied = busyAppointments.some((appointment) =>
         rangesOverlap(
           startsAt,
           endTime,
           appointment.starts_at,
-          appointment.end_time ?? new Date(new Date(appointment.starts_at).getTime() + duration * 60000).toISOString()
+          appointment.end_time ?? new Date(new Date(appointment.starts_at).getTime() + appointmentDuration * 60000).toISOString()
         )
       );
       const isPastToday =
         date === getDateInTimeZone(new Date(), timezone) &&
         cursor <= getMinutesInTimeZone(new Date(), timezone);
       if (!blocked && !occupied && !isPastToday) slots.push({ time: slot, startsAt, endTime });
-      cursor += duration;
+      cursor += startInterval;
     }
     return slots;
   });
@@ -1960,17 +1982,24 @@ export async function scanUpcomingAvailability({
   const startDate = getDateInTimeZone(new Date(), timezone);
   const endDate = addDaysToDateString(startDate, maxDays);
 
-  const [rulesResult, blocks, serviceResult, appointments] = await Promise.all([
+  const [rulesResult, blocks, serviceResult, appointments, psRow] = await Promise.all([
     getAvailabilityRules(clinicId, professionalId),
     getAvailabilityBlocks(clinicId, professionalId),
     getServices(clinicId),
-    getAppointments(clinicId, { dateFrom: startDate, dateTo: endDate, timezone, professionalId })
+    getAppointments(clinicId, { dateFrom: startDate, dateTo: endDate, timezone, professionalId }),
+    supabase
+      .from("professional_services")
+      .select("duration_minutes")
+      .eq("professional_id", professionalId)
+      .eq("service_id", serviceId)
+      .maybeSingle()
   ]);
 
   const service = serviceResult.data.find((item) => item.id === serviceId);
   if (!service || !service.active) return [];
 
-  const duration = service.duration_minutes ?? 30;
+  // appointmentDuration: actual length of each appointment
+  const appointmentDuration = psRow.data?.duration_minutes ?? service.duration_minutes ?? 30;
   const busyAppointments = appointments.filter((appointment) =>
     ["pending", "confirmed", "urgent", "rescheduled"].includes(appointment.status)
   );
@@ -1991,29 +2020,31 @@ export async function scanUpcomingAvailability({
       (appointment) => getDateInTimeZone(new Date(appointment.starts_at), timezone) === date
     );
     const slots: AvailableSlot[] = rules.flatMap((rule) => {
+      // startInterval: how often a slot can begin
+      const startInterval = rule.slot_duration_minutes;
       const result: AvailableSlot[] = [];
       let cursor = timeToMinutes(rule.start_time);
       const end = timeToMinutes(rule.end_time);
-      while (cursor + duration <= end) {
+      while (cursor + appointmentDuration <= end) {
         const slot = minutesToTime(cursor);
         const startsAt = zonedDateTimeToUtcIso(date, slot, timezone);
-        const endTime = new Date(new Date(startsAt).getTime() + duration * 60000).toISOString();
+        const endTime = new Date(new Date(startsAt).getTime() + appointmentDuration * 60000).toISOString();
         const blocked = dayBlocks.some(
-          (block) => cursor < timeToMinutes(block.end_time) && cursor + duration > timeToMinutes(block.start_time)
+          (block) => cursor < timeToMinutes(block.end_time) && cursor + appointmentDuration > timeToMinutes(block.start_time)
         );
         const occupied = dayBusy.some((appointment) =>
           rangesOverlap(
             startsAt,
             endTime,
             appointment.starts_at,
-            appointment.end_time ?? new Date(new Date(appointment.starts_at).getTime() + duration * 60000).toISOString()
+            appointment.end_time ?? new Date(new Date(appointment.starts_at).getTime() + appointmentDuration * 60000).toISOString()
           )
         );
         const isPastToday =
           date === getDateInTimeZone(now, timezone) &&
           cursor <= getMinutesInTimeZone(now, timezone);
         if (!blocked && !occupied && !isPastToday) result.push({ time: slot, startsAt, endTime });
-        cursor += duration;
+        cursor += startInterval;
       }
       return result;
     });
@@ -2139,8 +2170,8 @@ function mapProfessional(row: any): ProfessionalWithRelations {
       .map((item: any) => item.specialties)
       .filter(Boolean),
     services: (row.professional_services ?? [])
-      .map((item: any) => item.services)
-      .filter(Boolean),
+      .filter((item: any) => Boolean(item.services))
+      .map((item: any) => ({ ...item.services, professional_duration_minutes: item.duration_minutes ?? null })),
     availability_rules: row.availability_rules ?? []
   };
 }

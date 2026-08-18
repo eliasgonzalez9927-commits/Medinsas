@@ -409,7 +409,7 @@ export function AvailabilityPage() {
         {[
           { label: "Días activos", value: String(activeDays), icon: <CalendarClock size={18} /> },
           { label: "Turnos / semana", value: String(totalSlots), icon: <Clock size={18} /> },
-          { label: "Duración promedio", value: `${avgDuration} min`, icon: <Clock size={18} /> },
+          { label: "Intervalo promedio", value: `${avgDuration} min`, icon: <Clock size={18} /> },
           { label: "Próximo disponible", value: nextDay ?? "—", icon: <Check size={18} /> }
         ].map((kpi) => (
           <SectionCard key={kpi.label} className="p-4">
@@ -483,7 +483,7 @@ export function AvailabilityPage() {
                                 <span className="text-xs font-semibold text-clinic-brand">
                                   {rule.start_time.slice(0, 5)} – {rule.end_time.slice(0, 5)}
                                 </span>
-                                <span className="text-xs text-clinic-muted">· {rule.slot_duration_minutes} min</span>
+                                <span className="text-xs text-clinic-muted">· c/{rule.slot_duration_minutes} min</span>
                                 {rule.location_id && locations.find((l) => l.id === rule.location_id) && (
                                   <span className="text-xs text-clinic-muted">· {locations.find((l) => l.id === rule.location_id)?.name}</span>
                                 )}
@@ -576,8 +576,8 @@ export function AvailabilityPage() {
                 )}
                 {previewSlots.length > 0 && (
                   <p className="mt-3 text-center text-xs text-clinic-muted">
-                    {previewSlots.length} turno{previewSlots.length !== 1 ? "s" : ""}
-                    {profRules.find((r) => r.day_of_week === previewDay) && ` de ${profRules.find((r) => r.day_of_week === previewDay)!.slot_duration_minutes} min`}
+                    {previewSlots.length} inicio{previewSlots.length !== 1 ? "s" : ""} posible{previewSlots.length !== 1 ? "s" : ""}
+                    {profRules.find((r) => r.day_of_week === previewDay) && ` · cada ${profRules.find((r) => r.day_of_week === previewDay)!.slot_duration_minutes} min`}
                   </p>
                 )}
               </div>
@@ -697,7 +697,7 @@ export function AvailabilityPage() {
                 <TimeInput label="Hasta" value={ruleForm.end_time} onChange={(v) => updateRuleField("end_time", v)} />
               </div>
               <label>
-                <span className="text-sm font-medium text-clinic-ink">Duración del turno</span>
+                <span className="text-sm font-medium text-clinic-ink">Intervalo de inicio</span>
                 <select
                   value={ruleForm.slot_duration_minutes}
                   onChange={(e) => updateRuleField("slot_duration_minutes", Number(e.target.value))}
@@ -707,6 +707,9 @@ export function AvailabilityPage() {
                     <option key={d} value={d}>{d} minutos</option>
                   ))}
                 </select>
+                <p className="mt-1.5 text-xs text-clinic-muted">
+                  Define cada cuánto puede empezar un turno. La duración real se toma del servicio asignado al profesional.
+                </p>
               </label>
               <label>
                 <span className="text-sm font-medium text-clinic-ink">Sede</span>

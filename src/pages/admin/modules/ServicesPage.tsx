@@ -29,6 +29,7 @@ type FormState = {
   specialty_id: string;
   description: string;
   duration_minutes: number;
+  operational_area: string;
   price: string;
   deposit_required: boolean;
   payment_required: boolean;
@@ -43,6 +44,7 @@ const emptyForm: FormState = {
   specialty_id: "",
   description: "",
   duration_minutes: 30,
+  operational_area: "",
   price: "",
   deposit_required: false,
   payment_required: false,
@@ -125,6 +127,7 @@ export function ServicesPage() {
       specialty_id: service.specialty_id ?? "",
       description: service.description ?? "",
       duration_minutes: service.duration_minutes,
+      operational_area: service.operational_area ?? "",
       price: service.price ? String(service.price) : "",
       deposit_required: service.deposit_required,
       payment_required: Boolean(service.payment_required),
@@ -176,6 +179,7 @@ export function ServicesPage() {
         specialty_id: form.specialty_id || null,
         description: form.description || null,
         duration_minutes: Number(form.duration_minutes),
+        operational_area: form.operational_area || null,
         price: form.price ? Number(form.price) : null,
         active: true,
         deposit_required: form.deposit_required,
@@ -362,8 +366,26 @@ export function ServicesPage() {
                   ))}
                 </select>
               </label>
-              <Input label="Duración (minutos)" value={String(form.duration_minutes)} onChange={(value) => setForm({ ...form, duration_minutes: Number(value) })} type="number" />
+              <Input label="Duración sugerida (min)" value={String(form.duration_minutes)} onChange={(value) => setForm({ ...form, duration_minutes: Number(value) })} type="number" />
               <Input label="Precio" value={form.price} onChange={(value) => setForm({ ...form, price: value })} type="number" />
+              <label>
+                <span className="text-sm font-medium text-clinic-ink">Área operativa</span>
+                <select
+                  value={form.operational_area}
+                  onChange={(e) => setForm({ ...form, operational_area: e.target.value })}
+                  className="mt-2 h-10 w-full rounded-lg border border-clinic-line px-3 text-sm outline-none focus:border-clinic-brand focus:ring-4 focus:ring-teal-100"
+                >
+                  <option value="">Sin área</option>
+                  <option value="Consultorio">Consultorio</option>
+                  <option value="Quirófano">Quirófano</option>
+                  <option value="Kinesiología">Kinesiología</option>
+                  <option value="Laboratorio">Laboratorio</option>
+                  <option value="Diagnóstico por imágenes">Diagnóstico por imágenes</option>
+                  <option value="Guardia">Guardia</option>
+                  <option value="Telemedicina">Telemedicina</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </label>
               <Input label="Monto de seña" value={form.deposit_amount} onChange={(value) => setForm({ ...form, deposit_amount: value })} type="number" />
               <label className="md:col-span-2">
                 <span className="text-sm font-medium text-clinic-ink">Descripción</span>

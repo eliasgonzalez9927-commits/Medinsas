@@ -65,6 +65,7 @@ export type Service = {
   slug: string | null;
   description: string | null;
   duration_minutes: number;
+  operational_area?: string | null;
   price: number | null;
   active: boolean;
   financing_enabled: boolean;
@@ -78,6 +79,11 @@ export type Service = {
 export type ProfessionalService = {
   professional_id: string;
   service_id: string;
+  duration_minutes?: number | null;
+};
+
+export type ServiceWithProfessionalDuration = Service & {
+  professional_duration_minutes: number | null;
 };
 
 export type Patient = {
@@ -232,7 +238,7 @@ export type MedicalRecord = {
 
 export type ProfessionalWithRelations = Professional & {
   specialties: Specialty[];
-  services: Service[];
+  services: ServiceWithProfessionalDuration[];
   availability_rules?: AvailabilityRule[];
 };
 
@@ -272,6 +278,7 @@ export type ServiceInput = {
   slug?: string | null;
   description?: string | null;
   duration_minutes: number;
+  operational_area?: string | null;
   price?: number | null;
   active?: boolean;
   financing_enabled?: boolean;

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { CalendarDays, Copy, Download, Edit3, FileUp, Plus, X } from "lucide-react";
+import { CalendarDays, Check, Copy, Download, Edit3, FileUp, Plus, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SectionCard } from "../../../components/admin/SectionCard";
 import { Button } from "../../../components/ui/Button";
@@ -7,6 +7,7 @@ import {
   createProfessional,
   getDefaultClinic,
   getProfessionals,
+  setProfessionalServiceDuration,
   toggleProfessionalStatus,
   updateProfessional
 } from "../../../lib/clinic-data";
@@ -45,6 +46,8 @@ export function ProfessionalsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [expandedServices, setExpandedServices] = useState<string | null>(null);
+  const [editingDuration, setEditingDuration] = useState<{ professionalId: string; serviceId: string; value: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -147,6 +150,23 @@ export function ProfessionalsPage() {
       setNotice("Link de reserva copiado.");
     } catch {
       setError(`No pudimos copiar el link. Usa: ${link}`);
+    }
+  }
+
+  async function handleSaveDuration() {
+    if (!editingDuration) return;
+    const minutes = Number(editingDuration.value);
+    if (!editingDuration.value || isNaN(minutes) || minutes < 1) {
+      setEditingDuration(null);
+      return;
+    }
+    try {
+      await setProfessionalServiceDuration(editingDuration.professionalId, editingDuration.serviceId, minutes);
+      setNotice("Duración actualizada.");
+      setEditingDuration(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No pudimos actualizar la duración.");
     }
   }
 
@@ -257,9 +277,69 @@ export function ProfessionalsPage() {
               <dl className="mt-5 grid gap-3 text-sm">
                 <Info label="Matricula" value={professional.license_number ?? "Sin cargar"} />
                 <Info label="Email" value={professional.email ?? "Sin email"} />
-                <Info label="Duracion" value={`${professional.consultation_minutes} min`} />
-                <Info label="Servicios" value={String(professional.services.length)} />
+                <Info label="Duración base" value={`${professional.consultation_minutes} min`} />
               </dl>
+              {/* Servicios que atiende */}
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setExpandedServices(expandedServices === professional.id ? null : professional.id)}
+                  className="flex w-full items-center justify-between rounded-lg border border-clinic-line bg-clinic-surface px-3 py-2.5 text-sm font-medium text-clinic-ink hover:bg-[#e6f4f1]"
+                >
+                  <span>Servicios que atiende ({professional.services.length})</span>
+                  <span className="text-clinic-muted">{expandedServices === professional.id ? "▲" : "▼"}</span>
+                </button>
+                {expandedServices === professional.id && (
+                  <div className="mt-1 divide-y divide-clinic-line rounded-lg border border-clinic-line bg-white">
+                    {professional.services.length === 0 ? (
+                      <p className="px-3 py-3 text-xs text-clinic-muted">Sin servicios asignados.</p>
+                    ) : (
+                      professional.services.map((service) => {
+                        const isEditing = editingDuration?.professionalId === professional.id && editingDuration?.serviceId === service.id;
+                        const displayDuration = service.professional_duration_minutes ?? service.duration_minutes;
+                        return (
+                          <div key={service.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                            <span className="min-w-0 flex-1 truncate text-xs font-medium text-clinic-ink">{service.name}</span>
+                            {isEditing ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  autoFocus
+                                  type="number"
+                                  min={1}
+                                  value={editingDuration.value}
+                                  onChange={(e) => setEditingDuration({ ...editingDuration, value: e.target.value })}
+                                  onKeyDown={(e) => { if (e.key === "Enter") handleSaveDuration(); if (e.key === "Escape") setEditingDuration(null); }}
+                                  className="h-7 w-16 rounded border border-clinic-brand px-2 text-xs outline-none"
+                                />
+                                <span className="text-xs text-clinic-muted">min</span>
+                                <button type="button" onClick={handleSaveDuration} className="rounded p-0.5 text-clinic-brand hover:bg-[#e6f4f1]">
+                                  <Check size={14} />
+                                </button>
+                                <button type="button" onClick={() => setEditingDuration(null)} className="rounded p-0.5 text-clinic-muted hover:bg-clinic-surface">
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setEditingDuration({ professionalId: professional.id, serviceId: service.id, value: String(displayDuration) })}
+                                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-clinic-muted hover:bg-[#e6f4f1] hover:text-clinic-ink"
+                                title="Editar duración para este profesional"
+                              >
+                                {displayDuration} min
+                                {service.professional_duration_minutes != null && (
+                                  <span className="rounded bg-teal-50 px-1 text-[10px] font-semibold text-clinic-brand">custom</span>
+                                )}
+                                <Edit3 size={11} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="mt-4 rounded-lg border border-clinic-line bg-clinic-surface px-3 py-2.5 text-sm">
                 {professional.professional_share_percentage != null ? (
                   <p className="text-clinic-ink">
