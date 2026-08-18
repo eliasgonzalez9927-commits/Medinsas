@@ -1020,6 +1020,26 @@ export async function connectWhatsAppAccount(input: { code: string; wabaId: stri
   return body.settings as WhatsAppSettings;
 }
 
+export type WhatsAppDelivery = {
+  id: string;
+  recipient_phone: string | null;
+  event_type: string;
+  status: string;
+  created_at: string;
+};
+
+export async function getWhatsAppDeliveries(clinicId: string): Promise<WhatsAppDelivery[]> {
+  const { data, error } = await supabase
+    .from("notification_deliveries")
+    .select("id, recipient_phone, event_type, status, created_at")
+    .eq("clinic_id", clinicId)
+    .eq("channel", "whatsapp")
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (error) throw new FriendlyDataError("No pudimos cargar el historial de WhatsApp.");
+  return (data ?? []) as WhatsAppDelivery[];
+}
+
 export async function startMercadoPagoConnection(): Promise<string> {
   const { data: sessionData } = await supabase.auth.getSession();
   if (!sessionData.session) throw new FriendlyDataError("Tu sesión expiró. Volvé a iniciar sesión.");
@@ -1372,6 +1392,29 @@ export async function updateService(id: string, data: Partial<ServiceInput>): Pr
 
 export async function toggleServiceStatus(id: string, active: boolean): Promise<void> {
   await updateService(id, { active });
+}
+
+export async function getServiceAppointmentCount(serviceId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("appointments")
+    .select("id", { count: "exact", head: true })
+    .eq("service_id", serviceId);
+  if (error) throw new FriendlyDataError("No pudimos verificar los turnos del servicio.");
+  return count ?? 0;
+}
+
+export async function deleteService(id: string, clinicId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("services")
+      .delete()
+      .eq("id", id)
+      .eq("clinic_id", clinicId);
+    if (error) throw error;
+  } catch (error) {
+    console.error("Failed to delete service", error);
+    throw new FriendlyDataError("No pudimos eliminar el servicio.");
+  }
 }
 
 export async function getAvailabilityRules(

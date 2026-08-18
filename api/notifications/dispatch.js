@@ -206,7 +206,7 @@ export default async function handler(req, res) {
 function isCronAuthorized(req) {
   const header = req.headers?.authorization ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  return Boolean(process.env.CRON_SECRET) && token === process.env.CRON_SECRET;
+  return Boolean(process.env.CRON_SECRET) && token === process.env.CRON_SECRET.trim();
 }
 
 async function handleSupportTicket(client, req, res) {

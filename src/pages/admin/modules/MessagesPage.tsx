@@ -127,10 +127,10 @@ export function MessagesPage() {
 
   return (
     <AdminPageShell
-      description="Email operativo y comunicaciones generales a pacientes con confirmacion, opt-in y logs."
-      eyebrow="Mensajeria"
+      description="Enviá comunicados y avisos por email a tus pacientes con confirmación, opt-in y logs de envío."
+      eyebrow="Comunicación"
       onRefresh={load}
-      title="Mensajes"
+      title="Avisos"
     >
       {notice && <Message tone="success">{notice}</Message>}
       {error && <Message tone="error">{error}</Message>}
